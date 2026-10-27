@@ -42,4 +42,5 @@
 - Live local HTTP: `POST /cases` 201, `POST /cases/DEMO-1/sources` 201 with 12 assets / 42 events / five distinct issue types; `GET /data-issues`, filtered `/events`, `/sources`, `/evidence` returned 200. Source count 12 and evidence count 42. Local server stopped after the smoke.
 - Secret/data check and GitHub CI: to be recorded after staging/push. Meta API: **NOT TESTED** (S1 does not call it; `.env` is ignored and local only).
 - S1 implementation commit: `33a775b` (`Implement S1 synthetic PCB sources and evidence lineage`). Staged secret scan and `git diff --cached --check` found no matches/errors; UCI ZIP and synthetic output were absent from the commit.
+- First S1 GitHub Actions run [40435213984](https://github.com/homilpat/meta_Hackathon/actions/runs/40435213984): **FAILED**. Install, pytest, Ruff, and Alembic passed; the final CI smoke still asserted the S0 health-stage string. Updated that assertion to S1; a fresh run is required before G1 can be reported as green.
 

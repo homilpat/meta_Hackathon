@@ -12,5 +12,5 @@ jobs:
       - run: python -m pytest -q
       - run: python -m ruff check .
       - run: alembic upgrade head
-      - run: python -c "from fastapi.testclient import TestClient; from app.main import app; assert TestClient(app).get('/health').json() == {'status':'ok','stage':'S0'}"
+      - run: python -c "from fastapi.testclient import TestClient; from app.main import app; assert TestClient(app).get('/health').json() == {'status':'ok','stage':'S1'}"
 

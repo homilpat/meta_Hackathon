@@ -99,13 +99,14 @@ function Queue({ ctx }: { ctx: Ctx }) {
   </Page>
 }
 
-function Dashboard({ ctx, cases, onNew }: { ctx: Ctx; cases: J[]; onNew: () => void }) {
+function Dashboard({ ctx, cases, onNew }: { ctx: Ctx; cases: J[]; onNew: (line: boolean) => void }) {
   const p = (x: string) => ctx.cid ? `/cases/${ctx.cid}/${x}` : null
   const ev = useLoad<J[]>(ctx, p('evidence'), []), iss = useLoad<J[]>(ctx, p('data-issues'), [])
   const preds = useLoad<J[]>(ctx, p('predictions'), []), runs = useLoad<J[]>(ctx, p('investigations'), [])
   const docs = [useLoad<J[]>(ctx, p('ncr'), []), useLoad<J[]>(ctx, p('containment'), []), useLoad<J[]>(ctx, p('rca'), [])]
   const reval = docs.flat().filter(d => d.status === 'REVALIDATION_REQUIRED' || d.status === 'BASIS_CHANGED').length
-  return <Page title="품질 운영 현황" desc="선택한 사건의 근거, 모델 출력, 문서 결재 상태를 확인합니다." action={ctx.me?.role === 'AUTHOR' && <button className="button primary" onClick={onNew}>새 합성 PCB 사건 생성</button>}>
+  return <Page title="품질 운영 현황" desc="선택한 사건의 근거, 모델 출력, 문서 결재 상태를 확인합니다." action={ctx.me?.role === 'AUTHOR' && <span className="row-gap"><button className="button secondary" onClick={() => onNew(false)}>소형 픽스처 사건</button>
+      <button className="button primary" onClick={() => onNew(true)}>SMT 라인 사건 (3 lot · 144 보드)</button></span>}>
     <div className="demo-notice"><Icon name="spark" size={15}/><b>합성 데이터</b><span>모든 제조 기록은 생성기로 만든 가상의 PCB 데이터(SYNTHETIC, SELF_GENERATED)이며 실제 제조 성과가 아닙니다.</span></div>
     <div className="capability-rail">
       <div><span className="capability-icon teal"><Icon name="database"/></span><p><b>근거 기반 문서</b><span>관측·계산 주장은 반드시 Evidence ID를 인용하고 서버가 검증합니다</span></p></div>
@@ -132,9 +133,19 @@ function DataWorkspace({ ctx }: { ctx: Ctx }) {
   const human = (e: J) => events.find(h => h.entity_type === 'human_verifications' && h.entity_key.join('/') === e.entity_key.join('/') && h.record.inspection_id === e.record.inspection_id)
   const counts: Record<string, number> = {}
   for (const i of issues) counts[i.code] = (counts[i.code] || 0) + 1
+  const lots = events.filter(e => e.entity_type === 'lots').map(l => {
+    const panels = new Set(events.filter(e => e.entity_type === 'panels' && e.record.lot_id === l.record.lot_id).map(e => e.entity_key[0]))
+    const fails = aoi.filter(e => panels.has(e.entity_key[0]) && e.record.result === 'FAIL')
+    const ship = events.filter(e => e.entity_type === 'shipments' && e.record.lot_id === l.record.lot_id)
+    return { l, panels: panels.size, aoi: aoi.filter(e => panels.has(e.entity_key[0])).length, fails: fails.length,
+      open: fails.filter(e => human(e)?.record.result !== 'FALSE_ALARM').length, shipped: ship.filter(s => s.record.status === 'SHIPPED').length, wip: ship.filter(s => s.record.status !== 'SHIPPED').length }
+  })
   return <Page title="제조 데이터 및 증거" desc="원천 자산의 버전·해시·권리 정보와 검사 결과를 확인합니다.">
     <div className="source-grid">{sources.map(s => <Card key={s.asset_id}><div className="source-head"><div className="source-icon"><Icon name="database"/></div><Badge tone={s.supersedes_asset_id ? 'amber' : 'green'}>{s.supersedes_asset_id ? '정정본' : `v${s.source_version}`}</Badge></div>
       <b>{s.source_system}</b><span className="muted">{s.asset_id}</span><span className="muted">{s.license_id} · {s.data_origin} · {s.sensitivity}</span><span className="muted">sha256 {s.content_sha256.slice(0, 12)}…</span></Card>)}</div>
+    {lots.length > 0 && <Card className="mb"><SectionTitle title="Lot 추적" sub="lot → 패널 → 보드 · 출하 상태 · AOI FAIL 중 오검출로 해소되지 않은 건"/><div className="table-wrap"><table><thead><tr><th>Lot</th><th>라인 / 스텐실 / 페이스트</th><th>패널</th><th>AOI 검사</th><th>FAIL</th><th>미해소</th><th>출하 / 재공</th></tr></thead><tbody>
+      {lots.map(x => <tr key={x.l.event_id}><td><b className="id">{x.l.record.lot_id}</b></td><td>{x.l.record.line_id} · {x.l.record.stencil_id} · {x.l.record.paste_lot}</td><td>{x.panels}</td><td>{x.aoi}</td><td>{x.fails}</td>
+        <td><Badge tone={x.open ? 'red' : 'green'}>{x.open}</Badge></td><td>{x.shipped} / {x.wip}</td></tr>)}</tbody></table></div></Card>}
     <div className="split-main">
       <Card><SectionTitle title="데이터 품질 이슈" sub="결정적 규칙으로 탐지 · 원인 판단 아님" action={<Badge tone={issues.length ? 'amber' : 'green'}>{issues.length}건</Badge>}/>
         <div className="meta-list">{Object.entries(counts).map(([k, n]) => <div key={k}><span>{k}</span><b>{n}</b></div>)}</div></Card>
@@ -321,19 +332,21 @@ function Impact({ ctx }: { ctx: Ctx }) {
   const sources = useLoad<J[]>(ctx, `/cases/${ctx.cid}/sources`, [])
   const events = useLoad<J[]>(ctx, `/cases/${ctx.cid}/events?entity_type=spi_measurements`, [])
   const rows = [...new Set(events.map(e => e.original_row_id))].sort()
-  const [row, setRow] = useState('SPI-P02-B01-1')
+  const [pick, setRow] = useState('SPI-P02-B01-1')
+  const row = rows.includes(pick) ? pick : rows[0] ?? pick
+  const line = sources.some(s => s.source_system === 'SYNTHETIC_LOTS')
   const imp = impacts[impacts.length - 1]
   const fix = async () => {
     const spi = sources.filter(s => s.source_system === 'SYNTHETIC_SPI_MEASUREMENTS')
     if (!spi.length) return
     const version = Math.max(...spi.map(s => s.source_version)) + 1
-    const asset = await (await fetch(`/synthetic/7/spi-correction?row_id=${row}&version=${version}`)).json()
+    const asset = await (await fetch(`/synthetic/7/spi-correction?row_id=${row}&version=${version}&line=${line}`)).json()
     await ctx.api(`/cases/${ctx.cid}/source-revisions`, 'POST', { asset, reason: `SPI 재측정 ${row}` }, true); ctx.refresh()
   }
   const col = (title: string, items: string[], tone: string) => <div className="graph-col"><small>{title}</small>{items.length ? items.map(i => <div className={`node-box ${tone}`} key={i}>{i}</div>) : <span className="muted">없음</span>}</div>
   return <Page title="증거 변경 영향 분석" desc="정정된 원천 행에서 의존성 그래프를 따라 영향받는 문서만 재검토로 돌립니다."
     action={ctx.me?.role === 'AUTHOR' && <span className="row-gap"><select value={row} onChange={e => setRow(e.target.value)}>{rows.map(r => <option key={r}>{r}</option>)}</select><button className="button primary" onClick={fix}>SPI 정정 가져오기 (데모)</button></span>}>
-    {!imp ? <Card><Empty>가져온 원천 정정이 없습니다. 데모 정정은 seed 7 픽스처 기준으로 값만 바꾼 합성 행입니다.</Empty></Card> : <>
+    {!imp ? <Card><Empty>가져온 원천 정정이 없습니다. 데모 정정은 seed 7 생성기 기준으로 값만 바꾼 합성 행입니다.</Empty></Card> : <>
       <div className="revision-alert"><Icon name="warning"/><div><b>{imp.reason}</b><span>{imp.actor_id} · {imp.created_at.slice(0, 19)}</span></div><div><Badge tone="slate">{imp.supersedes_asset_id}</Badge><Icon name="arrow"/><Badge tone="amber">{imp.asset_id}</Badge></div></div>
       <div className="impact-layout">
         <Card><SectionTitle title="문서 상태 변화" sub="정정 전 → 후"/>{imp.documents.length ? imp.documents.map((d: J) =>
@@ -394,10 +407,10 @@ export default function App() {
     api('/cases').then((cs: J[]) => { setCases(cs); setCid(c => cs.some(x => x.case_id === c) ? c : cs[cs.length - 1]?.case_id ?? '') }).catch(() => setCases([]))
   }, [api, tick])
 
-  const newCase = async () => {
-    const id = `PCB-${Date.now().toString(36).toUpperCase()}`
+  const newCase = async (line: boolean) => {
+    const id = `${line ? 'SMT' : 'PCB'}-${Date.now().toString(36).toUpperCase()}`
     await api('/cases', 'POST', { case_id: id })
-    await api(`/cases/${id}/sources`, 'POST', await (await fetch('/synthetic/7')).json())
+    await api(`/cases/${id}/sources`, 'POST', await (await fetch(line ? '/synthetic/line/7' : '/synthetic/7')).json())
     for (const u of ['bob', 'erin', 'frank']) await api(`/cases/${id}/assignments`, 'POST', { user_id: u })
     setCid(id); refresh()
   }

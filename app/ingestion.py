@@ -21,6 +21,8 @@ KEYS = {
     "equipment_events": ("tool_id",),
     "source_revisions": ("old_asset_id", "new_asset_id"),
     "historical_quality_cases": ("historical_case_id",),
+    "lots": ("lot_id",),
+    "shipments": ("panel_id",),
 }
 
 
@@ -142,6 +144,7 @@ def normalize(bundle: SyntheticBundle) -> tuple[list[dict], list[dict]]:
         "aoi_inspections": "boards",
         "human_verifications": "boards",
         "repair_dispositions": "boards",
+        "shipments": "panels",
     }
     for kind, parent_kind in parent.items():
         for event in (e for e in events if e["entity_type"] == kind):
@@ -182,6 +185,17 @@ def normalize(bundle: SyntheticBundle) -> tuple[list[dict], list[dict]]:
     for board_key, board_events in by_type["boards"].items():
         if board_key not in aoi_boards:
             issue("MISSING_AOI", board_events[0]["id"], str(board_key))
+    # Lot traceability: a panel or shipment naming a lot must name a known lot, and the same one.
+    lots = {k[0] for k in by_type["lots"]}
+    panel_lot = {}
+    for event in (e for e in events if e["entity_type"] in ("panels", "shipments")):
+        lot = json.loads(event["raw_json"]).get("lot_id")
+        if lot is None:
+            continue
+        if lot not in lots:
+            issue("MISSING_LOT", event["id"], str(lot), "ERROR")
+        elif panel_lot.setdefault(event["entity_key"][0], lot) != lot:
+            issue("LOT_MISMATCH", event["id"], f"{event['entity_key'][0]}:{lot}", "ERROR")
     for event in (e for e in events if e["entity_type"] == "source_revisions"):
         old_id, new_id = event["entity_key"]
         if old_id not in assets or new_id not in assets or assets[new_id].supersedes_asset_id != old_id:

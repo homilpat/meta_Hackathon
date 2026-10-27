@@ -3,6 +3,7 @@
 import hashlib
 import json
 import random
+from datetime import UTC, datetime, timedelta
 
 VERSION = "s1.0"
 T0 = "2026-01-01T08:00:00+00:00"
@@ -141,9 +142,86 @@ def generate(seed: int = 7) -> dict:
     return {"generator_version": VERSION, "seed": seed, "data_origin": "SYNTHETIC", "assets": assets}
 
 
-def spi_correction(seed: int = 7, row_id: str = "SPI-P02-B01-1", delta: float = -0.03, version: int = 3) -> dict:
-    """Demo S6 source fix: SPI asset v<version> re-measures one row of the fixture."""
-    spi = next(a for a in generate(seed)["assets"] if a["asset_id"] == "synthetic:spi_measurements:v1")
+LINE_VERSION = "line1.0"
+LINE_T0 = datetime(2026, 1, 5, 6, 0, tzinfo=UTC)
+
+
+def generate_line(seed: int = 7, lots: int = 3, panels_per_lot: int = 12, boards: int = 4, comps: int = 4) -> dict:
+    """Production-scale fictional SMT line: lots -> panels -> boards -> components -> pins, shipments.
+
+    Lot L02 runs on a worn stencil: paste volume drifts down panel by panel, so true insufficient-solder
+    defects concentrate there late in the lot. AOI also raises random false calls, a few boards skip AOI,
+    and early panels of each lot have already shipped. Every value is generated; none is measured.
+    """
+    rng = random.Random(seed)
+    t = {"lots": [], "panels": [], "boards": [], "components": [], "pins": [], "spi_measurements": [],
+         "aoi_inspections": [], "human_verifications": [], "repair_dispositions": [], "shipments": [],
+         "equipment_events": []}
+
+    def row(row_id: str, at: datetime, **fields: object) -> dict:
+        return {"original_row_id": row_id, "data_origin": "SYNTHETIC", "event_time": at.isoformat(),
+                "source_updated_at": None, "ingested_at": (at + timedelta(hours=2)).isoformat(), **fields}
+
+    for li in range(1, lots + 1):
+        lot, worn = f"L{li:02d}", li == 2
+        start = LINE_T0 + timedelta(hours=8 * (li - 1))
+        t["lots"].append(row(f"LOT-{lot}", start, lot_id=lot, line_id="SMT-1", stencil_id=f"STN-{li}",
+                             paste_lot=f"PST-{100 + li}"))
+        if worn:
+            t["equipment_events"].append(row(f"EQ-STN-{li}", start, tool_id=f"STN-{li}",
+                                             status="CLEANING_INTERVAL_EXCEEDED"))
+        for pi in range(1, panels_per_lot + 1):
+            panel, at = f"{lot}-P{pi:02d}", start + timedelta(minutes=12 * pi)
+            t["panels"].append(row(f"PANEL-{panel}", at, panel_id=panel, lot_id=lot))
+            shipped = pi <= panels_per_lot // 3
+            t["shipments"].append(row(f"SHIP-{panel}", at + timedelta(hours=6), panel_id=panel, lot_id=lot,
+                                      status="SHIPPED" if shipped else "IN_WIP"))
+            drift = 0.0025 * pi if worn else 0.0
+            for bi in range(1, boards + 1):
+                board = f"B{bi}"
+                t["boards"].append(row(f"BOARD-{panel}-{board}", at, panel_id=panel, board_id=board))
+                vols = []
+                for ci in range(1, comps + 1):
+                    comp = f"C{ci:02d}"
+                    t["components"].append(row(f"COMP-{panel}-{board}-{comp}", at, panel_id=panel, board_id=board,
+                                               component_id=comp))
+                    for pin in (1, 2):
+                        key = {"panel_id": panel, "board_id": board, "component_id": comp, "pin_number": pin}
+                        t["pins"].append(row(f"PIN-{panel}-{board}-{comp}-{pin}", at, **key))
+                        v = round(max(0.02, rng.gauss(0.12 - drift, 0.008)), 4)
+                        vols.append(v)
+                        t["spi_measurements"].append(row(f"SPI-{panel}-{board}-{comp}-{pin}", at, **key,
+                                                         inspection_id="S01", volume_mm3=v))
+                if rng.random() < 0.02:
+                    continue  # AOI skipped: a missing record is not a PASS
+                defect = min(vols) < 0.092
+                fail = defect or rng.random() < 0.04  # false calls happen
+                aoi_at = at + timedelta(minutes=25)
+                ref = {"panel_id": panel, "board_id": board, "inspection_id": "A01"}
+                t["aoi_inspections"].append(row(f"AOI-{panel}-{board}-A01", aoi_at, **ref,
+                                                result="FAIL" if fail else "PASS"))
+                if fail:
+                    t["human_verifications"].append(row(f"H-{panel}-{board}-A01", aoi_at + timedelta(minutes=40),
+                                                        **ref, result="DEFECT_CONFIRMED" if defect else "FALSE_ALARM"))
+                    t["repair_dispositions"].append(row(f"R-{panel}-{board}-A01", aoi_at + timedelta(hours=1), **ref,
+                                                        disposition="REPAIRED" if defect else "NO_REPAIR"))
+
+    def asset(kind: str, records: list[dict]) -> dict:
+        return {"asset_id": f"synthetic:{kind}:v1", "source_system": f"SYNTHETIC_{kind.upper()}", "entity_type": kind,
+                "source_version": 1, "supersedes_asset_id": None, "license_id": "SELF_GENERATED",
+                "data_origin": "SYNTHETIC", "sensitivity": "APPROVED_FOR_EXTERNAL",
+                "captured_at": LINE_T0.isoformat(), "ingested_at": (LINE_T0 + timedelta(days=1)).isoformat(),
+                "content_sha256": sha256(records), "records": records}
+
+    return {"generator_version": LINE_VERSION, "seed": seed, "data_origin": "SYNTHETIC",
+            "assets": [asset(k, v) for k, v in t.items() if v]}
+
+
+def spi_correction(seed: int = 7, row_id: str = "SPI-P02-B01-1", delta: float = -0.03, version: int = 3,
+                   line: bool = False) -> dict:
+    """Demo S6 source fix: SPI asset v<version> re-measures one row of the fixture (or of the line dataset)."""
+    bundle = generate_line(seed) if line else generate(seed)
+    spi = next(a for a in bundle["assets"] if a["asset_id"] == "synthetic:spi_measurements:v1")
     rec = dict(next(r for r in spi["records"] if r["original_row_id"] == row_id))
     rec.update(volume_mm3=round(rec["volume_mm3"] + delta, 4), source_updated_at="2026-01-04T08:00:00+00:00",
                ingested_at="2026-01-04T09:00:00+00:00")

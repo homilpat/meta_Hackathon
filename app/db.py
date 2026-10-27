@@ -34,7 +34,7 @@ class SourceAsset(Base):
     captured_at: Mapped[str] = mapped_column(String(40))
     ingested_at: Mapped[str] = mapped_column(String(40))
     content_sha256: Mapped[str] = mapped_column(String(64))
-    raw_json: Mapped[str] = mapped_column(Text)
+    raw_json: Mapped[str] = mapped_column(Text, deferred=True)  # whole asset; joins must not drag it per event
 
 
 class SourceEvent(Base):

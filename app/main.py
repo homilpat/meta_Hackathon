@@ -15,7 +15,7 @@ from app.db import Assignment, DataQualityIssue, Evidence, QualityCase, SourceAs
 from app.ingestion import SyntheticBundle, normalize
 from app.ml_api import make_ml_router
 from app.model_provider import MODEL, MetaProvider, ModelProvider
-from app.synthetic import canonical, generate, spi_correction
+from app.synthetic import LINE_VERSION, canonical, generate, generate_line, spi_correction
 from app.workflow import Actor, make_auth, make_router, require_case, require_role
 
 
@@ -84,7 +84,8 @@ def create_app(database_url: str = "sqlite:///qualityops.db",
     def upload_sources(case_id: str, bundle: SyntheticBundle, actor: Who) -> dict:
         require_role(actor, "AUTHOR")
         # shortcut: S1 accepts only this reproducible generator; real adapters need their own provenance gate.
-        expected = SyntheticBundle.model_validate(generate(bundle.seed))
+        make = generate_line if bundle.generator_version == LINE_VERSION else generate
+        expected = SyntheticBundle.model_validate(make(bundle.seed))
         if bundle.model_dump(mode="json") != expected.model_dump(mode="json"):
             raise HTTPException(422, "Bundle is not an exact generated synthetic fixture")
         try:
@@ -186,14 +187,18 @@ def create_app(database_url: str = "sqlite:///qualityops.db",
             return [{"event_id": i.event_id, "code": i.code,
                      "severity": i.severity, "detail": i.detail} for i in rows]
 
+    @app.get("/synthetic/line/{seed}")
+    def synthetic_line(seed: int) -> dict:
+        return generate_line(seed)
+
     @app.get("/synthetic/{seed}")
     def synthetic(seed: int) -> dict:
         return generate(seed)
 
     @app.get("/synthetic/{seed}/spi-correction")
-    def synthetic_correction(seed: int, row_id: str = "SPI-P02-B01-1", version: int = 3) -> dict:
+    def synthetic_correction(seed: int, row_id: str = "SPI-P02-B01-1", version: int = 3, line: bool = False) -> dict:
         try:
-            return spi_correction(seed, row_id, version=version)
+            return spi_correction(seed, row_id, version=version, line=line)
         except StopIteration:
             raise HTTPException(404, "No such SPI row in the fixture") from None
 

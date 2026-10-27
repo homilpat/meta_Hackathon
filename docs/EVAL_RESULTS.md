@@ -20,7 +20,7 @@ Documents are approved in 8D order (NCR D2 -> Containment D3 -> RCA D4); the API
 | Approved-data tool payloads wrongly blocked by the egress gateway | 0/180 |
 | CONFIDENTIAL rows denied at the tool layer | 30/30 |
 | CONFIDENTIAL payloads blocked at the gateway before any network call | 30/30 |
-| Revision import + impact latency (local SQLite, 240 imports) | p50 17.6 ms, max 138.9 ms |
+| Revision import + impact latency (local SQLite, 240 imports) | p50 35.4 ms, max 1290.2 ms |
 
 Oracle: a corrected SPI row must reopen the NCR if its board had an AOI FAIL (the NCR is the D2 problem
 description and cites no model output), and the RCA only for the confirmed-defect board P02/B01 (model scores

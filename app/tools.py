@@ -109,7 +109,12 @@ class EvidenceTools:
                 "model": [f"PRED-{p.id}", round(p.risk_score, 4), round(p.threshold, 4)] if p else None})
         issues = Counter(i.code for i in self.session.scalars(
             select(DataQualityIssue).where(DataQualityIssue.case_id == self.case_id)))
-        return {"aoi_evidence_ids": [i["ev"] for i in aoi.values()], "aoi_fail": fails,
+        lots = [{"lot": lot, "stencil": v["lot"]["rec"]["stencil_id"], "lot_ev": v["lot"]["ev"], "aoi": len(v["aoi"]),
+                 "fail": len(v["fails"]), "not_cleared": len(v["open"]),
+                 "unshipped_panels": sum(x["rec"]["status"] != "SHIPPED" for x in v["ship"]),
+                 "shipped_panels": sum(x["rec"]["status"] == "SHIPPED" for x in v["ship"])}
+                for lot, v in sorted(ncr.lot_view(items, aoi).items())]
+        return {"aoi_evidence_ids": [i["ev"] for i in aoi.values()], "lots": lots, "aoi_fail": fails,
                 "no_aoi_record": [["/".join(b["key"]), b["ev"]] for b in ncr._uninspected(items, aoi)],
                 "data_issues": dict(issues),
                 "legend": "[value, evidence_id]; model = [PRED id, score, threshold] (model output, not inspection)"}

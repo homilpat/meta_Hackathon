@@ -114,6 +114,29 @@ def _uninspected(items: list[dict], aoi: dict) -> list[dict]:
     return [b for b in items if b["type"] == "boards" and b["key"] not in inspected]
 
 
+def lot_view(items: list[dict], aoi: dict) -> dict[str, dict]:
+    """Per lot (line datasets only): lot record, panels, shipments, AOI FAIL keys and the ones not cleared."""
+    lots = {i["key"][0]: {"lot": i, "panels": set(), "ship": [], "aoi": [], "fails": [], "open": []}
+            for i in items if i["type"] == "lots"}
+    panel_lot = {i["key"][0]: i["rec"].get("lot_id") for i in items if i["type"] == "panels"}
+    for i in items:
+        if i["type"] == "panels" and panel_lot[i["key"][0]] in lots:
+            lots[panel_lot[i["key"][0]]]["panels"].add(i["key"][0])
+        if i["type"] == "shipments" and i["rec"]["lot_id"] in lots:
+            lots[i["rec"]["lot_id"]]["ship"].append(i)
+    for key, a in aoi.items():
+        v = lots.get(panel_lot.get(key[0]))
+        if v is None:
+            continue
+        v["aoi"].append(key)
+        if a["rec"]["result"] == "FAIL":
+            v["fails"].append(key)
+            human = _linked(items, "human_verifications", key)
+            if not human or human["rec"]["result"] != "FALSE_ALARM":
+                v["open"].append(key)
+    return lots
+
+
 def build_claims(session: Session, case_id: str) -> list[dict]:
     items = current(_evidence(session, case_id))
     claims, add = _collector()
@@ -123,6 +146,11 @@ def build_claims(session: Session, case_id: str) -> list[dict]:
     if aoi:
         add("CALCULATED", f"{len(fails)} of {len(aoi)} AOI inspections reported FAIL.",
             [i["ev"] for i in aoi.values()], float(len(fails)), "count")
+    for lot, v in sorted(lot_view(items, aoi).items()):
+        if v["aoi"]:
+            add("CALCULATED", f"Lot {lot}: {len(v['fails'])} of {len(v['aoi'])} AOI inspections reported FAIL; "
+                f"{len(v['open'])} not cleared as false alarms.", [aoi[k]["ev"] for k in v["aoi"]],
+                float(len(v["fails"])), "count")
     for key in fails:
         panel, board, insp = key
         add("OBSERVED", f"AOI inspection {insp} on board {panel}/{board} reported FAIL.", [aoi[key]["ev"]])
@@ -150,7 +178,7 @@ def build_claims(session: Session, case_id: str) -> list[dict]:
 
 
 def build_containment(session: Session, case_id: str) -> list[dict]:
-    """Containment PLAN draft from AOI/human/repair records only. Proposals, nothing is executed here."""
+    """Containment PLAN draft from AOI/human/repair and lot/shipment records. Proposals, nothing is executed here."""
     items = current(_evidence(session, case_id))
     claims, add = _collector()
     aoi = _aoi(items)
@@ -168,6 +196,29 @@ def build_containment(session: Session, case_id: str) -> list[dict]:
     for b in _uninspected(items, aoi):
         add("PROPOSAL", f"Proposed, not executed: hold board {'/'.join(b['key'])} until an AOI inspection is "
             "recorded; a missing record is not a PASS.", [b["ev"]])
+    boards = {}
+    for i in items:
+        if i["type"] == "boards":
+            boards.setdefault(i["key"][0], 0)
+            boards[i["key"][0]] += 1
+    for lot, v in sorted(lot_view(items, aoi).items()):
+        if not v["fails"]:
+            continue
+        if not v["open"]:
+            add("OBSERVED", f"No lot-level hold proposed for lot {lot}: all {len(v['fails'])} AOI FAILs were "
+                "verified FALSE_ALARM.", [aoi[k]["ev"] for k in v["fails"]])
+            continue
+        why = [aoi[k]["ev"] for k in v["open"]]
+        wip = [x for x in v["ship"] if x["rec"]["status"] != "SHIPPED"]
+        out = [x for x in v["ship"] if x["rec"]["status"] == "SHIPPED"]
+        if wip:
+            add("PROPOSAL", f"Proposed, not executed: hold the {len(wip)} unshipped panels of lot {lot} "
+                f"({sum(boards.get(x['key'][0], 0) for x in wip)} boards) pending QA disposition; {len(v['open'])} "
+                "AOI FAILs in this lot are not cleared as false alarms.", [*why, *(x["ev"] for x in wip)])
+        if out:
+            add("PROPOSAL", f"Proposed, not executed: QA to decide customer notification or field containment for "
+                f"the {len(out)} already SHIPPED panels of lot {lot} "
+                f"({sum(boards.get(x['key'][0], 0) for x in out)} boards).", [*why, *(x["ev"] for x in out)])
     add("UNKNOWN", "Lot and shipment scope beyond the recorded panels is not determined. "
         "Execution status: NOT_EXECUTED; any hold must be performed and recorded by Production.", [])
     return claims
@@ -178,6 +229,8 @@ def build_rca(session: Session, case_id: str) -> list[dict]:
     items = current(_evidence(session, case_id))
     claims, add = _collector()
     spi_by_board, aoi = latest_spi_by_board(items), _aoi(items)
+    lots = lot_view(items, aoi)
+    in_lot = {p for v in lots.values() if v["open"] for p in v["panels"]}  # covered by the lot hypothesis below
     boards = []
     for key in sorted(k for k, i in aoi.items() if i["rec"]["result"] == "FAIL"):
         human = _linked(items, "human_verifications", key)
@@ -194,6 +247,8 @@ def build_rca(session: Session, case_id: str) -> list[dict]:
         avg = round(mean(i["rec"]["volume_mm3"] for i in spi), 4)
         add("CALCULATED", f"Mean SPI solder volume on {panel}/{board} is {avg} mm3 over {len(spi)} pin "
             "measurements (latest source version per row).", ev, avg, "mm3")
+        if panel in in_lot:
+            continue
         add("HYPOTHESIS", f"Candidate cause (UNCONFIRMED): solder paste deposit variation on {panel}/{board}. "
             f"The SPI values and AOI {insp} FAIL are consistent with it but do not establish causation.",
             [*ev, aoi[key]["ev"]])
@@ -211,6 +266,29 @@ def build_rca(session: Session, case_id: str) -> list[dict]:
             add("CALCULATED", f"Largest SHAP contributions to the {board} score: "
                 + ", ".join(f"{k} {v:+.2f}" for k, v in top)
                 + " (log-odds). SHAP explains the model score, not the physical defect cause.", [f"XAI-{x.id}"])
+    for lot, v in sorted(lots.items()):
+        if not v["open"]:
+            continue
+        rec = v["lot"]["rec"]
+        eq = [i for i in items if i["type"] == "equipment_events" and i["key"][0] == rec["stencil_id"]]
+        inside = [i for k, rows in spi_by_board.items() if k[0] in v["panels"] for i in rows]
+        rest = [i for k, rows in spi_by_board.items() if k[0] not in v["panels"] for i in rows]
+        if inside and rest:
+            a, b = (round(mean(i["rec"]["volume_mm3"] for i in x), 4) for x in (inside, rest))
+            add("CALCULATED", f"Mean SPI solder volume in lot {lot} is {a} mm3 over {len(inside)} pins.",
+                [i["ev"] for i in inside], a, "mm3")
+            add("CALCULATED", f"Mean SPI solder volume in the other lots is {b} mm3 over {len(rest)} pins.",
+                [i["ev"] for i in rest], b, "mm3")
+        add("OBSERVED", f"Lot {lot} ran on line {rec['line_id']} with stencil {rec['stencil_id']} and paste lot "
+            f"{rec['paste_lot']}.", [v["lot"]["ev"]])
+        for e in eq:
+            add("OBSERVED", f"Equipment record for {rec['stencil_id']}: {e['rec']['status']}.", [e["ev"]])
+        add("HYPOTHESIS", f"Candidate cause (UNCONFIRMED): condition of stencil {rec['stencil_id']} used for lot {lot}. "
+            "A lower lot SPI mean and the equipment record are consistent with it but do not establish causation.",
+            [v["lot"]["ev"], *(e["ev"] for e in eq)])
+        add("PROPOSAL", f"Proposed verification, not executed: inspect stencil {rec['stencil_id']} apertures and "
+            f"compare SPI on a run with a fresh stencil, paste lot {rec['paste_lot']} unchanged.",
+            [v["lot"]["ev"], *(e["ev"] for e in eq)])
     add("UNKNOWN", "No verification result is recorded. Cause status: UNCONFIRMED until a Process Engineer "
         "records the verification outcome.", [])
     return claims

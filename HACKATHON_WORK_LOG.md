@@ -143,3 +143,11 @@
 - Every document response now carries `comments` and `trail` (each event on that version with actor and the role they acted in, from the append-only log).
 - Web UI: "부서 할 일" screen with deep link to the document; per-claim comment column, comment thread with reply/resolve, "책임 추적" timeline panel.
 - Checks: pytest 107 passed (2 new in `tests/test_collab.py`); ruff exit 0; `npm run build` exit 0; alembic upgrade → downgrade 0007 → upgrade on a fresh DB ok; browser: erin's queue shows BASIS_CHECK owned by erin, "열기" opens the containment plan with basis-check buttons, comment panel and trail.
+
+## 2026-10-27 KST — Collaboration 2/3: concurrent multi-user simulation (found and fixed races)
+
+- `python -m scripts.concurrency_sim --trials 20`: real uvicorn server, file SQLite, conflicting requests from different demo users released together by a thread barrier. Scenarios: three simultaneous decisions on one review; approval of v1 while v2 is drafted; containment approval while an SPI correction reopens its NCR; same Idempotency-Key sent 4x at once; 4 cases running D2–D4 in parallel.
+- First run (10 trials) **failed**: 10/10 trials accepted 2–3 decisions on one review; 8/10 left a containment plan APPROVED on a reopened NCR; 30/40 same-key retries returned HTTP 500 (duplicate version insert). Root cause: pysqlite runs SELECTs outside the write transaction, so check-then-write was not atomic.
+- Fix: `serialize_sqlite` in `app/main.py` — every SQLite transaction starts with `BEGIN IMMEDIATE` (30 s busy timeout); Postgres would use row locks instead (noted in code).
+- After the fix (20 trials each): 0 invariant violations, 0 HTTP 5xx; losers get 403/409 as designed (double decision 20×200 + 40×403; stale approval 7×409; revision race 8×409; same-key 80×201 identical bodies). Written to `docs/CONCURRENCY_RESULTS.md` (before/after) and `docs/concurrency.json`.
+- Regression test `test_concurrent_decisions_on_one_review_accept_exactly_one` fails 3/3 with the fix disabled, passes with it. pytest 108 passed; ruff exit 0.

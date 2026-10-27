@@ -1,3 +1,6 @@
+import threading
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DatabaseError
@@ -58,3 +61,20 @@ def test_department_queue_and_responsibility_trail(env):  # noqa: F811
     assert [(t["event"], t["actor_id"], t["role"]) for t in trail] == [
         ("DRAFT_CREATED", "alice", "AUTHOR"), ("REVIEW_REQUESTED", "alice", "AUTHOR"),
         ("APPROVE", "erin", "QA_PRODUCTION"), ("BASIS_CHANGED", "alice", "AUTHOR")]
+
+
+def test_concurrent_decisions_on_one_review_accept_exactly_one(env):  # noqa: F811
+    c = env
+    create(c, "ncr")
+    sha = review(c, "ncr", 1).json()["content_sha256"]
+    gate = threading.Barrier(3)
+
+    def decide(decision):
+        gate.wait()
+        return c.post("/cases/C1/ncr/1/decision", headers=H("bob"),
+                      json={"decision": decision, "content_sha256": sha}).status_code
+
+    with ThreadPoolExecutor(3) as pool:
+        codes = list(pool.map(decide, ("APPROVE", "REJECT", "REQUEST_INFO")))
+    assert codes.count(200) == 1, codes
+    assert len(get(c, "/cases/C1/ncr/1")["decisions"]) == 1

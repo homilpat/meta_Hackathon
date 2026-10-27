@@ -1,0 +1,57 @@
+{
+  "double_decision": {
+    "description": "one reviewer sends APPROVE, REJECT and REQUEST_INFO at once (three tabs)",
+    "trials": 20,
+    "status_codes": {
+      "200": 20,
+      "403": 40
+    },
+    "violations": [],
+    "server_errors_5xx": 0,
+    "seconds": 7.07
+  },
+  "stale_approval": {
+    "description": "reviewer approves v1 while the author drafts v2",
+    "trials": 20,
+    "status_codes": {
+      "200": 13,
+      "201": 20,
+      "409": 7
+    },
+    "violations": [],
+    "server_errors_5xx": 0,
+    "seconds": 7.09
+  },
+  "revision_vs_approval": {
+    "description": "QA approves the containment plan while an SPI correction reopens its NCR",
+    "trials": 20,
+    "status_codes": {
+      "200": 12,
+      "201": 20,
+      "409": 8
+    },
+    "violations": [],
+    "server_errors_5xx": 0,
+    "seconds": 9.14
+  },
+  "same_key_retry": {
+    "description": "one client retries the same create request 4x concurrently (same Idempotency-Key)",
+    "trials": 20,
+    "status_codes": {
+      "201": 80
+    },
+    "violations": [],
+    "server_errors_5xx": 0,
+    "seconds": 7.23
+  },
+  "parallel_cases": {
+    "description": "4 cases run the full D2-D4 chain in parallel threads",
+    "trials": 20,
+    "status_codes": {
+      "200": 20
+    },
+    "violations": [],
+    "server_errors_5xx": 0,
+    "seconds": 53.16
+  }
+}

@@ -8,7 +8,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import sessionmaker
 
 from app.db import Assignment, DataQualityIssue, Evidence, QualityCase, SourceAsset, SourceEvent
@@ -30,10 +30,26 @@ class CaseCreate(BaseModel):
     data_origin: Literal["SYNTHETIC"] = "SYNTHETIC"
 
 
+def serialize_sqlite(engine) -> None:
+    """Take the write lock at BEGIN, so every check-then-write (review still PENDING? key unused? NCR still
+    APPROVED?) runs on the state it changes. pysqlite otherwise reads outside the transaction and two
+    concurrent decisions could both pass their checks (found by scripts/concurrency_sim.py)."""
+    # ponytail: one writer at a time is SQLite's ceiling; on Postgres use row locks (SELECT ... FOR UPDATE).
+    @event.listens_for(engine, "connect")
+    def _no_implicit_begin(dbapi_connection, _record):
+        dbapi_connection.isolation_level = None
+
+    @event.listens_for(engine, "begin")
+    def _begin_immediate(conn):
+        conn.exec_driver_sql("BEGIN IMMEDIATE")
+
+
 def create_app(database_url: str = "sqlite:///qualityops.db",
                provider: ModelProvider | None = None) -> FastAPI:
     app = FastAPI(title="QualityOps AI", version="0.6.0")
-    engine = create_engine(database_url)
+    engine = create_engine(database_url, connect_args={"timeout": 30} if database_url.startswith("sqlite") else {})
+    if engine.dialect.name == "sqlite":
+        serialize_sqlite(engine)
     sessions = sessionmaker(engine)
     app.state.engine = engine
 

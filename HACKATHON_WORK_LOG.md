@@ -156,3 +156,11 @@
 
 - The 할 일 screen opens on "내 할 일" (`/queue?scope=mine`: items whose owner is the current user) with a toggle to "부서 할 일" (whole role). Browser check: alice sees REDRAFT NCR/RCA and the ANSWER_COMMENT from erin on C2; "열기" deep-links to the document. README gained a Collaboration paragraph.
 - Not built (stated): real login, push notifications/real-time refresh, free-form chat (feedback is claim-anchored and audited instead). `npm run build` exit 0; pytest 108 passed.
+
+## 2026-10-27 KST — Real public data check of the model/XAI method (UCI Steel Plates, user-approved download)
+
+- `scripts/steel_model.py`: downloads the official UCI ZIP (100,890 bytes) to git-ignored `data/uci/`, accepts it only if SHA-256 equals the S1 record (`cb8eb985…`, matched), checks 1941×34 with one-hot labels.
+- Task: 7-class fault **type** classification (every row is faulty — no detection/defect-rate claim). Stratified 60/20/20, seed 11; no plate/time ids in the source, so scores may be optimistic for a new period (stated in the card).
+- Test: LightGBM accuracy 0.779 / macro F1 0.810 / log loss 0.569; logistic regression 0.689 / 0.699 / 0.788; majority class 0.347 / 0.074. Per-class F1 0.655 (Pastry) to 0.963 (Stains). TreeSHAP per class, max additivity error recorded.
+- Outputs: `docs/STEEL_MODEL_CARD.md`, `docs/steel_eval.json` (aggregates only, attribution included); `GET /reference-models/steel`; prediction screen card "실제 공개 데이터 검증", labelled REAL and separate from PCB cases. Steel rows never enter a case or a Meta prompt. THIRD_PARTY_NOTICES: dataset attribution.
+- Checks: pytest 109 passed (new: aggregates only, beats baselines, additivity); ruff exit 0; `npm run build` exit 0; `git status` shows no file under `data/`.

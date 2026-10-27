@@ -147,6 +147,20 @@ function DataWorkspace({ ctx }: { ctx: Ctx }) {
   </Page>
 }
 
+function SteelReference({ ctx }: { ctx: Ctx }) {
+  const r = useLoad<J>(ctx, '/reference-models/steel', null)
+  if (!r) return null
+  const m = r.metrics_test as Record<string, J>
+  return <Card className="mt"><SectionTitle title="실제 공개 데이터 검증 · 강판 결함 유형 (REAL)" sub={`UCI Steel Plates Faults · ${r.rows.total}행 · 테스트 ${r.rows.test}행 · ${r.split}`} action={<Badge tone="blue">PCB 사건과 분리</Badge>}/>
+    <Note>같은 방법(LightGBM + TreeSHAP + 기준선)을 실제 제조 검사 데이터에 적용한 결과입니다. 모든 행이 결함 판재라서 결함 <b>유형</b> 분류만 검증하며, 불량 검출률은 말하지 않습니다. 이 데이터는 사건이나 Meta 프롬프트에 들어가지 않습니다.</Note>
+    <div className="table-wrap"><table><thead><tr><th>모델</th><th>정확도</th><th>macro F1</th><th>log loss</th></tr></thead><tbody>
+      {Object.entries(m).map(([k, v]) => <tr key={k}><td><b>{k}</b></td><td>{v.accuracy}</td><td>{v.macro_f1}</td><td>{v.log_loss}</td></tr>)}</tbody></table></div>
+    <div className="table-wrap"><table><thead><tr><th>결함 유형</th><th>F1</th><th>평균 |SHAP| 상위 특성 (모델 점수 설명, 원인 아님)</th></tr></thead><tbody>
+      {Object.entries(r.lightgbm_per_class_f1 as Record<string, number>).map(([c, f]) => <tr key={c}><td>{c}</td><td>{f}</td>
+        <td className="wrap">{(r.shap.top5_mean_abs_by_class[c] as [string, number][]).map(([n, v]) => `${n} ${v}`).join(' · ')}</td></tr>)}</tbody></table></div>
+    <p className="muted">{r.attribution}</p></Card>
+}
+
 function Prediction({ ctx }: { ctx: Ctx }) {
   const preds = useLoad<J[]>(ctx, `/cases/${ctx.cid}/predictions`, [])
   const [sel, setSel] = useState(0)
@@ -172,6 +186,7 @@ function Prediction({ ctx }: { ctx: Ctx }) {
             <div className="detail-row" key={x[0]}><span>{x[0]}</span><b>{x[1]}</b></div>)}
           <div className="divider"/><SectionTitle title="입력 Evidence" sub={`${p.input_evidence_ids.length}개 SPI 행`}/><Cite ids={p.input_evidence_ids}/></Card>
       </div></>}
+    <SteelReference ctx={ctx}/>
   </Page>
 }
 

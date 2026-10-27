@@ -85,8 +85,13 @@ text before the network call. **LIVE Meta has not been run in this repository ye
 
 ## Data and scope
 
-PHME 2022 access and usage rights are unresolved and none of its content is included. [UCI Steel
-Plates](docs/UCI_STEEL_PLATES.md) is an adapter interface only; no rows are committed. See [dataset
+PHME 2022 access and usage rights are unresolved and none of its content is included.
+
+**Real public data check:** `python -m scripts.steel_model` downloads [UCI Steel Plates Faults](docs/UCI_STEEL_PLATES.md)
+(CC BY 4.0, hash-verified, kept in git-ignored `data/`) and runs the same LightGBM + TreeSHAP method as a separate
+fault-*type* classifier: test macro F1 0.810 vs 0.699 logistic regression and 0.074 majority class
+([model card](docs/STEEL_MODEL_CARD.md); shown on the prediction screen). Every row is a faulty plate, so it does
+not measure defect detection; its rows never enter a case or a model prompt. See [dataset
 decisions](docs/DATASET_ACCESS.md) and the [data dictionary](docs/DATA_DICTIONARY.md).
 
 Sources: [Meta event](https://dev.meta.ai/events/global-hackathon), [Meta API](https://dev.meta.ai/docs/overview),

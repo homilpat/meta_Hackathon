@@ -203,6 +203,14 @@ def create_app(database_url: str = "sqlite:///qualityops.db",
         p = app.state.provider
         return {"model": p.model if p else MODEL, "mode": p.mode if p else None, "configured": p is not None}
 
+    @app.get("/reference-models/steel")
+    def steel_reference() -> dict:
+        """Aggregate results of the REAL-data reference model (scripts/steel_model.py); no source rows."""
+        path = Path("docs/steel_eval.json")
+        if not path.is_file():
+            raise HTTPException(404, "Run python -m scripts.steel_model first")
+        return json.loads(path.read_text(encoding="utf-8"))
+
     @app.get("/ui", include_in_schema=False)
     def ui() -> FileResponse:
         return FileResponse(Path(__file__).parent / "static" / "index.html")

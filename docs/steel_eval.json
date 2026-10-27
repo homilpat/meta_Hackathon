@@ -1,0 +1,292 @@
+{
+  "source": "https://archive.ics.uci.edu/static/public/198/steel+plates+faults.zip",
+  "archive_sha256": "cb8eb9859198b63f053e443513036b401746fa517ef58bd17c846c6741c93919",
+  "archive_bytes": 100890,
+  "attribution": "Buscema, M., Terzi, S., & Tastle, W. (2010). Steel Plates Faults [Dataset]. UCI Machine Learning Repository. https://doi.org/10.24432/C5J88N \u2014 CC BY 4.0. Modified: parsed and used to train/evaluate a classifier; no rows are redistributed.",
+  "data_origin": "REAL",
+  "task": "7-class steel plate fault TYPE classification (all rows are faulty)",
+  "rows": {
+    "total": 1941,
+    "train": 1164,
+    "valid": 388,
+    "test": 389
+  },
+  "class_counts": {
+    "Pastry": 158,
+    "Z_Scratch": 190,
+    "K_Scatch": 391,
+    "Stains": 72,
+    "Dirtiness": 55,
+    "Bumps": 402,
+    "Other_Faults": 673
+  },
+  "split": "stratified random 60/20/20, seed 11 (no timestamps or plate ids in the source)",
+  "metrics_test": {
+    "majority_class": {
+      "accuracy": 0.347,
+      "macro_f1": 0.0736,
+      "log_loss": 23.5349
+    },
+    "logistic_regression": {
+      "accuracy": 0.6889,
+      "macro_f1": 0.6992,
+      "log_loss": 0.7875
+    },
+    "lightgbm": {
+      "accuracy": 0.7789,
+      "macro_f1": 0.8103,
+      "log_loss": 0.5689
+    }
+  },
+  "lightgbm_per_class_f1": {
+    "Pastry": 0.6552,
+    "Z_Scratch": 0.9067,
+    "K_Scatch": 0.9342,
+    "Stains": 0.963,
+    "Dirtiness": 0.8,
+    "Bumps": 0.6977,
+    "Other_Faults": 0.7153
+  },
+  "lightgbm_best_iteration": 84,
+  "confusion_matrix_test": {
+    "labels": [
+      "Pastry",
+      "Z_Scratch",
+      "K_Scatch",
+      "Stains",
+      "Dirtiness",
+      "Bumps",
+      "Other_Faults"
+    ],
+    "rows_true_cols_pred": [
+      [
+        19,
+        1,
+        0,
+        0,
+        0,
+        3,
+        9
+      ],
+      [
+        0,
+        34,
+        0,
+        0,
+        0,
+        0,
+        4
+      ],
+      [
+        0,
+        0,
+        71,
+        0,
+        0,
+        1,
+        6
+      ],
+      [
+        0,
+        0,
+        0,
+        13,
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        8,
+        0,
+        3
+      ],
+      [
+        2,
+        0,
+        0,
+        0,
+        0,
+        60,
+        19
+      ],
+      [
+        5,
+        2,
+        3,
+        0,
+        1,
+        26,
+        98
+      ]
+    ]
+  },
+  "shap": {
+    "method": "lightgbm_pred_contrib_treeshap",
+    "max_additivity_error": 1.2434497875801753e-14,
+    "top5_mean_abs_by_class": {
+      "Pastry": [
+        [
+          "Edges_Y_Index",
+          0.7999
+        ],
+        [
+          "Orientation_Index",
+          0.5703
+        ],
+        [
+          "Minimum_of_Luminosity",
+          0.2849
+        ],
+        [
+          "Steel_Plate_Thickness",
+          0.2606
+        ],
+        [
+          "Empty_Index",
+          0.2278
+        ]
+      ],
+      "Z_Scratch": [
+        [
+          "Length_of_Conveyer",
+          1.1949
+        ],
+        [
+          "TypeOfSteel_A300",
+          0.4177
+        ],
+        [
+          "Steel_Plate_Thickness",
+          0.36
+        ],
+        [
+          "Y_Minimum",
+          0.2329
+        ],
+        [
+          "Maximum_of_Luminosity",
+          0.1185
+        ]
+      ],
+      "K_Scatch": [
+        [
+          "Steel_Plate_Thickness",
+          1.2735
+        ],
+        [
+          "Outside_X_Index",
+          0.5418
+        ],
+        [
+          "Minimum_of_Luminosity",
+          0.2987
+        ],
+        [
+          "X_Minimum",
+          0.2422
+        ],
+        [
+          "Luminosity_Index",
+          0.209
+        ]
+      ],
+      "Stains": [
+        [
+          "Pixels_Areas",
+          0.5114
+        ],
+        [
+          "Log_Y_Index",
+          0.251
+        ],
+        [
+          "Length_of_Conveyer",
+          0.1373
+        ],
+        [
+          "Steel_Plate_Thickness",
+          0.1372
+        ],
+        [
+          "Y_Minimum",
+          0.0979
+        ]
+      ],
+      "Dirtiness": [
+        [
+          "Square_Index",
+          0.3976
+        ],
+        [
+          "Y_Minimum",
+          0.3365
+        ],
+        [
+          "Minimum_of_Luminosity",
+          0.2449
+        ],
+        [
+          "X_Minimum",
+          0.2015
+        ],
+        [
+          "Edges_Index",
+          0.1734
+        ]
+      ],
+      "Bumps": [
+        [
+          "Minimum_of_Luminosity",
+          0.3079
+        ],
+        [
+          "Edges_Y_Index",
+          0.3027
+        ],
+        [
+          "Square_Index",
+          0.2765
+        ],
+        [
+          "Y_Perimeter",
+          0.2562
+        ],
+        [
+          "TypeOfSteel_A300",
+          0.2332
+        ]
+      ],
+      "Other_Faults": [
+        [
+          "Sum_of_Luminosity",
+          0.2884
+        ],
+        [
+          "Steel_Plate_Thickness",
+          0.2475
+        ],
+        [
+          "Pixels_Areas",
+          0.1975
+        ],
+        [
+          "Edges_Y_Index",
+          0.1864
+        ],
+        [
+          "Empty_Index",
+          0.1034
+        ]
+      ]
+    }
+  },
+  "versions": {
+    "lightgbm": "4.7.0",
+    "scikit-learn": "1.9.1",
+    "numpy": "2.5.4"
+  }
+}

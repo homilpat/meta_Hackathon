@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QualityOps AI</title>
+<style>
+ body{font:14px system-ui,sans-serif;margin:0;background:#f6f7f9;color:#1a1d21}
+ header{background:#1f3a5f;color:#fff;padding:10px 16px;display:flex;gap:12px;align-items:center}
+ main{display:grid;grid-template-columns:240px 1fr;gap:16px;padding:16px}
+ section{background:#fff;border:1px solid #d9dde3;border-radius:6px;padding:12px;margin-bottom:12px}
+ h2{font-size:15px;margin:0 0 8px} table{border-collapse:collapse;width:100%} td,th{border:1px solid #d9dde3;padding:4px 6px;text-align:left;vertical-align:top}
+ button{margin:2px;padding:4px 10px} .case{cursor:pointer;padding:6px;border-radius:4px} .case:hover,.sel{background:#e4ecf7}
+ .banner{background:#fff4d6;border:1px solid #e3c35a;padding:6px 8px;border-radius:4px;margin-bottom:8px}
+ .OBSERVED{color:#1b6e3c}.CALCULATED{color:#1c4f9c}.HYPOTHESIS{color:#9a5b00}.UNKNOWN{color:#8a1f1f}
+ #msg{padding:6px 16px;color:#8a1f1f;min-height:18px} code{font-size:11px;word-break:break-all}
+</style>
+<header><b>QualityOps AI</b> <span>SYNTHETIC data only</span>
+ <label>User <select id="user"><option value="alice">alice (author)</option><option value="dave">dave (author)</option><option value="bob">bob (reviewer)</option><option value="carol">carol (reviewer)</option></select></label></header>
+<div id="msg"></div>
+<main>
+ <div><section><h2>Cases</h2><div id="cases"></div><button id="new">New synthetic PCB case</button></section></div>
+ <div id="detail"><section>Select a case.</section></div>
+</main>
+<script>
+const $=id=>document.getElementById(id); let cur=null;
+const uid=()=>crypto.randomUUID();
+async function api(path,method='GET',body,idem){
+  const h={'X-User':$('user').value}; if(body!==undefined)h['Content-Type']='application/json'; if(idem)h['Idempotency-Key']=idem;
+  const r=await fetch(path,{method,headers:h,body:body===undefined?undefined:JSON.stringify(body)});
+  const t=await r.text(); let j; try{j=JSON.parse(t)}catch{j=t}
+  if(!r.ok){$('msg').textContent=r.status+': '+(j.detail?JSON.stringify(j.detail):t);throw new Error(r.status)} $('msg').textContent=''; return j}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function loadCases(){ const cs=await api('/cases'); $('cases').innerHTML=cs.map(c=>`<div class="case ${c.case_id===cur?'sel':''}" data-id="${esc(c.case_id)}">${esc(c.case_id)}</div>`).join('')||'<i>none</i>';
+  document.querySelectorAll('.case').forEach(e=>e.onclick=()=>{cur=e.dataset.id;loadCases();loadDetail()}); $('new').style.display=$('user').value in {alice:1,dave:1}?'':'none'}
+async function loadDetail(){
+  if(!cur)return; const me=await api('/me'); let ev,iss,docs,tl;
+  try{[ev,iss,docs,tl]=await Promise.all([api(`/cases/${cur}/evidence`),api(`/cases/${cur}/data-issues`),api(`/cases/${cur}/ncr`),api(`/cases/${cur}/timeline`)])}
+  catch{$('detail').innerHTML='<section>No access to this case.</section>';return}
+  const author=me.role==='AUTHOR', latest=docs[docs.length-1];
+  let h=`<section><h2>Case ${esc(cur)}</h2>Evidence rows: ${ev.length} · data-quality issues: ${iss.length} (${[...new Set(iss.map(i=>i.code))].join(', ')})
+   <br><button id="mk" ${author?'':'disabled'}>Create NCR draft</button><button id="as" ${author?'':'disabled'}>Assign bob as reviewer</button></section>`;
+  for(const d of docs){ const mine=d.author_id===me.id, isLatest=d===latest;
+    h+=`<section><h2>NCR v${d.version} — ${d.status}</h2><div class="banner">Draft generator: ${esc(d.builder)} (no AI model used). Author: ${esc(d.author_id)}</div>
+    <table><tr><th>ID</th><th>Class</th><th>Statement</th><th>Evidence</th></tr>${d.claims.map(c=>`<tr><td>${c.claim_id}</td><td class="${c.classification}">${c.classification}</td><td>${esc(c.text)}</td><td>${esc(c.evidence_ids.join(', ')||'-')}</td></tr>`).join('')}</table>
+    <p>SHA-256 <code>${d.content_sha256}</code> · <a href="#" data-html="${d.version}">open HTML</a></p>
+    ${d.decisions.map(x=>`<p>${x.action} by ${esc(x.actor_id)}: ${esc(x.comment)}</p>`).join('')}
+    ${author&&mine&&isLatest&&d.status==='DRAFT'?`<button data-rr="${d.version}">Request review from bob</button><button data-rr="${d.version}" data-who="carol">…from carol</button>`:''}
+    ${me.role==='REVIEWER'&&isLatest&&d.status==='IN_REVIEW'?'<input id="cm" placeholder="Comment"> '+['APPROVE','REJECT','REQUEST_INFO'].map(a=>`<button data-dec="${a}" data-v="${d.version}" data-sha="${d.content_sha256}">${a}</button>`).join(''):''}</section>`}
+  h+=`<section><h2>Audit timeline</h2><table>${tl.map(t=>`<tr><td>${t.at}</td><td>${esc(t.actor_id)}</td><td>${t.event}</td><td>${esc(t.detail)}</td></tr>`).join('')}</table></section>`;
+  $('detail').innerHTML=h;
+  $('mk').onclick=async()=>{await api(`/cases/${cur}/ncr`,'POST',{},uid());loadDetail()};
+  $('as').onclick=async()=>{await api(`/cases/${cur}/assignments`,'POST',{user_id:'bob'});loadDetail()};
+  document.querySelectorAll('[data-rr]').forEach(b=>b.onclick=async()=>{await api(`/cases/${cur}/ncr/${b.dataset.rr}/request-review`,'POST',{reviewer_id:b.dataset.who||'bob'},uid());loadDetail()});
+  document.querySelectorAll('[data-dec]').forEach(b=>b.onclick=async()=>{const c=$('cm').value;await api(`/cases/${cur}/ncr/${b.dataset.v}/decision`,'POST',{decision:b.dataset.dec,comment:c,content_sha256:b.dataset.sha},uid());loadDetail()});
+  document.querySelectorAll('[data-html]').forEach(a=>a.onclick=async e=>{e.preventDefault();const w=window.open('');w.document.write(await (await fetch(`/cases/${cur}/ncr/${a.dataset.html}/html`,{headers:{'X-User':$('user').value}})).text())});
+}
+$('new').onclick=async()=>{const id='PCB-'+Date.now().toString(36).toUpperCase(); await api('/cases','POST',{case_id:id}); const b=await (await fetch('/synthetic/7')).json(); await api(`/cases/${id}/sources`,'POST',b); cur=id; await loadCases(); loadDetail()};
+$('user').onchange=()=>{loadCases();loadDetail()}; loadCases();
+</script></html>

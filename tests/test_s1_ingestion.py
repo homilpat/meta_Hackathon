@@ -16,7 +16,7 @@ from scripts.generate_synthetic_pcb import main as generate_cli
 def client(tmp_path):
     app = create_app(f"sqlite:///{tmp_path / 'case.db'}")
     Base.metadata.create_all(app.state.engine)
-    with TestClient(app) as test_client:
+    with TestClient(app, headers={"X-User": "alice"}) as test_client:
         yield test_client
     app.state.engine.dispose()
 

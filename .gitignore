@@ -14,3 +14,4 @@ data/
 artifacts/
 synthetic-pcb.json
 
+.serena/

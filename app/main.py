@@ -1,16 +1,19 @@
 import hashlib
 import json
 from collections import Counter
-from typing import Literal
+from pathlib import Path
+from typing import Annotated, Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
-from app.db import DataQualityIssue, Evidence, QualityCase, SourceAsset, SourceEvent
+from app.db import Assignment, DataQualityIssue, Evidence, QualityCase, SourceAsset, SourceEvent
 from app.ingestion import SyntheticBundle, normalize
 from app.synthetic import canonical, generate
+from app.workflow import Actor, make_auth, make_router, require_case, require_role
 
 
 class Health(BaseModel):
@@ -25,37 +28,39 @@ class CaseCreate(BaseModel):
 
 
 def create_app(database_url: str = "sqlite:///qualityops.db") -> FastAPI:
-    app = FastAPI(title="QualityOps AI", version="0.1.0")
+    app = FastAPI(title="QualityOps AI", version="0.2.0")
     engine = create_engine(database_url)
     sessions = sessionmaker(engine)
     app.state.engine = engine
 
-    def require_case(session, case_id: str) -> QualityCase:
-        case = session.get(QualityCase, case_id)
-        if case is None:
-            raise HTTPException(404, "Case not found")
-        return case
+    current_user = make_auth(sessions)
+    Who = Annotated[Actor, Depends(current_user)]
+    app.include_router(make_router(sessions, current_user))
 
     @app.get("/health", response_model=Health)
     def health() -> Health:
-        return Health(status="ok", stage="S1")
+        return Health(status="ok", stage="S2")
 
     @app.post("/cases", status_code=201)
-    def create_case(payload: CaseCreate) -> dict:
+    def create_case(payload: CaseCreate, actor: Who) -> dict:
+        require_role(actor, "AUTHOR")
         with sessions.begin() as session:
             if session.get(QualityCase, payload.case_id):
                 raise HTTPException(409, "Case already exists")
             session.add(QualityCase(id=payload.case_id, domain=payload.domain, data_origin=payload.data_origin))
+            session.flush()
+            session.add(Assignment(case_id=payload.case_id, user_id=actor.id))
         return payload.model_dump()
 
     @app.get("/cases/{case_id}")
-    def get_case(case_id: str) -> dict:
+    def get_case(case_id: str, actor: Who) -> dict:
         with sessions() as session:
-            case = require_case(session, case_id)
+            case = require_case(session, case_id, actor)
             return {"case_id": case.id, "domain": case.domain, "data_origin": case.data_origin}
 
     @app.post("/cases/{case_id}/sources", status_code=201)
-    def upload_sources(case_id: str, bundle: SyntheticBundle) -> dict:
+    def upload_sources(case_id: str, bundle: SyntheticBundle, actor: Who) -> dict:
+        require_role(actor, "AUTHOR")
         # shortcut: S1 accepts only this reproducible generator; real adapters need their own provenance gate.
         expected = SyntheticBundle.model_validate(generate(bundle.seed))
         if bundle.model_dump(mode="json") != expected.model_dump(mode="json"):
@@ -65,7 +70,7 @@ def create_app(database_url: str = "sqlite:///qualityops.db") -> FastAPI:
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
         with sessions.begin() as session:
-            require_case(session, case_id)
+            require_case(session, case_id, actor)
             if session.scalar(select(SourceAsset.id).where(SourceAsset.case_id == case_id).limit(1)):
                 raise HTTPException(409, "Sources already uploaded for this case")
             asset_ids = {}
@@ -104,9 +109,9 @@ def create_app(database_url: str = "sqlite:///qualityops.db") -> FastAPI:
                 "issue_counts": Counter(i["code"] for i in issues)}
 
     @app.get("/cases/{case_id}/sources")
-    def get_sources(case_id: str) -> list[dict]:
+    def get_sources(case_id: str, actor: Who) -> list[dict]:
         with sessions() as session:
-            require_case(session, case_id)
+            require_case(session, case_id, actor)
             assets = session.scalars(select(SourceAsset).where(SourceAsset.case_id == case_id).order_by(SourceAsset.id)).all()
             return [{
                 "asset_id": a.asset_id, "source_system": a.source_system,
@@ -116,10 +121,10 @@ def create_app(database_url: str = "sqlite:///qualityops.db") -> FastAPI:
             } for a in assets]
 
     @app.get("/cases/{case_id}/events")
-    def get_events(case_id: str, entity_type: str | None = None,
+    def get_events(case_id: str, actor: Who, entity_type: str | None = None,
                    panel_id: str | None = None, board_id: str | None = None) -> list[dict]:
         with sessions() as session:
-            require_case(session, case_id)
+            require_case(session, case_id, actor)
             rows = session.execute(
                 select(SourceEvent, SourceAsset)
                 .join(SourceAsset, SourceEvent.source_asset_id == SourceAsset.id)
@@ -138,9 +143,9 @@ def create_app(database_url: str = "sqlite:///qualityops.db") -> FastAPI:
                 and (board_id is None or len(e.entity_key) > 1 and e.entity_key[1] == board_id)]
 
     @app.get("/cases/{case_id}/evidence")
-    def get_evidence(case_id: str) -> list[dict]:
+    def get_evidence(case_id: str, actor: Who) -> list[dict]:
         with sessions() as session:
-            require_case(session, case_id)
+            require_case(session, case_id, actor)
             rows = session.execute(
                 select(Evidence, SourceEvent).join(SourceEvent, Evidence.source_event_id == SourceEvent.id)
                 .where(Evidence.case_id == case_id).order_by(Evidence.id)
@@ -150,14 +155,22 @@ def create_app(database_url: str = "sqlite:///qualityops.db") -> FastAPI:
                      "content_sha256": v.content_sha256} for v, e in rows]
 
     @app.get("/cases/{case_id}/data-issues")
-    def get_issues(case_id: str) -> list[dict]:
+    def get_issues(case_id: str, actor: Who) -> list[dict]:
         with sessions() as session:
-            require_case(session, case_id)
+            require_case(session, case_id, actor)
             rows = session.scalars(
                 select(DataQualityIssue).where(DataQualityIssue.case_id == case_id).order_by(DataQualityIssue.id)
             ).all()
             return [{"event_id": i.event_id, "code": i.code,
                      "severity": i.severity, "detail": i.detail} for i in rows]
+
+    @app.get("/synthetic/{seed}")
+    def synthetic(seed: int) -> dict:
+        return generate(seed)
+
+    @app.get("/ui", include_in_schema=False)
+    def ui() -> FileResponse:
+        return FileResponse(Path(__file__).parent / "static" / "index.html")
 
     return app
 

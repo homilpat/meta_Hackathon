@@ -80,3 +80,97 @@ class DataQualityIssue(Base):
     severity: Mapped[str] = mapped_column(String(20))
     detail: Mapped[str] = mapped_column(Text)
 
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    name: Mapped[str] = mapped_column(String(80))
+    role: Mapped[str] = mapped_column(String(20))  # AUTHOR | REVIEWER
+
+
+class Assignment(Base):
+    """Case access scope: a user sees and acts on a case only through a row here."""
+
+    __tablename__ = "assignments"
+    __table_args__ = (UniqueConstraint("case_id", "user_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+
+
+class DocumentVersion(Base):
+    __tablename__ = "document_versions"
+    __table_args__ = (UniqueConstraint("case_id", "doc_type", "version"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"))
+    doc_type: Mapped[str] = mapped_column(String(10))
+    version: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(20))  # DRAFT IN_REVIEW APPROVED REJECTED INFO_REQUESTED SUPERSEDED
+    author_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    builder: Mapped[str] = mapped_column(String(60))
+    content_sha256: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class DocumentClaim(Base):
+    __tablename__ = "document_claims"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    document_version_id: Mapped[int] = mapped_column(ForeignKey("document_versions.id"))
+    claim_id: Mapped[str] = mapped_column(String(20))
+    classification: Mapped[str] = mapped_column(String(20))  # OBSERVED CALCULATED HYPOTHESIS UNKNOWN
+    text: Mapped[str] = mapped_column(Text)
+    value: Mapped[float | None]
+    unit: Mapped[str | None] = mapped_column(String(20))
+    evidence_ids: Mapped[list] = mapped_column(JSON)
+
+
+class Review(Base):
+    __tablename__ = "reviews"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    document_version_id: Mapped[int] = mapped_column(ForeignKey("document_versions.id"))
+    requested_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    reviewer_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    state: Mapped[str] = mapped_column(String(10))  # PENDING | DONE
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class ApprovalEvent(Base):
+    """Append-only decision bound to the exact content hash that was reviewed."""
+
+    __tablename__ = "approval_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    document_version_id: Mapped[int] = mapped_column(ForeignKey("document_versions.id"))
+    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    action: Mapped[str] = mapped_column(String(20))  # APPROVE REJECT REQUEST_INFO
+    content_sha256: Mapped[str] = mapped_column(String(64))
+    comment: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class WorkflowEvent(Base):
+    __tablename__ = "workflow_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"))
+    document_version_id: Mapped[int | None] = mapped_column(ForeignKey("document_versions.id"))
+    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    event: Mapped[str] = mapped_column(String(30))
+    detail: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class IdempotencyKey(Base):
+    __tablename__ = "idempotency_keys"
+
+    key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    endpoint: Mapped[str] = mapped_column(String(160), primary_key=True)
+    status_code: Mapped[int] = mapped_column(Integer)
+    response_json: Mapped[str] = mapped_column(Text)

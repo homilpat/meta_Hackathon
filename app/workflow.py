@@ -1,0 +1,293 @@
+"""S2 identity, case scope, NCR versions, review/approval workflow and audit timeline."""
+
+import json
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Annotated, Literal, NamedTuple
+
+from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.orm import Session, sessionmaker
+
+from app import ncr
+from app.db import (
+    ApprovalEvent,
+    Assignment,
+    DocumentClaim,
+    DocumentVersion,
+    Evidence,
+    IdempotencyKey,
+    QualityCase,
+    Review,
+    User,
+    WorkflowEvent,
+)
+
+# ponytail: demo identities selected by X-User header, no passwords. Swap for real auth before any
+# non-demo use; the role/assignment checks below do not change.
+DEMO_USERS = {
+    "alice": ("Alice (author)", "AUTHOR"), "dave": ("Dave (author)", "AUTHOR"),
+    "bob": ("Bob (reviewer)", "REVIEWER"), "carol": ("Carol (reviewer)", "REVIEWER"),
+}
+
+
+class Actor(NamedTuple):
+    id: str
+    role: str
+
+
+def now() -> str:
+    return datetime.now(UTC).isoformat()
+
+
+class ReviewRequest(BaseModel):
+    reviewer_id: str
+
+
+class Decision(BaseModel):
+    decision: Literal["APPROVE", "REJECT", "REQUEST_INFO"]
+    comment: str = ""
+    content_sha256: str  # the exact version content the reviewer saw
+
+
+class NcrCreate(BaseModel):
+    extra_claims: list[dict] = []  # author-added claims, held to the same evidence rules
+
+
+class Assign(BaseModel):
+    user_id: str
+
+
+def make_auth(sessions: sessionmaker) -> Callable[..., Actor]:
+    def current_user(x_user: Annotated[str | None, Header()] = None) -> Actor:
+        if x_user not in DEMO_USERS:
+            raise HTTPException(401, "Unknown or missing X-User")
+        name, role = DEMO_USERS[x_user]
+        with sessions.begin() as session:
+            if session.get(User, x_user) is None:
+                session.add(User(id=x_user, name=name, role=role))
+        return Actor(x_user, role)
+
+    return current_user
+
+
+def require_case(session: Session, case_id: str, actor: Actor) -> QualityCase:
+    case = session.get(QualityCase, case_id)
+    if case is None:
+        raise HTTPException(404, "Case not found")
+    if not session.scalar(select(Assignment.id).where(
+            Assignment.case_id == case_id, Assignment.user_id == actor.id)):
+        raise HTTPException(403, "Not assigned to this case")
+    return case
+
+
+def require_role(actor: Actor, role: str) -> None:
+    if actor.role != role:
+        raise HTTPException(403, f"{role} role required")
+
+
+def log(session: Session, case_id: str, actor: Actor, event: str, detail: str, doc_id: int | None = None):
+    session.add(WorkflowEvent(case_id=case_id, document_version_id=doc_id, actor_id=actor.id,
+                              event=event, detail=detail, created_at=now()))
+
+
+def _doc_out(session: Session, doc: DocumentVersion) -> dict:
+    claims = session.scalars(select(DocumentClaim).where(DocumentClaim.document_version_id == doc.id)
+                             .order_by(DocumentClaim.id)).all()
+    reviews = session.scalars(select(Review).where(Review.document_version_id == doc.id)).all()
+    decisions = session.scalars(select(ApprovalEvent).where(ApprovalEvent.document_version_id == doc.id)
+                                .order_by(ApprovalEvent.id)).all()
+    return {
+        "case_id": doc.case_id, "doc_type": doc.doc_type, "version": doc.version, "status": doc.status,
+        "author_id": doc.author_id, "builder": doc.builder, "content_sha256": doc.content_sha256,
+        "created_at": doc.created_at,
+        "claims": [{"claim_id": c.claim_id, "classification": c.classification, "text": c.text,
+                    "value": c.value, "unit": c.unit, "evidence_ids": c.evidence_ids} for c in claims],
+        "reviews": [{"reviewer_id": r.reviewer_id, "state": r.state} for r in reviews],
+        "decisions": [{"actor_id": d.actor_id, "action": d.action, "comment": d.comment,
+                       "content_sha256": d.content_sha256, "created_at": d.created_at} for d in decisions],
+    }
+
+
+def _get_doc(session: Session, case_id: str, version: int) -> DocumentVersion:
+    doc = session.scalar(select(DocumentVersion).where(
+        DocumentVersion.case_id == case_id, DocumentVersion.doc_type == "NCR",
+        DocumentVersion.version == version))
+    if doc is None:
+        raise HTTPException(404, "Document version not found")
+    return doc
+
+
+def _latest(session: Session, case_id: str) -> DocumentVersion | None:
+    return session.scalar(select(DocumentVersion).where(
+        DocumentVersion.case_id == case_id, DocumentVersion.doc_type == "NCR")
+        .order_by(DocumentVersion.version.desc()).limit(1))
+
+
+def make_router(sessions: sessionmaker, current_user: Callable[..., Actor]) -> APIRouter:
+    router = APIRouter()
+    Who = Annotated[Actor, Depends(current_user)]
+    IdemKey = Annotated[str, Header(alias="Idempotency-Key", min_length=8, max_length=80)]
+
+    def idempotent(endpoint: str, key: str, actor: Actor, run: Callable[[Session], tuple[int, dict]]):
+        """Run `run` once per (key, user, endpoint); a retry replays the stored response."""
+        with sessions.begin() as session:
+            seen = session.get(IdempotencyKey, (key, actor.id, endpoint))
+            if seen:
+                return JSONResponse(json.loads(seen.response_json), status_code=seen.status_code)
+            status, body = run(session)
+            session.add(IdempotencyKey(key=key, user_id=actor.id, endpoint=endpoint, status_code=status,
+                                       response_json=json.dumps(body)))
+            return JSONResponse(body, status_code=status)
+
+    @router.get("/me")
+    def me(actor: Who) -> dict:
+        return {"id": actor.id, "role": actor.role, "name": DEMO_USERS[actor.id][0]}
+
+    @router.get("/cases")
+    def list_cases(actor: Who) -> list[dict]:
+        with sessions() as session:
+            rows = session.scalars(select(QualityCase).join(Assignment, Assignment.case_id == QualityCase.id)
+                                   .where(Assignment.user_id == actor.id).order_by(QualityCase.created_at)).all()
+            return [{"case_id": c.id, "domain": c.domain, "data_origin": c.data_origin} for c in rows]
+
+    @router.post("/cases/{case_id}/assignments", status_code=201)
+    def assign(case_id: str, body: Assign, actor: Who) -> dict:
+        require_role(actor, "AUTHOR")
+        if body.user_id not in DEMO_USERS:
+            raise HTTPException(422, "Unknown user")
+        with sessions.begin() as session:
+            require_case(session, case_id, actor)
+            if session.get(User, body.user_id) is None:
+                name, role = DEMO_USERS[body.user_id]
+                session.add(User(id=body.user_id, name=name, role=role))
+                session.flush()
+            if not session.scalar(select(Assignment.id).where(
+                    Assignment.case_id == case_id, Assignment.user_id == body.user_id)):
+                session.add(Assignment(case_id=case_id, user_id=body.user_id))
+                log(session, case_id, actor, "ASSIGNED", body.user_id)
+        return {"case_id": case_id, "user_id": body.user_id}
+
+    @router.post("/cases/{case_id}/ncr")
+    def create_ncr(case_id: str, body: NcrCreate, key: IdemKey, actor: Who):
+        require_role(actor, "AUTHOR")
+
+        def run(session: Session) -> tuple[int, dict]:
+            require_case(session, case_id, actor)
+            claims = ncr.build_claims(session, case_id)
+            known = set(session.scalars(select(Evidence.evidence_id).where(Evidence.case_id == case_id)))
+            if not known:
+                raise HTTPException(422, "Case has no evidence; upload sources first")
+            claims += [{"value": None, "unit": None, "evidence_ids": [], **c,
+                        "claim_id": f"C{len(claims) + i + 1}"} for i, c in enumerate(body.extra_claims)]
+            try:
+                ncr.validate_claims(claims, known)
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from exc
+            prev = _latest(session, case_id)
+            version = prev.version + 1 if prev else 1
+            if prev and prev.status in ("DRAFT", "IN_REVIEW", "INFO_REQUESTED"):
+                prev.status = "SUPERSEDED"
+            doc = DocumentVersion(case_id=case_id, doc_type="NCR", version=version, status="DRAFT",
+                                  author_id=actor.id, builder=ncr.BUILDER, created_at=now(),
+                                  content_sha256=ncr.content_sha256(case_id, version, claims))
+            session.add(doc)
+            session.flush()
+            session.add_all(DocumentClaim(document_version_id=doc.id, claim_id=c["claim_id"],
+                                          classification=c["classification"], text=c["text"],
+                                          value=c["value"], unit=c["unit"], evidence_ids=c["evidence_ids"])
+                            for c in claims)
+            log(session, case_id, actor, "DRAFT_CREATED", f"NCR v{version} builder={ncr.BUILDER}", doc.id)
+            session.flush()
+            return 201, _doc_out(session, doc)
+
+        return idempotent(f"create_ncr:{case_id}", key, actor, run)
+
+    @router.get("/cases/{case_id}/ncr")
+    def list_ncr(case_id: str, actor: Who) -> list[dict]:
+        with sessions() as session:
+            require_case(session, case_id, actor)
+            docs = session.scalars(select(DocumentVersion).where(DocumentVersion.case_id == case_id)
+                                   .order_by(DocumentVersion.version)).all()
+            return [_doc_out(session, d) for d in docs]
+
+    @router.get("/cases/{case_id}/ncr/{version}")
+    def get_ncr(case_id: str, version: int, actor: Who) -> dict:
+        with sessions() as session:
+            require_case(session, case_id, actor)
+            return _doc_out(session, _get_doc(session, case_id, version))
+
+    @router.get("/cases/{case_id}/ncr/{version}/html", response_class=HTMLResponse)
+    def get_ncr_html(case_id: str, version: int, actor: Who) -> str:
+        with sessions() as session:
+            require_case(session, case_id, actor)
+            return ncr.render_html(_doc_out(session, _get_doc(session, case_id, version)))
+
+    @router.post("/cases/{case_id}/ncr/{version}/request-review")
+    def request_review(case_id: str, version: int, body: ReviewRequest, key: IdemKey, actor: Who):
+        require_role(actor, "AUTHOR")
+
+        def run(session: Session) -> tuple[int, dict]:
+            require_case(session, case_id, actor)
+            doc = _get_doc(session, case_id, version)
+            if doc.author_id != actor.id:
+                raise HTTPException(403, "Only the author can request review")
+            if doc.version != _latest(session, case_id).version or doc.status != "DRAFT":
+                raise HTTPException(409, "Only the latest DRAFT version can be sent for review")
+            reviewer = DEMO_USERS.get(body.reviewer_id)
+            if reviewer is None or reviewer[1] != "REVIEWER" or body.reviewer_id == actor.id:
+                raise HTTPException(422, "Reviewer must be a REVIEWER other than the author")
+            if not session.scalar(select(Assignment.id).where(
+                    Assignment.case_id == case_id, Assignment.user_id == body.reviewer_id)):
+                raise HTTPException(422, "Reviewer is not assigned to this case")
+            doc.status = "IN_REVIEW"
+            session.add(Review(document_version_id=doc.id, requested_by=actor.id,
+                               reviewer_id=body.reviewer_id, state="PENDING", created_at=now()))
+            log(session, case_id, actor, "REVIEW_REQUESTED", f"v{version} -> {body.reviewer_id}", doc.id)
+            session.flush()
+            return 200, _doc_out(session, doc)
+
+        return idempotent(f"request_review:{case_id}:{version}", key, actor, run)
+
+    @router.post("/cases/{case_id}/ncr/{version}/decision")
+    def decide(case_id: str, version: int, body: Decision, key: IdemKey, actor: Who):
+        require_role(actor, "REVIEWER")
+
+        def run(session: Session) -> tuple[int, dict]:
+            require_case(session, case_id, actor)
+            doc = _get_doc(session, case_id, version)
+            if doc.author_id == actor.id:
+                raise HTTPException(403, "Authors cannot decide their own document")
+            review = session.scalar(select(Review).where(
+                Review.document_version_id == doc.id, Review.reviewer_id == actor.id,
+                Review.state == "PENDING"))
+            if review is None:
+                raise HTTPException(403, "No pending review request for you on this version")
+            if doc.version != _latest(session, case_id).version:
+                raise HTTPException(409, "A newer version exists; this one is stale")
+            if doc.status != "IN_REVIEW" or body.content_sha256 != doc.content_sha256:
+                raise HTTPException(409, "Version is not in review or content changed since you read it")
+            review.state = "DONE"
+            doc.status = {"APPROVE": "APPROVED", "REJECT": "REJECTED", "REQUEST_INFO": "INFO_REQUESTED"}[
+                body.decision]
+            session.add(ApprovalEvent(document_version_id=doc.id, actor_id=actor.id, action=body.decision,
+                                      content_sha256=doc.content_sha256, comment=body.comment,
+                                      created_at=now()))
+            log(session, case_id, actor, body.decision, f"v{version}: {body.comment}", doc.id)
+            session.flush()
+            return 200, _doc_out(session, doc)
+
+        return idempotent(f"decision:{case_id}:{version}", key, actor, run)
+
+    @router.get("/cases/{case_id}/timeline")
+    def timeline(case_id: str, actor: Who) -> list[dict]:
+        with sessions() as session:
+            require_case(session, case_id, actor)
+            rows = session.scalars(select(WorkflowEvent).where(WorkflowEvent.case_id == case_id)
+                                   .order_by(WorkflowEvent.id)).all()
+            return [{"at": w.created_at, "actor_id": w.actor_id, "event": w.event, "detail": w.detail,
+                     "version_id": w.document_version_id} for w in rows]
+
+    return router

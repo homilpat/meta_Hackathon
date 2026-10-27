@@ -3,7 +3,7 @@ corrections with impact analysis, and the audit timeline."""
 
 import json
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal, NamedTuple
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 from starlette.convertors import StringConvertor, register_url_convertor
 
-from app import history, impact, investigator, ncr
+from app import audit, history, impact, investigator, ncr
 from app.db import (
     ApprovalEvent,
     Assignment,
@@ -326,6 +326,12 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
 
         return idempotent(f"create_{kind}:{case_id}", key, actor, run)
 
+    @router.get("/audit/verify")
+    def audit_verify(actor: Who) -> dict:
+        """Recompute the audit hash chain: detects rows edited, deleted or inserted behind the app's back."""
+        with sessions() as session:
+            return audit.verify(session)
+
     @router.get("/queue")
     def queue(actor: Who, scope: Literal["department", "mine"] = "department") -> list[dict]:
         """Open work for the caller's role (department) across assigned cases, or only items the caller owns."""
@@ -578,6 +584,11 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
             case = require_case(session, case_id, actor)
             if case.data_origin != "SYNTHETIC":
                 raise HTTPException(422, "Only SYNTHETIC cases may be sent to an external model")
+            since = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+            used = len(session.scalars(select(ModelRun.id).where(ModelRun.requested_by == actor.id,
+                                                                 ModelRun.started_at >= since)).all())
+            if used >= investigator.RUNS_PER_USER_HOUR:  # cost/abuse cap on paid model calls
+                raise HTTPException(429, f"Investigation quota reached ({used} runs in the last hour)")
             if not session.scalar(select(Evidence.id).where(Evidence.case_id == case_id).limit(1)):
                 raise HTTPException(422, "Case has no evidence; upload sources first")
             mrun = investigator.investigate(session, case_id, actor.id, provider, use_history)

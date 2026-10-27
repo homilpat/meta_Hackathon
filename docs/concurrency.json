@@ -8,19 +8,19 @@
     },
     "violations": [],
     "server_errors_5xx": 0,
-    "seconds": 7.07
+    "seconds": 3.95
   },
   "stale_approval": {
     "description": "reviewer approves v1 while the author drafts v2",
     "trials": 20,
     "status_codes": {
-      "200": 13,
+      "200": 11,
       "201": 20,
-      "409": 7
+      "409": 9
     },
     "violations": [],
     "server_errors_5xx": 0,
-    "seconds": 7.09
+    "seconds": 2.81
   },
   "revision_vs_approval": {
     "description": "QA approves the containment plan while an SPI correction reopens its NCR",
@@ -32,7 +32,7 @@
     },
     "violations": [],
     "server_errors_5xx": 0,
-    "seconds": 9.14
+    "seconds": 4.66
   },
   "same_key_retry": {
     "description": "one client retries the same create request 4x concurrently (same Idempotency-Key)",
@@ -42,7 +42,7 @@
     },
     "violations": [],
     "server_errors_5xx": 0,
-    "seconds": 7.23
+    "seconds": 3.92
   },
   "parallel_cases": {
     "description": "4 cases run the full D2-D4 chain in parallel threads",
@@ -52,6 +52,11 @@
     },
     "violations": [],
     "server_errors_5xx": 0,
-    "seconds": 53.16
+    "seconds": 23.53
+  },
+  "audit_chain": {
+    "ok": true,
+    "links": 1818,
+    "breaks": []
   }
 }

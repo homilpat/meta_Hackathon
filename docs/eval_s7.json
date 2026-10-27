@@ -537,8 +537,8 @@
     "gateway_blocked": 30
   },
   "revision_latency_ms": {
-    "p50": 27.9,
-    "max": 166.0
+    "p50": 17.6,
+    "max": 138.9
   },
   "containment_basis_changed": 30
 }

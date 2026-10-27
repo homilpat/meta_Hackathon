@@ -13,7 +13,7 @@
     "after": 264
   },
   "reduction": 0.912,
-  "fixed_prompt_and_tool_specs_chars": 4105,
+  "fixed_prompt_and_tool_specs_chars": 4250,
   "ncr_facts_missing_from_summary": [],
   "per_case": [
     {

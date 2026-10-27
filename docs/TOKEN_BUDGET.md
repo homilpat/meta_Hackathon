@@ -9,7 +9,7 @@ half scored by the SPI model). No model was called.
 | After: `get_case_summary` | 1 | 1055 | 264 |
 
 Tool-result payload reduction: **91.2%**. Fixed per-request overhead (system prompt + tool specs):
-4105 chars, sent on every round, so fewer rounds also save it again each time.
+4250 chars, sent on every round, so fewer rounds also save it again each time.
 Every source/model evidence id cited by the NCR template is present in the summary: True
 (0 cases missing ids).
 

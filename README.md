@@ -63,6 +63,10 @@ append-only log. Each document shows a *책임 추적* trail (who did what, in w
 simulated with `python -m scripts.concurrency_sim` ([results](docs/CONCURRENCY_RESULTS.md)): it found three
 race conditions, which are fixed and covered by a regression test.
 
+## Security
+
+[SECURITY.md](SECURITY.md) lists each enforced control with the test that proves it (egress allowlist, least-privilege tools, output validation, prompt-injection test, separation of duties, hash-chained append-only audit with `GET /audit/verify`, investigation quota) and what a real deployment still needs (SSO, self-hosted model or provider contract for real data, encryption, external anchoring of the audit chain).
+
 ## Meta LIVE
 
 Put `MODEL_API_KEY=...` in the git-ignored `.env` (see `.env.example`). **Calls may incur API charges.**

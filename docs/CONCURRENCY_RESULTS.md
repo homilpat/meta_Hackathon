@@ -7,13 +7,19 @@ no model calls. Raw output: `docs/concurrency.json`.
 | scenario | what collides | trials | status codes of the colliding requests | 5xx | invariant violations |
 |---|---|---|---|---|---|
 | double_decision | one reviewer sends APPROVE, REJECT and REQUEST_INFO at once (three tabs) | 20 | {200: 20, 403: 40} | 0 | 0 |
-| stale_approval | reviewer approves v1 while the author drafts v2 | 20 | {200: 13, 201: 20, 409: 7} | 0 | 0 |
+| stale_approval | reviewer approves v1 while the author drafts v2 | 20 | {200: 11, 201: 20, 409: 9} | 0 | 0 |
 | revision_vs_approval | QA approves the containment plan while an SPI correction reopens its NCR | 20 | {200: 12, 201: 20, 409: 8} | 0 | 0 |
 | same_key_retry | one client retries the same create request 4x concurrently (same Idempotency-Key) | 20 | {201: 80} | 0 | 0 |
 | parallel_cases | 4 cases run the full D2-D4 chain in parallel threads | 20 | {200: 20} | 0 | 0 |
 
+Audit hash chain after all scenarios: ok=True, 1818 links, 0 breaks.
+
 Invariants: exactly one decision per review; a version is never approved after a newer draft exists; a
 containment plan is never APPROVED on top of a reopened NCR; one Idempotency-Key creates one version and every
 retry gets the same response; parallel cases finish independently with only their own events.
+Before the fix (first run, 10 trials, same scenarios): double_decision 10/10 trials accepted 2-3 decisions;
+revision_vs_approval 8/10 left a containment plan APPROVED on a reopened NCR; same_key_retry returned HTTP 500
+on 30 of 40 requests (duplicate version insert). Cause: the SQLite driver ran each request's checks outside
+its write transaction. Fix: `serialize_sqlite` in `app/main.py` (BEGIN IMMEDIATE).
 Limits: one machine, threads not processes, SQLite (single writer). It shows the server's conflict rules hold
 under these collisions; it is not a load test.

@@ -377,8 +377,22 @@ class DocComment(Base):
     created_at: Mapped[str] = mapped_column(String(40))
 
 
+class AuditChain(Base):
+    """One link per audit row: sha256(prev link + row content). Lets app.audit.verify detect edits that bypass
+    the triggers (e.g. an admin dropping them)."""
+
+    __tablename__ = "audit_chain"
+    __table_args__ = (UniqueConstraint("table_name", "row_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    table_name: Mapped[str] = mapped_column(String(30))
+    row_id: Mapped[int] = mapped_column(Integer)
+    prev_sha256: Mapped[str] = mapped_column(String(64))
+    sha256: Mapped[str] = mapped_column(String(64))
+
+
 # Audit rows are append-only at the database level, not just by convention.
-APPEND_ONLY = ("approval_events", "workflow_events", "doc_comments")
+APPEND_ONLY = ("approval_events", "workflow_events", "doc_comments", "audit_chain")
 
 
 def append_only_ddl(table: str) -> list[str]:

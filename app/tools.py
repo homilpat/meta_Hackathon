@@ -1,0 +1,99 @@
+"""Read-only evidence tools exposed to the model. Scoped to one case chosen by the server."""
+
+import json
+from collections import Counter
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.db import DataQualityIssue, Evidence, QualityCase, SourceAsset, SourceEvent
+
+APPROVED = ("SYNTHETIC", "APPROVED_FOR_EXTERNAL")
+
+
+class ToolError(Exception):
+    """Bad arguments or unknown tool. Safe to show to the model."""
+
+
+class ToolDenied(ToolError):
+    """Data not approved for external processing. Fail closed: no rows are returned."""
+
+
+def _fn(name: str, description: str, properties: dict, required: list[str] | None = None) -> dict:
+    return {"type": "function", "function": {
+        "name": name, "description": description,
+        "parameters": {"type": "object", "properties": properties, "required": required or [],
+                       "additionalProperties": False}}}
+
+
+SPECS = [
+    _fn("get_case_context", "Case id, source assets with versions and hashes, and event counts per type.", {}),
+    _fn("get_manufacturing_events",
+        "List events with their evidence_id and record. Filter by entity_type, panel_id, board_id.",
+        {"entity_type": {"type": "string"}, "panel_id": {"type": "string"}, "board_id": {"type": "string"},
+         "limit": {"type": "integer", "minimum": 1, "maximum": 50}}),
+    _fn("get_evidence", "Fetch evidence rows by evidence_id (max 20).",
+        {"evidence_ids": {"type": "array", "items": {"type": "string"}, "maxItems": 20}}, ["evidence_ids"]),
+    _fn("check_data_integrity", "List recorded data-quality issues (duplicates, missing AOI, corrections).", {}),
+]
+ARGS = {s["function"]["name"]: set(s["function"]["parameters"]["properties"]) for s in SPECS}
+
+
+class EvidenceTools:
+    def __init__(self, session: Session, case_id: str):
+        self.session, self.case_id = session, case_id
+
+    def call(self, name: str, args: dict) -> dict:
+        if name not in ARGS:
+            raise ToolError(f"unknown tool {name!r}")
+        if not isinstance(args, dict) or set(args) - ARGS[name]:
+            raise ToolError(f"invalid arguments for {name}")
+        return getattr(self, name)(**args)
+
+    def _rows(self, *conditions) -> list[dict]:
+        rows = self.session.execute(
+            select(Evidence, SourceEvent, SourceAsset)
+            .join(SourceEvent, Evidence.source_event_id == SourceEvent.id)
+            .join(SourceAsset, SourceEvent.source_asset_id == SourceAsset.id)
+            .where(Evidence.case_id == self.case_id, *conditions).order_by(Evidence.id)).all()
+        if any((e.data_origin, e.sensitivity) != APPROVED for _, e, _ in rows):
+            raise ToolDenied("denied: source not approved for external processing")
+        return [{"evidence_id": v.evidence_id, "entity_type": e.entity_type, "entity_key": e.entity_key,
+                 "source_version": a.source_version, "validity": v.validity,
+                 "record": json.loads(e.raw_json)} for v, e, a in rows]
+
+    def get_case_context(self) -> dict:
+        case = self.session.get(QualityCase, self.case_id)
+        assets = self.session.scalars(select(SourceAsset).where(SourceAsset.case_id == self.case_id)).all()
+        counts = Counter(r[0] for r in self.session.execute(
+            select(SourceEvent.entity_type).where(SourceEvent.case_id == self.case_id)))
+        return {"case_id": case.id, "domain": case.domain, "data_origin": case.data_origin,
+                "event_counts": dict(counts),
+                "assets": [{"asset_id": a.asset_id, "source_version": a.source_version,
+                            "content_sha256": a.content_sha256} for a in assets],
+                "note": "Cite only evidence_id values returned by tools."}
+
+    def get_manufacturing_events(self, entity_type: str | None = None, panel_id: str | None = None,
+                                 board_id: str | None = None, limit: int = 25) -> dict:
+        if not isinstance(limit, int) or not 1 <= limit <= 50:
+            raise ToolError("limit must be 1..50")
+        rows = [r for r in self._rows()
+                if (entity_type is None or r["entity_type"] == entity_type)
+                and (panel_id is None or r["entity_key"][0] == panel_id)
+                and (board_id is None or (len(r["entity_key"]) > 1 and r["entity_key"][1] == board_id))]
+        return {"total_matching": len(rows), "events": rows[:limit]}
+
+    def get_evidence(self, evidence_ids: list[str]) -> dict:
+        if not isinstance(evidence_ids, list) or len(evidence_ids) > 20 or not all(
+                isinstance(i, str) for i in evidence_ids):
+            raise ToolError("evidence_ids must be a list of at most 20 strings")
+        found = self._rows(Evidence.evidence_id.in_(evidence_ids))
+        have = {r["evidence_id"] for r in found}
+        return {"evidence": found, "not_found": sorted(set(evidence_ids) - have)}
+
+    def check_data_integrity(self) -> dict:
+        issues = self.session.scalars(select(DataQualityIssue).where(
+            DataQualityIssue.case_id == self.case_id).order_by(DataQualityIssue.id)).all()
+        return {"issue_counts": dict(Counter(i.code for i in issues)),
+                "issues": [{"code": i.code, "severity": i.severity, "detail": i.detail,
+                            "evidence_id": f"EV-{i.event_id}"} for i in issues[:50]]}

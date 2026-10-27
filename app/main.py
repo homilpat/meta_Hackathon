@@ -12,6 +12,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.db import Assignment, DataQualityIssue, Evidence, QualityCase, SourceAsset, SourceEvent
 from app.ingestion import SyntheticBundle, normalize
+from app.model_provider import MetaProvider, ModelProvider
 from app.synthetic import canonical, generate
 from app.workflow import Actor, make_auth, make_router, require_case, require_role
 
@@ -27,19 +28,21 @@ class CaseCreate(BaseModel):
     data_origin: Literal["SYNTHETIC"] = "SYNTHETIC"
 
 
-def create_app(database_url: str = "sqlite:///qualityops.db") -> FastAPI:
-    app = FastAPI(title="QualityOps AI", version="0.2.0")
+def create_app(database_url: str = "sqlite:///qualityops.db",
+               provider: ModelProvider | None = None) -> FastAPI:
+    app = FastAPI(title="QualityOps AI", version="0.3.0")
     engine = create_engine(database_url)
     sessions = sessionmaker(engine)
     app.state.engine = engine
 
     current_user = make_auth(sessions)
     Who = Annotated[Actor, Depends(current_user)]
-    app.include_router(make_router(sessions, current_user))
+    app.state.provider = provider or MetaProvider.from_env()  # None -> investigations return 503
+    app.include_router(make_router(sessions, current_user, app.state.provider))
 
     @app.get("/health", response_model=Health)
     def health() -> Health:
-        return Health(status="ok", stage="S2")
+        return Health(status="ok", stage="S3")
 
     @app.post("/cases", status_code=201)
     def create_case(payload: CaseCreate, actor: Who) -> dict:

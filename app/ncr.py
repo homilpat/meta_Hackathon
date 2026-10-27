@@ -28,8 +28,8 @@ def validate_claims(claims: list[dict], known_evidence: set[str]) -> None:
             raise ValueError(f"{cid}: unknown evidence {sorted(unknown)}")
 
 
-def content_sha256(case_id: str, version: int, claims: list[dict]) -> str:
-    body = {"case_id": case_id, "version": version, "builder": BUILDER, "claims": claims}
+def content_sha256(case_id: str, version: int, claims: list[dict], builder: str = BUILDER) -> str:
+    body = {"case_id": case_id, "version": version, "builder": builder, "claims": claims}
     return hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
@@ -100,6 +100,12 @@ def build_claims(session: Session, case_id: str) -> list[dict]:
     return claims
 
 
+def generator_note(builder: str) -> str:
+    if builder == BUILDER:
+        return "no AI model used"
+    return "model output, accepted only after server-side ClaimValidator"
+
+
 def render_html(doc: dict) -> str:
     rows = "".join(
         f"<tr><td>{c['claim_id']}</td><td>{c['classification']}</td><td>{html.escape(c['text'])}</td>"
@@ -107,7 +113,8 @@ def render_html(doc: dict) -> str:
     return (
         "<!doctype html><meta charset=utf-8><title>NCR draft</title>"
         f"<h1>NCR {html.escape(doc['case_id'])} v{doc['version']} — {doc['status']}</h1>"
-        f"<p><b>Draft generator: {BUILDER} (no AI model used). Synthetic data.</b></p>"
+        f"<p><b>Draft generator: {html.escape(doc['builder'])} ({generator_note(doc['builder'])}). "
+        "Synthetic data.</b></p>"
         f"<p>Author: {html.escape(doc['author_id'])} · SHA-256: <code>{doc['content_sha256']}</code></p>"
         "<table border=1 cellpadding=4><tr><th>ID</th><th>Class</th><th>Statement</th><th>Evidence</th></tr>"
         f"{rows}</table>")

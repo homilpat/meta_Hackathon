@@ -174,3 +174,38 @@ class IdempotencyKey(Base):
     endpoint: Mapped[str] = mapped_column(String(160), primary_key=True)
     status_code: Mapped[int] = mapped_column(Integer)
     response_json: Mapped[str] = mapped_column(Text)
+
+
+class ModelRun(Base):
+    """One investigation attempt. mode is LIVE only for the real provider; failures are stored too."""
+
+    __tablename__ = "model_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"))
+    requested_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    model: Mapped[str] = mapped_column(String(60))
+    mode: Mapped[str] = mapped_column(String(20))  # LIVE | TEST_DOUBLE
+    status: Mapped[str] = mapped_column(String(24))  # VALIDATED VALIDATION_FAILED FAILED JSON_ERROR LIMIT_EXCEEDED
+    rounds: Mapped[int] = mapped_column(Integer)
+    prompt_tokens: Mapped[int] = mapped_column(Integer)
+    completion_tokens: Mapped[int] = mapped_column(Integer)
+    error: Mapped[str | None] = mapped_column(Text)
+    report_json: Mapped[str | None] = mapped_column(Text)
+    validation_errors: Mapped[list] = mapped_column(JSON)
+    started_at: Mapped[str] = mapped_column(String(40))
+    finished_at: Mapped[str] = mapped_column(String(40))
+
+
+class ToolCall(Base):
+    __tablename__ = "tool_calls"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    model_run_id: Mapped[int] = mapped_column(ForeignKey("model_runs.id"))
+    round: Mapped[int] = mapped_column(Integer)
+    tool_name: Mapped[str] = mapped_column(String(60))
+    arguments_json: Mapped[str] = mapped_column(Text)
+    result_sha256: Mapped[str | None] = mapped_column(String(64))
+    ok: Mapped[bool]
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[str] = mapped_column(String(40))

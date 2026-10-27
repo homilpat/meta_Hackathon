@@ -1,24 +1,11 @@
 """One explicit, synthetic-only LIVE smoke call. Output never includes provider content."""
 
 import json
-import os
 import sys
-from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-MODEL = "muse-spark-1.3"
-URL = "https://api.meta.ai/v1/chat/completions"
-
-
-def read_key() -> str:
-    if key := os.environ.get("MODEL_API_KEY"):
-        return key
-    if Path(".env").is_file():
-        for line in Path(".env").read_text(encoding="utf-8").splitlines():
-            if line.startswith("MODEL_API_KEY="):
-                return line.partition("=")[2].strip().strip('"').strip("'")
-    return ""
+from app.model_provider import MODEL, URL, read_key
 
 
 def parse_answer(content: str) -> str:

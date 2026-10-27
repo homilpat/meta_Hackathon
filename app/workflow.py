@@ -1,4 +1,4 @@
-"""S2 identity, case scope, NCR versions, review/approval workflow and audit timeline."""
+"""S2/S3 identity, case scope, NCR versions, review/approval workflow and audit timeline."""
 
 import json
 from collections.abc import Callable
@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app import ncr
+from app import investigator, ncr
 from app.db import (
     ApprovalEvent,
     Assignment,
@@ -19,11 +19,13 @@ from app.db import (
     DocumentVersion,
     Evidence,
     IdempotencyKey,
+    ModelRun,
     QualityCase,
     Review,
     User,
     WorkflowEvent,
 )
+from app.model_provider import ModelProvider
 
 # ponytail: demo identities selected by X-User header, no passwords. Swap for real auth before any
 # non-demo use; the role/assignment checks below do not change.
@@ -54,6 +56,7 @@ class Decision(BaseModel):
 
 class NcrCreate(BaseModel):
     extra_claims: list[dict] = []  # author-added claims, held to the same evidence rules
+    investigation_run_id: int | None = None  # build from a VALIDATED model run instead of the template
 
 
 class Assign(BaseModel):
@@ -126,7 +129,8 @@ def _latest(session: Session, case_id: str) -> DocumentVersion | None:
         .order_by(DocumentVersion.version.desc()).limit(1))
 
 
-def make_router(sessions: sessionmaker, current_user: Callable[..., Actor]) -> APIRouter:
+def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
+                provider: ModelProvider | None = None) -> APIRouter:
     router = APIRouter()
     Who = Annotated[Actor, Depends(current_user)]
     IdemKey = Annotated[str, Header(alias="Idempotency-Key", min_length=8, max_length=80)]
@@ -176,10 +180,19 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor]) -> A
 
         def run(session: Session) -> tuple[int, dict]:
             require_case(session, case_id, actor)
-            claims = ncr.build_claims(session, case_id)
             known = set(session.scalars(select(Evidence.evidence_id).where(Evidence.case_id == case_id)))
             if not known:
                 raise HTTPException(422, "Case has no evidence; upload sources first")
+            if body.investigation_run_id is None:
+                claims, builder = ncr.build_claims(session, case_id), ncr.BUILDER
+            else:
+                mrun = session.get(ModelRun, body.investigation_run_id)
+                if mrun is None or mrun.case_id != case_id:
+                    raise HTTPException(404, "Investigation run not found for this case")
+                if mrun.status != "VALIDATED":
+                    raise HTTPException(409, f"Run is {mrun.status}; only VALIDATED runs can become an NCR")
+                claims = investigator.report_claims(mrun)
+                builder = f"MODEL_{mrun.mode}:{mrun.model}:run{mrun.id}"
             claims += [{"value": None, "unit": None, "evidence_ids": [], **c,
                         "claim_id": f"C{len(claims) + i + 1}"} for i, c in enumerate(body.extra_claims)]
             try:
@@ -191,15 +204,15 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor]) -> A
             if prev and prev.status in ("DRAFT", "IN_REVIEW", "INFO_REQUESTED"):
                 prev.status = "SUPERSEDED"
             doc = DocumentVersion(case_id=case_id, doc_type="NCR", version=version, status="DRAFT",
-                                  author_id=actor.id, builder=ncr.BUILDER, created_at=now(),
-                                  content_sha256=ncr.content_sha256(case_id, version, claims))
+                                  author_id=actor.id, builder=builder, created_at=now(),
+                                  content_sha256=ncr.content_sha256(case_id, version, claims, builder))
             session.add(doc)
             session.flush()
             session.add_all(DocumentClaim(document_version_id=doc.id, claim_id=c["claim_id"],
                                           classification=c["classification"], text=c["text"],
                                           value=c["value"], unit=c["unit"], evidence_ids=c["evidence_ids"])
                             for c in claims)
-            log(session, case_id, actor, "DRAFT_CREATED", f"NCR v{version} builder={ncr.BUILDER}", doc.id)
+            log(session, case_id, actor, "DRAFT_CREATED", f"NCR v{version} builder={builder}", doc.id)
             session.flush()
             return 201, _doc_out(session, doc)
 
@@ -280,6 +293,33 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor]) -> A
             return 200, _doc_out(session, doc)
 
         return idempotent(f"decision:{case_id}:{version}", key, actor, run)
+
+    @router.post("/cases/{case_id}/investigations")
+    def start_investigation(case_id: str, key: IdemKey, actor: Who):
+        require_role(actor, "AUTHOR")
+        if provider is None:
+            raise HTTPException(503, "LIVE model provider not configured (MODEL_API_KEY unset); no mock fallback")
+
+        def run(session: Session) -> tuple[int, dict]:
+            case = require_case(session, case_id, actor)
+            if case.data_origin != "SYNTHETIC":
+                raise HTTPException(422, "Only SYNTHETIC cases may be sent to an external model")
+            if not session.scalar(select(Evidence.id).where(Evidence.case_id == case_id).limit(1)):
+                raise HTTPException(422, "Case has no evidence; upload sources first")
+            mrun = investigator.investigate(session, case_id, actor.id, provider)
+            log(session, case_id, actor, "INVESTIGATION_RUN",
+                f"run{mrun.id} mode={mrun.mode} model={mrun.model} status={mrun.status}")
+            session.flush()
+            return 201, investigator.run_out(session, mrun)
+
+        return idempotent(f"investigate:{case_id}", key, actor, run)
+
+    @router.get("/cases/{case_id}/investigations")
+    def list_investigations(case_id: str, actor: Who) -> list[dict]:
+        with sessions() as session:
+            require_case(session, case_id, actor)
+            runs = session.scalars(select(ModelRun).where(ModelRun.case_id == case_id).order_by(ModelRun.id)).all()
+            return [investigator.run_out(session, r) for r in runs]
 
     @router.get("/cases/{case_id}/timeline")
     def timeline(case_id: str, actor: Who) -> list[dict]:

@@ -14,7 +14,7 @@ from app.db import Assignment, DataQualityIssue, Evidence, QualityCase, SourceAs
 from app.ingestion import SyntheticBundle, normalize
 from app.ml_api import make_ml_router
 from app.model_provider import MetaProvider, ModelProvider
-from app.synthetic import canonical, generate
+from app.synthetic import canonical, generate, spi_correction
 from app.workflow import Actor, make_auth, make_router, require_case, require_role
 
 
@@ -31,7 +31,7 @@ class CaseCreate(BaseModel):
 
 def create_app(database_url: str = "sqlite:///qualityops.db",
                provider: ModelProvider | None = None) -> FastAPI:
-    app = FastAPI(title="QualityOps AI", version="0.5.0")
+    app = FastAPI(title="QualityOps AI", version="0.6.0")
     engine = create_engine(database_url)
     sessions = sessionmaker(engine)
     app.state.engine = engine
@@ -44,7 +44,7 @@ def create_app(database_url: str = "sqlite:///qualityops.db",
 
     @app.get("/health", response_model=Health)
     def health() -> Health:
-        return Health(status="ok", stage="S5")
+        return Health(status="ok", stage="S6")
 
     @app.post("/cases", status_code=201)
     def create_case(payload: CaseCreate, actor: Who) -> dict:
@@ -172,6 +172,13 @@ def create_app(database_url: str = "sqlite:///qualityops.db",
     @app.get("/synthetic/{seed}")
     def synthetic(seed: int) -> dict:
         return generate(seed)
+
+    @app.get("/synthetic/{seed}/spi-correction")
+    def synthetic_correction(seed: int, row_id: str = "SPI-P02-B01-1") -> dict:
+        try:
+            return spi_correction(seed, row_id)
+        except StopIteration:
+            raise HTTPException(404, "No such SPI row in the fixture") from None
 
     @app.get("/ui", include_in_schema=False)
     def ui() -> FileResponse:

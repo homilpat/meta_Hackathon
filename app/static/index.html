@@ -10,11 +10,11 @@
  button{margin:2px;padding:4px 10px} .case{cursor:pointer;padding:6px;border-radius:4px} .case:hover,.sel{background:#e4ecf7}
  .banner{background:#fff4d6;border:1px solid #e3c35a;padding:6px 8px;border-radius:4px;margin-bottom:8px}
  .LIVE{background:#d8f3e0;color:#1b6e3c;padding:1px 6px;border-radius:3px} .TEST_DOUBLE{background:#fde2c8;color:#8a4b00;padding:1px 6px;border-radius:3px}
- .OBSERVED{color:#1b6e3c}.CALCULATED{color:#1c4f9c}.HYPOTHESIS{color:#9a5b00}.UNKNOWN{color:#8a1f1f}
+ .PROPOSAL{color:#5a2d91}.REVALIDATION_REQUIRED{background:#fde2c8}.flag{background:#fff4d6} .OBSERVED{color:#1b6e3c}.CALCULATED{color:#1c4f9c}.HYPOTHESIS{color:#9a5b00}.UNKNOWN{color:#8a1f1f}
  #msg{padding:6px 16px;color:#8a1f1f;min-height:18px} code{font-size:11px;word-break:break-all}
 </style>
 <header><b>QualityOps AI</b> <span>SYNTHETIC data only</span>
- <label>User <select id="user"><option value="alice">alice (author)</option><option value="dave">dave (author)</option><option value="bob">bob (reviewer)</option><option value="carol">carol (reviewer)</option></select></label></header>
+ <label>User <select id="user"><option value="alice">alice (author)</option><option value="dave">dave (author)</option><option value="bob">bob (reviewer)</option><option value="carol">carol (reviewer)</option><option value="erin">erin (QA/Production)</option><option value="frank">frank (process engineer)</option></select></label></header>
 <div id="msg"></div>
 <main>
  <div><section><h2>Cases</h2><div id="cases"></div><button id="new">New synthetic PCB case</button></section></div>
@@ -28,41 +28,47 @@ async function api(path,method='GET',body,idem){
   const r=await fetch(path,{method,headers:h,body:body===undefined?undefined:JSON.stringify(body)});
   const t=await r.text(); let j; try{j=JSON.parse(t)}catch{j=t}
   if(!r.ok){$('msg').textContent=r.status+': '+(j.detail?JSON.stringify(j.detail):t);throw new Error(r.status)} $('msg').textContent=''; return j}
+const APPROVER={ncr:'bob',containment:'erin',rca:'frank'}, ROLE={ncr:'REVIEWER',containment:'QA_PRODUCTION',rca:'PROCESS_ENGINEER'};
 const note=b=>b==='DETERMINISTIC_TEMPLATE_NO_AI'?'no AI model used':'model output, accepted only after server-side ClaimValidator';
 const link=id=>/^(PRED|XAI)-\d+$/.test(id)?`<a href="#" data-ev="${id}">${id}</a>`:esc(id);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 async function loadCases(){ const cs=await api('/cases'); $('cases').innerHTML=cs.map(c=>`<div class="case ${c.case_id===cur?'sel':''}" data-id="${esc(c.case_id)}">${esc(c.case_id)}</div>`).join('')||'<i>none</i>';
   document.querySelectorAll('.case').forEach(e=>e.onclick=()=>{cur=e.dataset.id;loadCases();loadDetail()}); $('new').style.display=$('user').value in {alice:1,dave:1}?'':'none'}
 async function loadDetail(){
-  if(!cur)return; const me=await api('/me'); let ev,iss,docs,tl,runs,preds,hon,hoff;
-  try{[ev,iss,docs,tl,runs,preds,hon,hoff]=await Promise.all([api(`/cases/${cur}/evidence`),api(`/cases/${cur}/data-issues`),api(`/cases/${cur}/ncr`),api(`/cases/${cur}/timeline`),api(`/cases/${cur}/investigations`),api(`/cases/${cur}/predictions`),api(`/cases/${cur}/next-evidence?history_mode=on`),api(`/cases/${cur}/next-evidence?history_mode=off`)])}
+  if(!cur)return; const me=await api('/me'); let ev,iss,docs,tl,runs,preds,hon,hoff,cont,rca,imp;
+  try{[ev,iss,docs,tl,runs,preds,hon,hoff,cont,rca,imp]=await Promise.all([api(`/cases/${cur}/evidence`),api(`/cases/${cur}/data-issues`),api(`/cases/${cur}/ncr`),api(`/cases/${cur}/timeline`),api(`/cases/${cur}/investigations`),api(`/cases/${cur}/predictions`),api(`/cases/${cur}/next-evidence?history_mode=on`),api(`/cases/${cur}/next-evidence?history_mode=off`),api(`/cases/${cur}/containment`),api(`/cases/${cur}/rca`),api(`/cases/${cur}/change-impact`)])}
   catch{$('detail').innerHTML='<section>No access to this case.</section>';return}
-  const author=me.role==='AUTHOR', latest=docs[docs.length-1];
+  const author=me.role==='AUTHOR', all={ncr:docs,containment:cont,rca}, dis=author?'':'disabled';
+  const flagged=new Set(imp.flatMap(i=>i.documents.flatMap(d=>d.claims.map(c=>`${d.doc_type}:${d.version}:${c}`))));
   let h=`<section><h2>Case ${esc(cur)}</h2>Evidence rows: ${ev.length} · data-quality issues: ${iss.length} (${[...new Set(iss.map(i=>i.code))].join(', ')})
-   <br><button id="mk" ${author?'':'disabled'}>Create NCR draft</button><button id="as" ${author?'':'disabled'}>Assign bob as reviewer</button></section>`;
+   <br><button id="mk" ${dis}>Create NCR draft</button><button id="mc" ${dis}>Create Containment plan draft</button><button id="mr" ${dis}>Create RCA hypothesis draft</button><button id="as" ${dis}>Assign bob, erin, frank as reviewers</button><br><button id="fix" ${dis}>Import SPI correction (demo: SPI-P02-B01-1 re-measured)</button></section>`;
+  h+=`<section><h2>Source corrections and impact</h2><p style="font-size:12px">Only documents whose claims depend on a corrected row are reopened. Approval records are kept unchanged.</p>`+(imp.map(i=>`<div class="banner"><b>${esc(i.asset_id)}</b> supersedes ${esc(i.supersedes_asset_id)} — ${esc(i.reason)} (by ${esc(i.actor_id)})<br>Changed evidence: ${i.changed_evidence.map(esc).join(', ')}${i.derived.length?' · derived: '+i.derived.map(esc).join(', '):''}</div><table><tr><th>Document</th><th>Before</th><th>After</th><th>Affected claims</th></tr>${i.documents.map(d=>`<tr><td>${d.doc_type} v${d.version}</td><td>${d.status_before}</td><td class="${d.status_after}">${d.status_after}</td><td>${d.claims.join(', ')}</td></tr>`).join('')||'<tr><td colspan=4>No document depends on the corrected rows</td></tr>'}</table>`).join('')||'<i>No corrections imported.</i>')+`</section>`;
   h+=`<section><h2>SPI risk model (synthetic label)</h2><button id="pr" ${author?'':'disabled'}>Score boards with SPI model</button><p style="font-size:12px">Model output, not an inspection result. SHAP explains the model score, not the physical cause.</p>`+(preds.length?`<table><tr><th>Board</th><th>Risk</th><th>Threshold</th><th>Evidence</th></tr>${preds.map(p=>`<tr><td>${esc(p.target_key.join('/'))}</td><td>${p.risk_score.toFixed(3)}${p.above_threshold?' ▲':''}</td><td>${p.threshold.toFixed(3)}</td><td>${link(p.evidence_id)} ${link(p.xai_evidence_id)}</td></tr>`).join('')}</table>`:'')+`<div id="pd"></div></section>`;
   const chk=n=>`<ol>${n.next_checks.map(c=>`<li><b>${esc(c.check)}</b> — ${esc(c.what)} (${esc(c.who)})<br><small>${esc(c.reason)}${c.precedent_ids.length?' · precedent '+c.precedent_ids.map(esc).join(', '):''}</small></li>`).join('')||'<li>No discriminating check identified</li>'}</ol>`;
   h+=`<section><h2>Lessons from past cases (synthetic bank)</h2><p style="font-size:12px">${esc(hon.precedents.length?'':'NO_RELEVANT_PRECEDENT. ')}Similarity ranks candidates; it is not evidence about this case. Checks are evidence requests, not authorized actions.</p><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><div><b>Next checks — history OFF</b>${chk(hoff)}</div><div><b>Next checks — history ON</b>${chk(hon)}</div></div>${hon.warnings.map(w=>`<div class="banner">Why not adopt the past fix? ${esc(w.text)}</div>`).join('')}<table><tr><th>Precedent</th><th>Why similar</th><th>Outcome</th><th>Limits</th><th></th></tr>${hon.precedents.map(p=>`<tr><td>${esc(p.historical_case_id)} v${p.snapshot_version}<br><small>${esc(p.evidence_refs.join(', '))}</small></td><td>${esc(p.why_similar.join('; '))}</td><td>${p.outcomes.map(o=>`${esc(o.check)}: ${esc(o.check_status)}${o.action?` · ${esc(o.action)}: <b>${esc(o.outcome_status)}</b>`:''}`).join('<br>')}</td><td><small>${esc(p.limitations.join('; ')||'-')}</small></td><td>${author?`<button data-link="${esc(p.historical_case_id)}" data-d="ACCEPTED">Use</button><button data-link="${esc(p.historical_case_id)}" data-d="REJECTED">Reject</button>`:''}</td></tr>`).join('')}</table></section>`;
   h+=`<section><h2>Model investigations</h2><button id="inv" ${author?'':'disabled'}>Run investigation (LIVE Meta model)</button>`+runs.map(r=>`<div style="border-top:1px solid #d9dde3;margin-top:8px;padding-top:6px"><b>Run ${r.run_id}</b> history ${r.history} <span class="${r.mode}">${r.mode==='LIVE'?'LIVE Meta call':'TEST DOUBLE — not a Meta call'}</span> ${esc(r.model)} · <b>${r.status}</b> · rounds ${r.rounds} · tokens ${r.prompt_tokens}/${r.completion_tokens}<br>Tool calls: ${r.tool_calls.map(c=>`${esc(c.tool_name)}${c.ok?'':' (failed)'}`).join(', ')||'none'}${r.error?`<br>Error: ${esc(r.error)}`:''}${r.validation_errors.length?`<br>Rejected: ${r.validation_errors.map(esc).join('; ')}`:''}${r.report?`<br>Summary: ${esc(r.report.summary)}`:''}${author&&r.status==='VALIDATED'?`<br><button data-run="${r.run_id}">Create NCR from run ${r.run_id}</button>`:''}</div>`).join('')+`</section>`;
-  for(const d of docs){ const mine=d.author_id===me.id, isLatest=d===latest;
-    h+=`<section><h2>NCR v${d.version} — ${d.status}</h2><div class="banner">Draft generator: ${esc(d.builder)} (${note(d.builder)}). Author: ${esc(d.author_id)}</div>
-    <table><tr><th>ID</th><th>Class</th><th>Statement</th><th>Evidence</th></tr>${d.claims.map(c=>`<tr><td>${c.claim_id}</td><td class="${c.classification}">${c.classification}</td><td>${esc(c.text)}</td><td>${c.evidence_ids.map(link).join(', ')||'-'}</td></tr>`).join('')}</table>
-    <p>SHA-256 <code>${d.content_sha256}</code> · <a href="#" data-html="${d.version}">open HTML</a></p>
+  for(const [kind,list] of Object.entries(all))for(const d of list){ const mine=d.author_id===me.id, isLatest=d===list[list.length-1];
+    h+=`<section><h2>${d.doc_type} v${d.version} — <span class="${d.status}">${d.status}</span></h2><div class="banner">Draft generator: ${esc(d.builder)} (${note(d.builder)}). Author: ${esc(d.author_id)} · template ${esc(d.template_version)} · based on ${esc(d.based_on.join(', ')||'-')}${d.note?' · <b>'+esc(d.note)+'</b>':''}</div>
+    <table><tr><th>ID</th><th>Class</th><th>Statement</th><th>Evidence</th></tr>${d.claims.map(c=>`<tr class="${flagged.has(`${d.doc_type}:${d.version}:${c.claim_id}`)?'flag':''}"><td>${c.claim_id}</td><td class="${c.classification}">${c.classification}</td><td>${esc(c.text)}</td><td>${c.evidence_ids.map(link).join(', ')||'-'}</td></tr>`).join('')}</table>
+    <p>SHA-256 <code>${d.content_sha256}</code> · <a href="#" data-html="${d.version}" data-k="${kind}">open HTML</a></p>
     ${d.decisions.map(x=>`<p>${x.action} by ${esc(x.actor_id)}: ${esc(x.comment)}</p>`).join('')}
-    ${author&&mine&&isLatest&&d.status==='DRAFT'?`<button data-rr="${d.version}">Request review from bob</button><button data-rr="${d.version}" data-who="carol">…from carol</button>`:''}
-    ${me.role==='REVIEWER'&&isLatest&&d.status==='IN_REVIEW'?'<input id="cm" placeholder="Comment"> '+['APPROVE','REJECT','REQUEST_INFO'].map(a=>`<button data-dec="${a}" data-v="${d.version}" data-sha="${d.content_sha256}">${a}</button>`).join(''):''}</section>`}
+    ${author&&mine&&isLatest&&d.status==='DRAFT'?`<button data-rr="${d.version}" data-k="${kind}" data-who="${APPROVER[kind]}">Request review from ${APPROVER[kind]}</button>${kind==='ncr'?`<button data-rr="${d.version}" data-k="ncr" data-who="carol">…from carol</button>`:''}`:''}
+    ${me.role===ROLE[kind]&&isLatest&&d.status==='IN_REVIEW'?`<input id="cm-${kind}" placeholder="Comment"> `+['APPROVE','REJECT','REQUEST_INFO'].map(a=>`<button data-dec="${a}" data-k="${kind}" data-v="${d.version}" data-sha="${d.content_sha256}">${a}</button>`).join(''):''}</section>`}
   h+=`<section><h2>Audit timeline</h2><table>${tl.map(t=>`<tr><td>${t.at}</td><td>${esc(t.actor_id)}</td><td>${t.event}</td><td>${esc(t.detail)}</td></tr>`).join('')}</table></section>`;
   $('detail').innerHTML=h;
   $('mk').onclick=async()=>{await api(`/cases/${cur}/ncr`,'POST',{},uid());loadDetail()};
+  $('mc').onclick=async()=>{await api(`/cases/${cur}/containment`,'POST',{},uid());loadDetail()};
+  $('mr').onclick=async()=>{await api(`/cases/${cur}/rca`,'POST',{},uid());loadDetail()};
+  $('fix').onclick=async()=>{const a=await (await fetch('/synthetic/7/spi-correction')).json();await api(`/cases/${cur}/source-revisions`,'POST',{asset:a,reason:'SPI re-measurement of P02/B01 pin 1'},uid());loadDetail()};
   $('pr').onclick=async()=>{await api('/models/train','POST',{seed:11});await api(`/cases/${cur}/predictions`,'POST',{},uid());loadDetail()};
   document.querySelectorAll('[data-ev]').forEach(a=>a.onclick=e=>{e.preventDefault();showPred(a.dataset.ev,preds)});
   document.querySelectorAll('[data-link]').forEach(b=>b.onclick=async()=>{await api(`/cases/${cur}/history/links`,'POST',{historical_case_id:b.dataset.link,decision:b.dataset.d,note:'set in UI'});loadDetail()});
   $('inv').onclick=async()=>{$('msg').textContent='Investigation running…';await api(`/cases/${cur}/investigations`,'POST',{},uid());loadDetail()};
   document.querySelectorAll('[data-run]').forEach(b=>b.onclick=async()=>{await api(`/cases/${cur}/ncr`,'POST',{investigation_run_id:+b.dataset.run},uid());loadDetail()});
-  $('as').onclick=async()=>{await api(`/cases/${cur}/assignments`,'POST',{user_id:'bob'});loadDetail()};
-  document.querySelectorAll('[data-rr]').forEach(b=>b.onclick=async()=>{await api(`/cases/${cur}/ncr/${b.dataset.rr}/request-review`,'POST',{reviewer_id:b.dataset.who||'bob'},uid());loadDetail()});
-  document.querySelectorAll('[data-dec]').forEach(b=>b.onclick=async()=>{const c=$('cm').value;await api(`/cases/${cur}/ncr/${b.dataset.v}/decision`,'POST',{decision:b.dataset.dec,comment:c,content_sha256:b.dataset.sha},uid());loadDetail()});
-  document.querySelectorAll('[data-html]').forEach(a=>a.onclick=async e=>{e.preventDefault();const w=window.open('');w.document.write(await (await fetch(`/cases/${cur}/ncr/${a.dataset.html}/html`,{headers:{'X-User':$('user').value}})).text())});
+  $('as').onclick=async()=>{for(const u of ['bob','erin','frank'])await api(`/cases/${cur}/assignments`,'POST',{user_id:u});loadDetail()};
+  document.querySelectorAll('[data-rr]').forEach(b=>b.onclick=async()=>{await api(`/cases/${cur}/${b.dataset.k}/${b.dataset.rr}/request-review`,'POST',{reviewer_id:b.dataset.who},uid());loadDetail()});
+  document.querySelectorAll('[data-dec]').forEach(b=>b.onclick=async()=>{const c=$('cm-'+b.dataset.k).value;await api(`/cases/${cur}/${b.dataset.k}/${b.dataset.v}/decision`,'POST',{decision:b.dataset.dec,comment:c,content_sha256:b.dataset.sha},uid());loadDetail()});
+  document.querySelectorAll('[data-html]').forEach(a=>a.onclick=async e=>{e.preventDefault();const w=window.open('');w.document.write(await (await fetch(`/cases/${cur}/${a.dataset.k}/${a.dataset.html}/html`,{headers:{'X-User':$('user').value}})).text())});
 }
 function showPred(id,preds){const p=preds.find(p=>p.evidence_id===id||p.xai_evidence_id===id);const box=$('pd');if(!p){box.textContent='Not found';return}
   const max=Math.max(...Object.values(p.xai.contributions).map(Math.abs));

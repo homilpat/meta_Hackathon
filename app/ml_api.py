@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app import ml, ncr
+from app import impact, ml, ncr
 from app.db import Evidence, ModelVersion, Prediction, XaiArtifact
 from app.workflow import Actor, log, now, require_case, require_role, run_idempotent
 
@@ -125,6 +125,7 @@ def make_ml_router(sessions: sessionmaker, current_user: Callable[..., Actor]) -
                     Evidence(case_id=case_id, source_event_id=None, evidence_id=f"XAI-{x.id}",
                              classification="XAI_EXPLANATION", validity="MODEL_OUTPUT",
                              content_sha256=ml.sha256_json(rec["xai"]))])
+                impact.link(session, case_id, {(ev, f"PRED-{p.id}") for ev in ev_ids} | {(f"PRED-{p.id}", f"XAI-{x.id}")})
                 out.append(rec)
             log(session, case_id, actor, "PREDICTIONS_CREATED",
                 f"model v{mv.id} ({mv.artifact_sha256[:12]}) scored {len(out)} boards")

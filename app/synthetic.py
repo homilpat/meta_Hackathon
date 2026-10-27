@@ -139,3 +139,14 @@ def generate(seed: int = 7) -> dict:
     assets = [asset(kind, records) for kind, records in tables.items()]
     assets.append(asset("spi_measurements", [corrected], 2, "synthetic:spi_measurements:v1"))
     return {"generator_version": VERSION, "seed": seed, "data_origin": "SYNTHETIC", "assets": assets}
+
+
+def spi_correction(seed: int = 7, row_id: str = "SPI-P02-B01-1", delta: float = -0.03, version: int = 3) -> dict:
+    """Demo S6 source fix: SPI asset v<version> re-measures one row of the fixture."""
+    spi = next(a for a in generate(seed)["assets"] if a["asset_id"] == "synthetic:spi_measurements:v1")
+    rec = dict(next(r for r in spi["records"] if r["original_row_id"] == row_id))
+    rec.update(volume_mm3=round(rec["volume_mm3"] + delta, 4), source_updated_at="2026-01-04T08:00:00+00:00",
+               ingested_at="2026-01-04T09:00:00+00:00")
+    return {**spi, "asset_id": f"synthetic:spi_measurements:v{version}", "source_version": version,
+            "supersedes_asset_id": f"synthetic:spi_measurements:v{version - 1}",
+            "ingested_at": rec["ingested_at"], "records": [rec], "content_sha256": sha256([rec])}

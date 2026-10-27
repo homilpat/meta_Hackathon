@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import DDL, JSON, ForeignKey, Integer, String, Text, UniqueConstraint, event
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -88,7 +88,7 @@ class User(Base):
 
     id: Mapped[str] = mapped_column(String(40), primary_key=True)
     name: Mapped[str] = mapped_column(String(80))
-    role: Mapped[str] = mapped_column(String(20))  # AUTHOR | REVIEWER
+    role: Mapped[str] = mapped_column(String(20))  # AUTHOR REVIEWER QA_PRODUCTION PROCESS_ENGINEER
 
 
 class Assignment(Base):
@@ -108,13 +108,15 @@ class DocumentVersion(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"))
-    doc_type: Mapped[str] = mapped_column(String(10))
+    doc_type: Mapped[str] = mapped_column(String(20))  # NCR | CONTAINMENT | RCA
     version: Mapped[int] = mapped_column(Integer)
-    status: Mapped[str] = mapped_column(String(20))  # DRAFT IN_REVIEW APPROVED REJECTED INFO_REQUESTED SUPERSEDED
+    # DRAFT IN_REVIEW APPROVED REJECTED INFO_REQUESTED SUPERSEDED REVALIDATION_REQUIRED
+    status: Mapped[str] = mapped_column(String(24))
     author_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     builder: Mapped[str] = mapped_column(String(60))
     content_sha256: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[str] = mapped_column(String(40))
+    based_on: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")  # ["NCR v1", ...]
 
 
 class DocumentClaim(Base):
@@ -137,7 +139,7 @@ class Review(Base):
     document_version_id: Mapped[int] = mapped_column(ForeignKey("document_versions.id"))
     requested_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
     reviewer_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
-    state: Mapped[str] = mapped_column(String(10))  # PENDING | DONE
+    state: Mapped[str] = mapped_column(String(10))  # PENDING | DONE | HELD (source corrected)
     created_at: Mapped[str] = mapped_column(String(40))
 
 
@@ -329,3 +331,45 @@ class CaseLink(Base):
     note: Mapped[str] = mapped_column(Text)
     actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[str] = mapped_column(String(40))
+
+
+class EvidenceDependency(Base):
+    """Edge src -> dst: EV/PRED -> PRED/XAI, evidence -> CLAIM:<doc>:<claim>, CLAIM -> DOC:<doc>."""
+
+    __tablename__ = "evidence_dependencies"
+    __table_args__ = (UniqueConstraint("case_id", "src", "dst"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"))
+    src: Mapped[str] = mapped_column(String(80), index=True)
+    dst: Mapped[str] = mapped_column(String(80))
+
+
+class ChangeImpact(Base):
+    """Result of one source revision import: which nodes it reached and which documents it reopened."""
+
+    __tablename__ = "change_impacts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"))
+    asset_id: Mapped[str] = mapped_column(String(120))
+    supersedes_asset_id: Mapped[str] = mapped_column(String(120))
+    reason: Mapped[str] = mapped_column(Text)
+    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    changed_evidence: Mapped[list] = mapped_column(JSON)
+    impacted: Mapped[dict] = mapped_column(JSON)  # {"derived": [...], "claims": [...], "documents": [...]}
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+# Audit rows are append-only at the database level, not just by convention.
+APPEND_ONLY = ("approval_events", "workflow_events")
+
+
+def append_only_ddl(table: str) -> list[str]:
+    return [f"CREATE TRIGGER {table}_no_{op.lower()} BEFORE {op} ON {table} "
+            f"BEGIN SELECT RAISE(ABORT, '{table} is append-only'); END" for op in ("UPDATE", "DELETE")]
+
+
+for _table in APPEND_ONLY:
+    for _ddl in append_only_ddl(_table):
+        event.listen(Base.metadata.tables[_table], "after_create", DDL(_ddl).execute_if(dialect="sqlite"))

@@ -1,4 +1,5 @@
-"""S2/S3 identity, case scope, NCR versions, review/approval workflow and audit timeline."""
+"""Identity, case scope, document versions (NCR -> Containment -> RCA), review/approval, source
+corrections with impact analysis, and the audit timeline."""
 
 import json
 from collections.abc import Callable
@@ -7,15 +8,17 @@ from typing import Annotated, Literal, NamedTuple
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
+from starlette.convertors import StringConvertor, register_url_convertor
 
-from app import history, investigator, ncr
+from app import history, impact, investigator, ncr
 from app.db import (
     ApprovalEvent,
     Assignment,
     CaseLink,
+    ChangeImpact,
     DocumentClaim,
     DocumentVersion,
     Evidence,
@@ -26,6 +29,7 @@ from app.db import (
     User,
     WorkflowEvent,
 )
+from app.ingestion import SourceAssetInput
 from app.model_provider import ModelProvider
 
 # ponytail: demo identities selected by X-User header, no passwords. Swap for real auth before any
@@ -33,7 +37,19 @@ from app.model_provider import ModelProvider
 DEMO_USERS = {
     "alice": ("Alice (author)", "AUTHOR"), "dave": ("Dave (author)", "AUTHOR"),
     "bob": ("Bob (reviewer)", "REVIEWER"), "carol": ("Carol (reviewer)", "REVIEWER"),
+    "erin": ("Erin (QA/Production)", "QA_PRODUCTION"), "frank": ("Frank (process engineer)", "PROCESS_ENGINEER"),
 }
+# URL kind -> document type; who may approve it; which approved document it must build on.
+KINDS = {"ncr": "NCR", "containment": "CONTAINMENT", "rca": "RCA"}
+APPROVER = {"NCR": "REVIEWER", "CONTAINMENT": "QA_PRODUCTION", "RCA": "PROCESS_ENGINEER"}
+PREREQ = {"CONTAINMENT": "NCR", "RCA": "CONTAINMENT"}
+
+
+class DocKind(StringConvertor):
+    regex = "|".join(KINDS)
+
+
+register_url_convertor("doc", DocKind())
 
 
 class Actor(NamedTuple):
@@ -58,6 +74,11 @@ class Decision(BaseModel):
 class NcrCreate(BaseModel):
     extra_claims: list[dict] = []  # author-added claims, held to the same evidence rules
     investigation_run_id: int | None = None  # build from a VALIDATED model run instead of the template
+
+
+class RevisionIn(BaseModel):
+    asset: SourceAssetInput  # SYNTHETIC + APPROVED_FOR_EXTERNAL only; anything else is a 422
+    reason: str = Field(min_length=3, max_length=200)
 
 
 class Assign(BaseModel):
@@ -116,7 +137,8 @@ def _doc_out(session: Session, doc: DocumentVersion) -> dict:
     return {
         "case_id": doc.case_id, "doc_type": doc.doc_type, "version": doc.version, "status": doc.status,
         "author_id": doc.author_id, "builder": doc.builder, "content_sha256": doc.content_sha256,
-        "created_at": doc.created_at,
+        "created_at": doc.created_at, "based_on": doc.based_on, "template_version": ncr.TEMPLATE_VERSION,
+        "note": ncr.DOC_NOTE.get(doc.doc_type, ""),
         "claims": [{"claim_id": c.claim_id, "classification": c.classification, "text": c.text,
                     "value": c.value, "unit": c.unit, "evidence_ids": c.evidence_ids} for c in claims],
         "reviews": [{"reviewer_id": r.reviewer_id, "state": r.state} for r in reviews],
@@ -125,19 +147,37 @@ def _doc_out(session: Session, doc: DocumentVersion) -> dict:
     }
 
 
-def _get_doc(session: Session, case_id: str, version: int) -> DocumentVersion:
+def _get_doc(session: Session, case_id: str, version: int, doc_type: str = "NCR") -> DocumentVersion:
     doc = session.scalar(select(DocumentVersion).where(
-        DocumentVersion.case_id == case_id, DocumentVersion.doc_type == "NCR",
+        DocumentVersion.case_id == case_id, DocumentVersion.doc_type == doc_type,
         DocumentVersion.version == version))
     if doc is None:
         raise HTTPException(404, "Document version not found")
     return doc
 
 
-def _latest(session: Session, case_id: str) -> DocumentVersion | None:
+def _latest(session: Session, case_id: str, doc_type: str = "NCR") -> DocumentVersion | None:
     return session.scalar(select(DocumentVersion).where(
-        DocumentVersion.case_id == case_id, DocumentVersion.doc_type == "NCR")
+        DocumentVersion.case_id == case_id, DocumentVersion.doc_type == doc_type)
         .order_by(DocumentVersion.version.desc()).limit(1))
+
+
+def _based_on(session: Session, case_id: str, doc_type: str) -> list[str]:
+    """The approved chain a new document builds on; any break (e.g. revalidation) holds the task."""
+    chain, t = [], doc_type
+    while t := PREREQ.get(t):
+        up = _latest(session, case_id, t)
+        if up is None or up.status != "APPROVED":
+            raise HTTPException(409, f"{doc_type} needs the latest {t} to be APPROVED "
+                                     f"(is {up.status if up else 'missing'})")
+        chain.append(f"{t} v{up.version}")
+    return chain[::-1]
+
+
+def _impact_out(r: ChangeImpact) -> dict:
+    return {"impact_id": r.id, "asset_id": r.asset_id, "supersedes_asset_id": r.supersedes_asset_id,
+            "reason": r.reason, "actor_id": r.actor_id, "created_at": r.created_at,
+            "changed_evidence": r.changed_evidence, **r.impacted}
 
 
 def run_idempotent(sessions: sessionmaker, endpoint: str, key: str, actor: Actor,
@@ -190,17 +230,21 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
                 log(session, case_id, actor, "ASSIGNED", body.user_id)
         return {"case_id": case_id, "user_id": body.user_id}
 
-    @router.post("/cases/{case_id}/ncr")
-    def create_ncr(case_id: str, body: NcrCreate, key: IdemKey, actor: Who):
+    @router.post("/cases/{case_id}/{kind:doc}")
+    def create_doc(case_id: str, kind: str, body: NcrCreate, key: IdemKey, actor: Who):
         require_role(actor, "AUTHOR")
+        doc_type = KINDS[kind]
 
         def run(session: Session) -> tuple[int, dict]:
             require_case(session, case_id, actor)
+            based_on = _based_on(session, case_id, doc_type)
             known = set(session.scalars(select(Evidence.evidence_id).where(Evidence.case_id == case_id)))
             if not known:
                 raise HTTPException(422, "Case has no evidence; upload sources first")
             if body.investigation_run_id is None:
-                claims, builder = ncr.build_claims(session, case_id), ncr.BUILDER
+                claims, builder = ncr.BUILDERS[doc_type](session, case_id), ncr.BUILDER
+            elif doc_type != "NCR":
+                raise HTTPException(422, "Only an NCR can be built from an investigation run")
             else:
                 mrun = session.get(ModelRun, body.investigation_run_id)
                 if mrun is None or mrun.case_id != case_id:
@@ -215,78 +259,84 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
                 ncr.validate_claims(claims, known)
             except ValueError as exc:
                 raise HTTPException(422, str(exc)) from exc
-            prev = _latest(session, case_id)
+            prev = _latest(session, case_id, doc_type)
             version = prev.version + 1 if prev else 1
             if prev and prev.status in ("DRAFT", "IN_REVIEW", "INFO_REQUESTED"):
                 prev.status = "SUPERSEDED"
-            doc = DocumentVersion(case_id=case_id, doc_type="NCR", version=version, status="DRAFT",
-                                  author_id=actor.id, builder=builder, created_at=now(),
-                                  content_sha256=ncr.content_sha256(case_id, version, claims, builder))
+            extra = None if doc_type == "NCR" else {"doc_type": doc_type, "based_on": based_on}
+            doc = DocumentVersion(case_id=case_id, doc_type=doc_type, version=version, status="DRAFT",
+                                  author_id=actor.id, builder=builder, created_at=now(), based_on=based_on,
+                                  content_sha256=ncr.content_sha256(case_id, version, claims, builder, extra))
             session.add(doc)
             session.flush()
             session.add_all(DocumentClaim(document_version_id=doc.id, claim_id=c["claim_id"],
                                           classification=c["classification"], text=c["text"],
                                           value=c["value"], unit=c["unit"], evidence_ids=c["evidence_ids"])
                             for c in claims)
-            log(session, case_id, actor, "DRAFT_CREATED", f"NCR v{version} builder={builder}", doc.id)
+            impact.link_document(session, doc, claims)
+            log(session, case_id, actor, "DRAFT_CREATED",
+                f"{doc_type} v{version} builder={builder} based_on={','.join(based_on) or '-'}", doc.id)
             session.flush()
             return 201, _doc_out(session, doc)
 
-        return idempotent(f"create_ncr:{case_id}", key, actor, run)
+        return idempotent(f"create_{kind}:{case_id}", key, actor, run)
 
-    @router.get("/cases/{case_id}/ncr")
-    def list_ncr(case_id: str, actor: Who) -> list[dict]:
+    @router.get("/cases/{case_id}/{kind:doc}")
+    def list_docs(case_id: str, kind: str, actor: Who) -> list[dict]:
         with sessions() as session:
             require_case(session, case_id, actor)
-            docs = session.scalars(select(DocumentVersion).where(DocumentVersion.case_id == case_id)
-                                   .order_by(DocumentVersion.version)).all()
+            docs = session.scalars(select(DocumentVersion).where(
+                DocumentVersion.case_id == case_id, DocumentVersion.doc_type == KINDS[kind])
+                .order_by(DocumentVersion.version)).all()
             return [_doc_out(session, d) for d in docs]
 
-    @router.get("/cases/{case_id}/ncr/{version}")
-    def get_ncr(case_id: str, version: int, actor: Who) -> dict:
+    @router.get("/cases/{case_id}/{kind:doc}/{version}")
+    def get_doc(case_id: str, kind: str, version: int, actor: Who) -> dict:
         with sessions() as session:
             require_case(session, case_id, actor)
-            return _doc_out(session, _get_doc(session, case_id, version))
+            return _doc_out(session, _get_doc(session, case_id, version, KINDS[kind]))
 
-    @router.get("/cases/{case_id}/ncr/{version}/html", response_class=HTMLResponse)
-    def get_ncr_html(case_id: str, version: int, actor: Who) -> str:
+    @router.get("/cases/{case_id}/{kind:doc}/{version}/html", response_class=HTMLResponse)
+    def get_doc_html(case_id: str, kind: str, version: int, actor: Who) -> str:
         with sessions() as session:
             require_case(session, case_id, actor)
-            return ncr.render_html(_doc_out(session, _get_doc(session, case_id, version)))
+            return ncr.render_html(_doc_out(session, _get_doc(session, case_id, version, KINDS[kind])))
 
-    @router.post("/cases/{case_id}/ncr/{version}/request-review")
-    def request_review(case_id: str, version: int, body: ReviewRequest, key: IdemKey, actor: Who):
+    @router.post("/cases/{case_id}/{kind:doc}/{version}/request-review")
+    def request_review(case_id: str, kind: str, version: int, body: ReviewRequest, key: IdemKey, actor: Who):
         require_role(actor, "AUTHOR")
+        doc_type = KINDS[kind]
 
         def run(session: Session) -> tuple[int, dict]:
             require_case(session, case_id, actor)
-            doc = _get_doc(session, case_id, version)
+            doc = _get_doc(session, case_id, version, doc_type)
             if doc.author_id != actor.id:
                 raise HTTPException(403, "Only the author can request review")
-            if doc.version != _latest(session, case_id).version or doc.status != "DRAFT":
+            if doc.version != _latest(session, case_id, doc_type).version or doc.status != "DRAFT":
                 raise HTTPException(409, "Only the latest DRAFT version can be sent for review")
             reviewer = DEMO_USERS.get(body.reviewer_id)
-            if reviewer is None or reviewer[1] != "REVIEWER" or body.reviewer_id == actor.id:
-                raise HTTPException(422, "Reviewer must be a REVIEWER other than the author")
+            if reviewer is None or reviewer[1] != APPROVER[doc_type] or body.reviewer_id == actor.id:
+                raise HTTPException(422, f"{doc_type} reviewer must be a {APPROVER[doc_type]} other than the author")
             if not session.scalar(select(Assignment.id).where(
                     Assignment.case_id == case_id, Assignment.user_id == body.reviewer_id)):
                 raise HTTPException(422, "Reviewer is not assigned to this case")
             doc.status = "IN_REVIEW"
             session.add(Review(document_version_id=doc.id, requested_by=actor.id,
                                reviewer_id=body.reviewer_id, state="PENDING", created_at=now()))
-            log(session, case_id, actor, "REVIEW_REQUESTED", f"v{version} -> {body.reviewer_id}", doc.id)
+            log(session, case_id, actor, "REVIEW_REQUESTED", f"{doc_type} v{version} -> {body.reviewer_id}", doc.id)
             session.flush()
             return 200, _doc_out(session, doc)
 
-        return idempotent(f"request_review:{case_id}:{version}", key, actor, run)
+        return idempotent(f"request_review:{case_id}:{kind}:{version}", key, actor, run)
 
-    @router.post("/cases/{case_id}/ncr/{version}/decision")
-    def decide(case_id: str, version: int, body: Decision, key: IdemKey, actor: Who):
-        require_role(actor, "REVIEWER")
+    @router.post("/cases/{case_id}/{kind:doc}/{version}/decision")
+    def decide(case_id: str, kind: str, version: int, body: Decision, key: IdemKey, actor: Who):
+        doc_type = KINDS[kind]
+        require_role(actor, APPROVER[doc_type])
 
         def run(session: Session) -> tuple[int, dict]:
             require_case(session, case_id, actor)
-            doc = _get_doc(session, case_id, version)
+            doc = _get_doc(session, case_id, version, doc_type)
             if doc.author_id == actor.id:
                 raise HTTPException(403, "Authors cannot decide their own document")
             review = session.scalar(select(Review).where(
@@ -294,7 +344,7 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
                 Review.state == "PENDING"))
             if review is None:
                 raise HTTPException(403, "No pending review request for you on this version")
-            if doc.version != _latest(session, case_id).version:
+            if doc.version != _latest(session, case_id, doc_type).version:
                 raise HTTPException(409, "A newer version exists; this one is stale")
             if doc.status != "IN_REVIEW" or body.content_sha256 != doc.content_sha256:
                 raise HTTPException(409, "Version is not in review or content changed since you read it")
@@ -304,11 +354,46 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
             session.add(ApprovalEvent(document_version_id=doc.id, actor_id=actor.id, action=body.decision,
                                       content_sha256=doc.content_sha256, comment=body.comment,
                                       created_at=now()))
-            log(session, case_id, actor, body.decision, f"v{version}: {body.comment}", doc.id)
+            log(session, case_id, actor, body.decision, f"{doc_type} v{version}: {body.comment}", doc.id)
             session.flush()
             return 200, _doc_out(session, doc)
 
-        return idempotent(f"decision:{case_id}:{version}", key, actor, run)
+        return idempotent(f"decision:{case_id}:{kind}:{version}", key, actor, run)
+
+    @router.post("/cases/{case_id}/source-revisions")
+    def import_revision(case_id: str, body: RevisionIn, key: IdemKey, actor: Who):
+        require_role(actor, "AUTHOR")
+
+        def run(session: Session) -> tuple[int, dict]:
+            require_case(session, case_id, actor)
+            try:
+                changed = impact.import_revision(session, case_id, body.asset)
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from exc
+            found = impact.reopen(session, case_id, changed)
+            row = ChangeImpact(case_id=case_id, asset_id=body.asset.asset_id, actor_id=actor.id,
+                               supersedes_asset_id=body.asset.supersedes_asset_id, reason=body.reason,
+                               changed_evidence=changed, impacted=found, created_at=now())
+            session.add(row)
+            log(session, case_id, actor, "SOURCE_REVISED",
+                f"{body.asset.asset_id} supersedes {body.asset.supersedes_asset_id}: {body.reason}")
+            for d in found["documents"]:
+                if d["status_after"] != d["status_before"]:
+                    log(session, case_id, actor, "REVALIDATION_REQUIRED",
+                        f"{d['doc_type']} v{d['version']} was {d['status_before']}; claims "
+                        f"{','.join(d['claims'])} cite corrected source rows", d["document_version_id"])
+            session.flush()
+            return 201, _impact_out(row)
+
+        return idempotent(f"revision:{case_id}", key, actor, run)
+
+    @router.get("/cases/{case_id}/change-impact")
+    def change_impact(case_id: str, actor: Who) -> list[dict]:
+        with sessions() as session:
+            require_case(session, case_id, actor)
+            rows = session.scalars(select(ChangeImpact).where(ChangeImpact.case_id == case_id)
+                                   .order_by(ChangeImpact.id)).all()
+            return [_impact_out(r) for r in rows]
 
     @router.post("/cases/{case_id}/investigations")
     def start_investigation(case_id: str, key: IdemKey, actor: Who, body: InvestigateIn | None = None):

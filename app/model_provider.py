@@ -12,6 +12,10 @@ MODEL = "muse-spark-1.3"
 URL = "https://api.meta.ai/v1/chat/completions"
 # Last-line egress check on the exact bytes we are about to send.
 SECRET_PATTERN = re.compile(r"(?i)bearer\s+[A-Za-z0-9._-]{8,}|\bsk-[A-Za-z0-9]{10,}|MODEL_API_KEY\s*=")
+# Backstop for the data-rights gate in tools.py: rows marked anything but SYNTHETIC/APPROVED_FOR_EXTERNAL
+# never leave, even if an upstream check is bypassed. Matches JSON nested inside tool-result strings too.
+RESTRICTED_PATTERN = re.compile(r'(?i)\\?"(?:data_origin|sensitivity|source_origin)\\?"\s*:\s*\\?"'
+                                r"(?!SYNTHETIC\b|APPROVED_FOR_EXTERNAL\b)|CONFIDENTIAL")
 
 
 class ProviderError(Exception):
@@ -58,6 +62,8 @@ class MetaProvider:
         text = body.decode("utf-8")
         if self._key in text or SECRET_PATTERN.search(text):
             raise EgressBlocked("secret-like content in outbound payload")
+        if RESTRICTED_PATTERN.search(text):
+            raise EgressBlocked("data not approved for external processing in outbound payload")
         request = Request(URL, data=body, method="POST", headers={
             "Authorization": f"Bearer {self._key}", "Content-Type": "application/json"})
         try:

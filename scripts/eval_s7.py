@@ -104,11 +104,13 @@ def main() -> None:
 
     # ClaimValidator recall on seeded bad claims (one mutation of each kind per case's NCR v1).
     caught = seeded = 0
+    # Read through the API first: a direct session holds SQLite's write lock (BEGIN IMMEDIATE) until it closes.
+    ncr_v1 = {seed: call("alice", "GET", f"/cases/EVAL-{seed}/ncr/1")["claims"] for seed in SEEDS}
     with Session(app.state.engine) as s:
         for seed in SEEDS:
             cid = f"EVAL-{seed}"
             known = set(s.scalars(select(Evidence.evidence_id).where(Evidence.case_id == cid)))
-            base = call("alice", "GET", f"/cases/{cid}/ncr/1")["claims"]
+            base = ncr_v1[seed]
             obs = next(cl for cl in base if cl["classification"] == "OBSERVED")
             calc = next(cl for cl in base if cl["value"] is not None)
             for bad in ({**obs, "evidence_ids": []}, {**calc, "evidence_ids": []},

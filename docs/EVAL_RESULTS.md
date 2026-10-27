@@ -17,10 +17,10 @@ Documents are approved in 8D order (NCR D2 -> Containment D3 -> RCA D4); the API
 | Containment plans flagged BASIS_CHANGED (content kept, not reopened) after the NCR they build on reopened | 30/30 |
 | Template claims that are OBSERVED/CALCULATED/PROPOSAL without evidence | 0/600 |
 | ClaimValidator rejections of seeded bad claims (no evidence, fake id, executed action, confirmed cause) | 150/150 |
-| Approved-data tool payloads wrongly blocked by the egress gateway | 0/150 |
+| Approved-data tool payloads wrongly blocked by the egress gateway | 0/180 |
 | CONFIDENTIAL rows denied at the tool layer | 30/30 |
 | CONFIDENTIAL payloads blocked at the gateway before any network call | 30/30 |
-| Revision import + impact latency (local SQLite, 240 imports) | p50 15.2 ms, max 2181.7 ms |
+| Revision import + impact latency (local SQLite, 240 imports) | p50 27.9 ms, max 166.0 ms |
 
 Oracle: a corrected SPI row must reopen the NCR if its board had an AOI FAIL (the NCR is the D2 problem
 description and cites no model output), and the RCA only for the confirmed-defect board P02/B01 (model scores

@@ -529,16 +529,16 @@
     "rejected": 150
   },
   "egress": {
-    "clean_tool_payloads": 150,
+    "clean_tool_payloads": 180,
     "clean_blocked": 0,
-    "network_attempts_for_clean": 150,
+    "network_attempts_for_clean": 180,
     "confidential_rows": 30,
     "tool_denied": 30,
     "gateway_blocked": 30
   },
   "revision_latency_ms": {
-    "p50": 15.2,
-    "max": 2181.7
+    "p50": 27.9,
+    "max": 166.0
   },
   "containment_basis_changed": 30
 }

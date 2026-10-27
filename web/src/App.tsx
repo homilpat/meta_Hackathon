@@ -12,7 +12,7 @@ const KINDS = [['ncr', 'NCR', 'D2 부적합 보고서', 'bob'], ['containment', 
 const APPROVER_ROLE: Record<string, string> = { NCR: 'REVIEWER', CONTAINMENT: 'QA_PRODUCTION', RCA: 'PROCESS_ENGINEER' }
 
 const nav = [
-  ['dashboard', '개요', 'grid'], ['queue', '부서 할 일', 'check'], ['data', '제조 데이터 · 증거', 'database'], ['prediction', '품질 예측 · XAI', 'chart'],
+  ['dashboard', '개요', 'grid'], ['queue', '할 일', 'check'], ['data', '제조 데이터 · 증거', 'database'], ['prediction', '품질 예측 · XAI', 'chart'],
   ['investigation', 'AI 품질 조사', 'spark'], ['history', '과거 품질 사례', 'history'], ['reports', '문서 · 결재', 'document'],
   ['impact', '변경 영향 분석', 'nodes'], ['audit', '감사 · 보안', 'shield'],
 ] as const
@@ -83,9 +83,14 @@ const TASK: Record<string, [string, Tone]> = {
 }
 
 function Queue({ ctx }: { ctx: Ctx }) {
-  const items = useLoad<J[]>(ctx, '/queue?scope=department', [])
+  const [scope, setScope] = useState<'department' | 'mine'>('mine')
+  const items = useLoad<J[]>(ctx, `/queue?scope=${scope}`, [])
   const role = ctx.me?.role
-  return <Page title="부서 할 일" desc={`${role ?? '-'} 역할이 처리할 일입니다. 배정된 사건 전체 기준이며, 담당자는 그 일을 맡은 사람(검토 지정자, 승인자, 작성자)입니다.`}>
+  return <Page title={scope === 'mine' ? '내 할 일' : '부서 할 일'} desc={scope === 'mine'
+    ? `${ctx.me?.id ?? '-'}님이 담당자인 일: 지정된 검토, 내가 승인한 문서의 기반 확인, 내 문서의 재작성·코멘트 답변.`
+    : `${role ?? '-'} 역할 전체가 볼 일입니다. 배정된 사건 기준이며, 담당자가 비어 있으면 부서 누구나 처리할 수 있습니다.`}
+    action={<span className="row-gap"><button className={`button ${scope === 'mine' ? 'primary' : 'secondary'}`} onClick={() => setScope('mine')}>내 할 일</button>
+      <button className={`button ${scope === 'department' ? 'primary' : 'secondary'}`} onClick={() => setScope('department')}>부서 할 일</button></span>}>
     <Card><SectionTitle title="열린 작업" sub={`${items.length}건`}/><div className="table-wrap"><table><thead><tr><th>사건</th><th>문서</th><th>상태</th><th>할 일</th><th>담당</th><th>내용</th><th/></tr></thead><tbody>
       {items.map((i, n) => <tr key={n}><td><b className="id">{i.case_id}</b></td><td>{i.doc_type} v{i.version}</td><td><Badge tone={STATUS_TONE[i.status]}>{i.status}</Badge></td>
         <td><Badge tone={TASK[i.task]?.[1] ?? 'slate'}>{TASK[i.task]?.[0] ?? i.task}</Badge></td><td>{i.owner ?? '부서'}</td><td className="wrap">{i.detail || '-'}</td>

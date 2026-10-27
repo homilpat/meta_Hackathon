@@ -151,3 +151,8 @@
 - Fix: `serialize_sqlite` in `app/main.py` — every SQLite transaction starts with `BEGIN IMMEDIATE` (30 s busy timeout); Postgres would use row locks instead (noted in code).
 - After the fix (20 trials each): 0 invariant violations, 0 HTTP 5xx; losers get 403/409 as designed (double decision 20×200 + 40×403; stale approval 7×409; revision race 8×409; same-key 80×201 identical bodies). Written to `docs/CONCURRENCY_RESULTS.md` (before/after) and `docs/concurrency.json`.
 - Regression test `test_concurrent_decisions_on_one_review_accept_exactly_one` fails 3/3 with the fix disabled, passes with it. pytest 108 passed; ruff exit 0.
+
+## 2026-10-27 KST — Collaboration 3/3: personal to-do ("내 할 일")
+
+- The 할 일 screen opens on "내 할 일" (`/queue?scope=mine`: items whose owner is the current user) with a toggle to "부서 할 일" (whole role). Browser check: alice sees REDRAFT NCR/RCA and the ANSWER_COMMENT from erin on C2; "열기" deep-links to the document. README gained a Collaboration paragraph.
+- Not built (stated): real login, push notifications/real-time refresh, free-form chat (feedback is claim-anchored and audited instead). `npm run build` exit 0; pytest 108 passed.

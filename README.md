@@ -56,6 +56,13 @@ not needed to run it. To change the UI: `cd web && npm install && npm run dev` (
 
 The same flow by API is covered by `tests/test_s6_followups.py`.
 
+**Collaboration:** *할 일* shows "내 할 일" (items you own: reviews assigned to you, basis checks on plans you
+approved, redrafts and comment answers on your documents) and "부서 할 일" (everything open for your role).
+Reviewers leave comments on a single claim; the author answers and resolves them, and every comment stays in the
+append-only log. Each document shows a *책임 추적* trail (who did what, in which role). Concurrent use was
+simulated with `python -m scripts.concurrency_sim` ([results](docs/CONCURRENCY_RESULTS.md)): it found three
+race conditions, which are fixed and covered by a regression test.
+
 ## Meta LIVE
 
 Put `MODEL_API_KEY=...` in the git-ignored `.env` (see `.env.example`). **Calls may incur API charges.**

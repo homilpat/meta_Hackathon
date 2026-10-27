@@ -361,8 +361,24 @@ class ChangeImpact(Base):
     created_at: Mapped[str] = mapped_column(String(40))
 
 
+class DocComment(Base):
+    """Review feedback anchored to a document version (optionally one claim). Resolving appends a row."""
+
+    __tablename__ = "doc_comments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"))
+    document_version_id: Mapped[int] = mapped_column(ForeignKey("document_versions.id"))
+    claim_id: Mapped[str | None] = mapped_column(String(20))
+    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    kind: Mapped[str] = mapped_column(String(10))  # COMMENT | RESOLVE
+    reply_to: Mapped[int | None] = mapped_column(ForeignKey("doc_comments.id"))
+    body: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
 # Audit rows are append-only at the database level, not just by convention.
-APPEND_ONLY = ("approval_events", "workflow_events")
+APPEND_ONLY = ("approval_events", "workflow_events", "doc_comments")
 
 
 def append_only_ddl(table: str) -> list[str]:

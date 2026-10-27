@@ -19,6 +19,7 @@ from app.db import (
     Assignment,
     CaseLink,
     ChangeImpact,
+    DocComment,
     DocumentClaim,
     DocumentVersion,
     Evidence,
@@ -78,6 +79,16 @@ class BasisCheck(BaseModel):
     content_sha256: str
 
 
+class CommentIn(BaseModel):
+    body: str = Field(min_length=1, max_length=1000)
+    claim_id: str | None = None  # anchor to one claim, or the whole version
+    reply_to: int | None = None
+
+
+class ResolveIn(BaseModel):
+    body: str = Field(min_length=1, max_length=500)
+
+
 class NcrCreate(BaseModel):
     extra_claims: list[dict] = []  # author-added claims, held to the same evidence rules
     investigation_run_id: int | None = None  # build from a VALIDATED model run instead of the template
@@ -135,6 +146,23 @@ def log(session: Session, case_id: str, actor: Actor, event: str, detail: str, d
                               event=event, detail=detail, created_at=now()))
 
 
+def _comments(session: Session, doc_id: int) -> list[dict]:
+    rows = session.scalars(select(DocComment).where(DocComment.document_version_id == doc_id)
+                           .order_by(DocComment.id)).all()
+    resolved = {r.reply_to for r in rows if r.kind == "RESOLVE"}
+    return [{"comment_id": r.id, "claim_id": r.claim_id, "actor_id": r.actor_id, "kind": r.kind,
+             "reply_to": r.reply_to, "body": r.body, "created_at": r.created_at,
+             "open": r.kind == "COMMENT" and r.reply_to is None and r.id not in resolved} for r in rows]
+
+
+def _trail(session: Session, doc_id: int) -> list[dict]:
+    """Who did what to this version, in order, with the role they acted in (from the append-only log)."""
+    rows = session.scalars(select(WorkflowEvent).where(WorkflowEvent.document_version_id == doc_id)
+                           .order_by(WorkflowEvent.id)).all()
+    return [{"at": w.created_at, "actor_id": w.actor_id, "role": DEMO_USERS[w.actor_id][1], "event": w.event,
+             "detail": w.detail} for w in rows]
+
+
 def _doc_out(session: Session, doc: DocumentVersion) -> dict:
     claims = session.scalars(select(DocumentClaim).where(DocumentClaim.document_version_id == doc.id)
                              .order_by(DocumentClaim.id)).all()
@@ -151,6 +179,7 @@ def _doc_out(session: Session, doc: DocumentVersion) -> dict:
         "reviews": [{"reviewer_id": r.reviewer_id, "state": r.state} for r in reviews],
         "decisions": [{"actor_id": d.actor_id, "action": d.action, "comment": d.comment,
                        "content_sha256": d.content_sha256, "created_at": d.created_at} for d in decisions],
+        "comments": _comments(session, doc.id), "trail": _trail(session, doc.id),
     }
 
 
@@ -296,6 +325,83 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
             return 201, _doc_out(session, doc)
 
         return idempotent(f"create_{kind}:{case_id}", key, actor, run)
+
+    @router.get("/queue")
+    def queue(actor: Who, scope: Literal["department", "mine"] = "department") -> list[dict]:
+        """Open work for the caller's role (department) across assigned cases, or only items the caller owns."""
+        with sessions() as session:
+            cases = session.scalars(select(Assignment.case_id).where(Assignment.user_id == actor.id)).all()
+            items = []
+            for case_id in sorted(set(cases)):
+                for kind, doc_type in KINDS.items():
+                    doc = _latest(session, case_id, doc_type)
+                    if doc is None:
+                        continue
+
+                    def add(task: str, owner: str | None, detail: str = "", d=doc, k=kind, c=case_id):
+                        items.append({"case_id": c, "kind": k, "doc_type": d.doc_type, "version": d.version,
+                                      "status": d.status, "task": task, "owner": owner, "detail": detail})
+
+                    if actor.role == APPROVER[doc_type]:
+                        if doc.status == "IN_REVIEW":
+                            add("REVIEW", session.scalar(select(Review.reviewer_id).where(
+                                Review.document_version_id == doc.id, Review.state == "PENDING")))
+                        elif doc.status == "BASIS_CHANGED":  # owned by whoever approved it
+                            add("BASIS_CHECK", session.scalar(select(ApprovalEvent.actor_id).where(
+                                ApprovalEvent.document_version_id == doc.id, ApprovalEvent.action == "APPROVE")
+                                .order_by(ApprovalEvent.id.desc()).limit(1)))
+                    if actor.role == "AUTHOR":
+                        if doc.status == "DRAFT":
+                            try:
+                                _based_on(session, case_id, doc_type)
+                                add("SEND_FOR_REVIEW", doc.author_id)
+                            except HTTPException as exc:
+                                add("WAITING_UPSTREAM", doc.author_id, exc.detail)
+                        elif doc.status in ("REJECTED", "INFO_REQUESTED", "REVALIDATION_REQUIRED"):
+                            add("REDRAFT", doc.author_id)
+                        for cm in _comments(session, doc.id):
+                            if cm["open"]:
+                                add("ANSWER_COMMENT", doc.author_id,
+                                    f"{cm['actor_id']} on {cm['claim_id'] or 'document'}: {cm['body']}")
+            return [i for i in items if scope == "department" or i["owner"] == actor.id]
+
+    @router.post("/cases/{case_id}/{kind:doc}/{version}/comments", status_code=201)
+    def add_comment(case_id: str, kind: str, version: int, body: CommentIn, actor: Who) -> dict:
+        with sessions.begin() as session:
+            require_case(session, case_id, actor)
+            doc = _get_doc(session, case_id, version, KINDS[kind])
+            if body.claim_id and not session.scalar(select(DocumentClaim.id).where(
+                    DocumentClaim.document_version_id == doc.id, DocumentClaim.claim_id == body.claim_id)):
+                raise HTTPException(422, "Unknown claim on this version")
+            if body.reply_to is not None:
+                parent = session.get(DocComment, body.reply_to)
+                if parent is None or parent.document_version_id != doc.id:
+                    raise HTTPException(422, "reply_to must be a comment on this version")
+            row = DocComment(case_id=case_id, document_version_id=doc.id, claim_id=body.claim_id, actor_id=actor.id,
+                             kind="COMMENT", reply_to=body.reply_to, body=body.body, created_at=now())
+            session.add(row)
+            session.flush()
+            log(session, case_id, actor, "COMMENTED",
+                f"{doc.doc_type} v{version} {body.claim_id or 'document'}: {body.body[:120]}", doc.id)
+            return next(c for c in _comments(session, doc.id) if c["comment_id"] == row.id)
+
+    @router.post("/cases/{case_id}/{kind:doc}/{version}/comments/{comment_id}/resolve", status_code=201)
+    def resolve_comment(case_id: str, kind: str, version: int, comment_id: int, body: ResolveIn, actor: Who) -> dict:
+        with sessions.begin() as session:
+            require_case(session, case_id, actor)
+            doc = _get_doc(session, case_id, version, KINDS[kind])
+            target = next((c for c in _comments(session, doc.id) if c["comment_id"] == comment_id), None)
+            if target is None or not target["open"]:
+                raise HTTPException(409, "Not an open comment on this version")
+            if actor.id not in (doc.author_id, target["actor_id"]):
+                raise HTTPException(403, "Only the document author or the commenter can resolve")
+            session.add(DocComment(case_id=case_id, document_version_id=doc.id, claim_id=target["claim_id"],
+                                   actor_id=actor.id, kind="RESOLVE", reply_to=comment_id, body=body.body,
+                                   created_at=now()))
+            log(session, case_id, actor, "COMMENT_RESOLVED",
+                f"{doc.doc_type} v{version} #{comment_id}: {body.body[:120]}", doc.id)
+            session.flush()
+            return {"comments": _comments(session, doc.id)}
 
     @router.get("/cases/{case_id}/stages")
     def stages(case_id: str, actor: Who) -> list[dict]:

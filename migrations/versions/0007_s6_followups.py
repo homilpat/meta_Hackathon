@@ -3,8 +3,9 @@
 import sqlalchemy as sa
 from alembic import op
 
-from app.db import APPEND_ONLY, append_only_ddl
+from app.db import append_only_ddl
 
+APPEND_ONLY = ("approval_events", "workflow_events")  # frozen at this revision; later tables add their own
 revision = "0007_s6"
 down_revision = "0006_s5"
 branch_labels = None

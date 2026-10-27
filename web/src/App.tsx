@@ -12,7 +12,7 @@ const KINDS = [['ncr', 'NCR', 'D2 부적합 보고서', 'bob'], ['containment', 
 const APPROVER_ROLE: Record<string, string> = { NCR: 'REVIEWER', CONTAINMENT: 'QA_PRODUCTION', RCA: 'PROCESS_ENGINEER' }
 
 const nav = [
-  ['dashboard', '개요', 'grid'], ['data', '제조 데이터 · 증거', 'database'], ['prediction', '품질 예측 · XAI', 'chart'],
+  ['dashboard', '개요', 'grid'], ['queue', '부서 할 일', 'check'], ['data', '제조 데이터 · 증거', 'database'], ['prediction', '품질 예측 · XAI', 'chart'],
   ['investigation', 'AI 품질 조사', 'spark'], ['history', '과거 품질 사례', 'history'], ['reports', '문서 · 결재', 'document'],
   ['impact', '변경 영향 분석', 'nodes'], ['audit', '감사 · 보안', 'shield'],
 ] as const
@@ -54,7 +54,8 @@ function Page({ title, desc, action, children }: { title: string; desc: string; 
   return <main className="page"><div className="page-head"><div><h1>{title}</h1><p>{desc}</p></div>{action}</div>{children}</main>
 }
 
-type Ctx = { cid: string; me: J; api: (path: string, method?: string, body?: unknown, idem?: boolean) => Promise<J>; refresh: () => void; tick: number }
+type Ctx = { cid: string; me: J; api: (path: string, method?: string, body?: unknown, idem?: boolean) => Promise<J>; refresh: () => void; tick: number
+  open: (cid: string, sel: string) => void; focus: string }
 
 function useLoad<T>(ctx: Ctx, path: string | null, init: T): T {
   const [v, setV] = useState<T>(init)
@@ -74,6 +75,23 @@ function Stages({ ctx }: { ctx: Ctx }) {
     return <div key={s.kind} title={s.blocked_by ?? ''} className={done ? 'done' : s.approval_open ? 'active' : 'future'}><i>{done ? <Icon name="check" size={13}/> : s.step}</i>
       <span>{KINDS.find(k => k[0] === s.kind)![2]}</span><small>{s.version ? `v${s.version} · ${s.status}` : '미작성'}{!s.approval_open && ' · 결재 잠금 (앞 단계 미승인)'}</small></div>
   })}</div>
+}
+
+const TASK: Record<string, [string, Tone]> = {
+  REVIEW: ['결재 검토', 'amber'], BASIS_CHECK: ['기반 변경 확인', 'amber'], SEND_FOR_REVIEW: ['검토 요청 가능', 'teal'],
+  WAITING_UPSTREAM: ['앞 단계 승인 대기', 'slate'], REDRAFT: ['재작성 필요', 'red'], ANSWER_COMMENT: ['코멘트 답변', 'violet'],
+}
+
+function Queue({ ctx }: { ctx: Ctx }) {
+  const items = useLoad<J[]>(ctx, '/queue?scope=department', [])
+  const role = ctx.me?.role
+  return <Page title="부서 할 일" desc={`${role ?? '-'} 역할이 처리할 일입니다. 배정된 사건 전체 기준이며, 담당자는 그 일을 맡은 사람(검토 지정자, 승인자, 작성자)입니다.`}>
+    <Card><SectionTitle title="열린 작업" sub={`${items.length}건`}/><div className="table-wrap"><table><thead><tr><th>사건</th><th>문서</th><th>상태</th><th>할 일</th><th>담당</th><th>내용</th><th/></tr></thead><tbody>
+      {items.map((i, n) => <tr key={n}><td><b className="id">{i.case_id}</b></td><td>{i.doc_type} v{i.version}</td><td><Badge tone={STATUS_TONE[i.status]}>{i.status}</Badge></td>
+        <td><Badge tone={TASK[i.task]?.[1] ?? 'slate'}>{TASK[i.task]?.[0] ?? i.task}</Badge></td><td>{i.owner ?? '부서'}</td><td className="wrap">{i.detail || '-'}</td>
+        <td><button className="citation" onClick={() => ctx.open(i.case_id, `${i.kind}:${i.version}`)}>열기</button></td></tr>)}
+    </tbody></table></div>{!items.length && <Empty>열린 작업이 없습니다.</Empty>}</Card>
+  </Page>
 }
 
 function Dashboard({ ctx, cases, onNew }: { ctx: Ctx; cases: J[]; onNew: () => void }) {
@@ -212,8 +230,11 @@ function Reports({ ctx }: { ctx: Ctx }) {
   const lists = KINDS.map(([k]) => useLoad<J[]>(ctx, `/cases/${ctx.cid}/${k}`, [])) // fixed order, safe for hooks
   const stages = useLoad<J[]>(ctx, `/cases/${ctx.cid}/stages`, [])
   const all = KINDS.flatMap(([k], i) => lists[i].map(d => ({ ...d, kind: k })))
-  const [selKey, setSelKey] = useState('')
+  const [selKey, setSelKey] = useState(ctx.focus)
   const [comment, setComment] = useState('')
+  const [note, setNote] = useState('')
+  const [claimFor, setClaimFor] = useState('')
+  const [replyTo, setReplyTo] = useState<number | null>(null)
   const d = all.find(x => `${x.kind}:${x.version}` === selKey) ?? all[all.length - 1]
   const author = ctx.me?.role === 'AUTHOR'
   const create = async (k: string) => { const r = await ctx.api(`/cases/${ctx.cid}/${k}`, 'POST', {}, true); setSelKey(`${k}:${r.version}`); ctx.refresh() }
@@ -221,6 +242,9 @@ function Reports({ ctx }: { ctx: Ctx }) {
   const approver = d && KINDS.find(k => k[0] === d.kind)![3]
   const stage = d && stages.find(s => s.kind === d.kind)
   const act = async (path: string, body: J) => { await ctx.api(`/cases/${ctx.cid}/${d.kind}/${d.version}/${path}`, 'POST', body, true); setComment(''); ctx.refresh() }
+  const say = async () => { await act('comments', { body: note, claim_id: claimFor || null, reply_to: replyTo }); setNote(''); setReplyTo(null) }
+  const resolve = async (id: number) => { await act(`comments/${id}/resolve`, { body: note || '해결' }); setNote('') }
+  const openOn = (cl: string) => (d?.comments ?? []).filter((x: J) => x.open && x.claim_id === cl).length
   return <Page title="문서 및 결재" desc="8D 순서: D2 NCR(검토자) → D3 임시조치 계획(QA/생산) → D4 원인 가설(공정 엔지니어). 초안은 미리 쓸 수 있지만 결재는 앞 단계 승인 후에만 열립니다."
     action={author && <span>{KINDS.map(([k, t]) => <button key={k} className="button secondary" onClick={() => create(k)}>{t} 초안 생성</button>)}</span>}>
     <Card className="mb"><Stages ctx={ctx}/></Card>
@@ -232,8 +256,9 @@ function Reports({ ctx }: { ctx: Ctx }) {
         <span>작성 {d.author_id} · {d.created_at.slice(0, 19)} · 템플릿 {d.template_version} · 기반 {d.based_on.join(', ') || '-'} · 생성기 {d.builder}</span></div>
         <a className="button secondary" href={`/cases/${d.case_id}/${d.kind}/${d.version}/html`} onClick={async e => { e.preventDefault(); const w = window.open(''); w?.document.write(await (await fetch(`/cases/${d.case_id}/${d.kind}/${d.version}/html`, { headers: { 'X-User': ctx.me.id } })).text()) }}>HTML 보기</a></div>
         {d.note && <Note>{d.note}</Note>}
-        <div className="table-wrap"><table><thead><tr><th>ID</th><th>구분</th><th>주장</th><th>근거</th></tr></thead><tbody>{d.claims.map((c: J) =>
-          <tr key={c.claim_id}><td>{c.claim_id}</td><td><Badge tone={CLASS_TONE[c.classification]}>{c.classification}</Badge></td><td className="wrap">{c.text}</td><td className="wrap"><Cite ids={c.evidence_ids}/></td></tr>)}</tbody></table></div>
+        <div className="table-wrap"><table><thead><tr><th>ID</th><th>구분</th><th>주장</th><th>근거</th><th>코멘트</th></tr></thead><tbody>{d.claims.map((c: J) =>
+          <tr key={c.claim_id}><td>{c.claim_id}</td><td><Badge tone={CLASS_TONE[c.classification]}>{c.classification}</Badge></td><td className="wrap">{c.text}</td><td className="wrap"><Cite ids={c.evidence_ids}/></td>
+            <td><button className="citation" onClick={() => { setClaimFor(c.claim_id); setReplyTo(null) }}>{openOn(c.claim_id) ? `열림 ${openOn(c.claim_id)}` : '+'}</button></td></tr>)}</tbody></table></div>
         <p className="muted">SHA-256 {d.content_sha256}</p></Card> : <Card><Empty>문서를 선택하세요.</Empty></Card>}
       {d && <div className="stack"><Card><SectionTitle title="검토 및 결재"/>
         {d.reviews.map((r: J, i: number) => <div className="reviewer" key={i}><div className="avatar">{r.reviewer_id[0].toUpperCase()}</div><div><b>{r.reviewer_id}</b><span>검토 요청 · {r.state}</span></div></div>)}
@@ -251,7 +276,22 @@ function Reports({ ctx }: { ctx: Ctx }) {
           <div className="dual"><button className="button success" onClick={() => act('decision', { decision: 'APPROVE', comment, content_sha256: d.content_sha256 })}>승인</button>
             <button className="button danger" onClick={() => act('decision', { decision: 'REJECT', comment, content_sha256: d.content_sha256 })}>반려</button></div>
           <button className="button secondary full" onClick={() => act('decision', { decision: 'REQUEST_INFO', comment, content_sha256: d.content_sha256 })}>추가 정보 요청</button></>}
-      </Card><Card><SectionTitle title="문서 주의사항"/><p className="muted">임시조치 계획 승인은 물리적 조치 완료를 의미하지 않습니다.</p><p className="muted">원인 가설 승인은 근본원인 확정을 의미하지 않습니다.</p></Card></div>}
+      </Card>
+      <Card><SectionTitle title="검토 코멘트" sub="주장 단위 · 감사 기록에 남음" action={<Badge tone={d.comments.some((x: J) => x.open) ? 'violet' : 'slate'}>열림 {d.comments.filter((x: J) => x.open).length}</Badge>}/>
+        {d.comments.filter((x: J) => !x.reply_to).map((x: J) => <div key={x.comment_id} className="comment">
+          <div className="detail-row"><span>{x.claim_id ?? '문서 전체'} · {x.actor_id} · {x.created_at.slice(11, 19)}</span><Badge tone={x.open ? 'violet' : 'green'}>{x.open ? '열림' : '해결'}</Badge></div>
+          <p>{x.body}</p>
+          {d.comments.filter((r: J) => r.reply_to === x.comment_id).map((r: J) => <p key={r.comment_id} className="muted">↳ {r.actor_id}{r.kind === 'RESOLVE' ? ' (해결)' : ''}: {r.body}</p>)}
+          {x.open && <span className="row-gap"><button className="citation" onClick={() => { setReplyTo(x.comment_id); setClaimFor(x.claim_id ?? '') }}>답글</button>
+            {(ctx.me?.id === d.author_id || ctx.me?.id === x.actor_id) && <button className="citation" onClick={() => resolve(x.comment_id)}>해결 처리</button>}</span>}</div>)}
+        <div className="row-gap"><select value={claimFor} onChange={e => setClaimFor(e.target.value)}><option value="">문서 전체</option>{d.claims.map((c: J) => <option key={c.claim_id}>{c.claim_id}</option>)}</select>
+          {replyTo && <Badge tone="violet">#{replyTo}에 답글</Badge>}</div>
+        <input className="input" placeholder="코멘트 (해결 처리 시 메모로도 사용)" value={note} onChange={e => setNote(e.target.value)}/>
+        <button className="button secondary full" disabled={!note.trim()} onClick={say}>코멘트 남기기</button></Card>
+      <Card><SectionTitle title="책임 추적" sub="이 버전에 누가 어떤 역할로 무엇을 했는지 · 수정 불가 기록"/>
+        <div className="tool-timeline">{d.trail.map((t: J, i: number) => <div className="tool-item" key={i}><i className={t.event === 'APPROVE' ? 'green' : 'amber'}>{t.event === 'APPROVE' && <Icon name="check" size={12}/>}</i>
+          <time>{t.at.slice(11, 19)}</time><div><b>{t.event} · {t.actor_id} ({t.role})</b><span>{t.detail}</span></div></div>)}</div></Card>
+      <Card><SectionTitle title="문서 주의사항"/><p className="muted">임시조치 계획 승인은 물리적 조치 완료를 의미하지 않습니다.</p><p className="muted">원인 가설 승인은 근본원인 확정을 의미하지 않습니다.</p></Card></div>}
     </div>
   </Page>
 }
@@ -312,6 +352,7 @@ export default function App() {
   const [provider, setProvider] = useState<J>(null)
   const [msg, setMsg] = useState('')
   const [tick, setTick] = useState(0)
+  const [focus, setFocus] = useState('')
 
   const api = useCallback(async (path: string, method = 'GET', body?: unknown, idem = false) => {
     const headers: Record<string, string> = { 'X-User': user }
@@ -339,16 +380,17 @@ export default function App() {
     setCid(id); refresh()
   }
 
-  const ctx: Ctx = { cid, me, api, refresh, tick }
+  const open = useCallback((c: string, sel: string) => { setCid(c); setFocus(sel); setActive('reports') }, [])
+  const ctx: Ctx = { cid, me, api, refresh, tick, open, focus }
   const screens: Record<string, ReactNode> = {
-    dashboard: <Dashboard ctx={ctx} cases={cases} onNew={newCase}/>, data: <DataWorkspace ctx={ctx}/>, prediction: <Prediction ctx={ctx}/>,
+    dashboard: <Dashboard ctx={ctx} cases={cases} onNew={newCase}/>, queue: <Queue ctx={ctx}/>, data: <DataWorkspace ctx={ctx}/>, prediction: <Prediction ctx={ctx}/>,
     investigation: <Investigation ctx={ctx} provider={provider}/>, history: <HistoryScreen ctx={ctx}/>, reports: <Reports ctx={ctx}/>, impact: <Impact ctx={ctx}/>, audit: <Audit ctx={ctx}/>,
   }
   return <div className="app">
     <aside className="sidebar">
       <div className="brand"><div className="brand-mark"><span/><span/><span/></div><div><b>QualityOps</b><small>AI</small></div></div>
       <label className="site-select"><span><small>현재 사건</small><select value={cid} onChange={e => setCid(e.target.value)}>{cases.map(c => <option key={c.case_id}>{c.case_id}</option>)}{!cases.length && <option value="">배정된 사건 없음</option>}</select></span></label>
-      <nav>{nav.map(n => <button key={n[0]} className={active === n[0] ? 'active' : ''} onClick={() => setActive(n[0])}><Icon name={n[2]}/><span>{n[1]}</span>{n[0] === 'investigation' && <i>AI</i>}</button>)}</nav>
+      <nav>{nav.map(n => <button key={n[0]} className={active === n[0] ? 'active' : ''} onClick={() => { setFocus(''); setActive(n[0]) }}><Icon name={n[2]}/><span>{n[1]}</span>{n[0] === 'investigation' && <i>AI</i>}</button>)}</nav>
       <div className="sidebar-bottom"><div className="status-live"><i className={provider?.configured ? '' : 'off'}/><span><b>Meta · {provider?.model ?? '-'}</b><small>{provider?.configured ? 'LIVE 키 설정됨' : '키 없음 · 호출 불가'}</small></span></div></div>
     </aside>
     <div className="shell">

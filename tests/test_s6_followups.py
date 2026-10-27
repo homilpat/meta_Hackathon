@@ -236,7 +236,8 @@ def test_audit_tables_are_append_only(env, tmp_path):
     with engine.connect() as conn:
         triggers = set(conn.scalars(text("SELECT name FROM sqlite_master WHERE type='trigger'")))
     engine.dispose()
-    assert triggers == {f"{t}_no_{op}" for t in ("approval_events", "workflow_events") for op in ("update", "delete")}
+    assert triggers == {f"{t}_no_{op}" for t in ("approval_events", "workflow_events", "doc_comments")
+                        for op in ("update", "delete")}
 
 
 REPLY = {"model": MODEL, "choices": [{"message": {"role": "assistant", "content": "{}"}}], "usage": {}}

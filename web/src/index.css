@@ -58,3 +58,4 @@
 .report-steps small{position:static;display:block;font-size:9px}.report-steps>div{flex-wrap:wrap}.doc-row{cursor:pointer}
 .impact-layout{grid-template-columns:300px minmax(460px,1fr) 260px}.compare-row{grid-template-columns:1fr;gap:3px}.compare-row svg{display:none}.compare-row del,.compare-row b{word-break:break-all}
 .dot.green{background:var(--green)}.dot.blue{background:var(--blue)}.dot.violet{background:var(--violet)}
+.comment{border-bottom:1px solid var(--line);padding:6px 0}.comment p{margin:4px 0}

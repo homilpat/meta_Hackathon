@@ -61,3 +61,35 @@ def test_lot_integrity_checks(lot, code):
     ship["content_sha256"] = sha256(ship["records"])
     _, issues = normalize(SyntheticBundle.model_validate(json.loads(json.dumps(b))))
     assert [i["code"] for i in issues if i["code"] in ("MISSING_LOT", "LOT_MISMATCH")] == [code]
+
+
+def test_western_electric_rules():
+    from app.spc import we_rules
+    assert we_rules([0, 0, 3.5], 2) == ["WE1"]
+    assert we_rules([2.5, 0, 2.2], 2) == ["WE2"]
+    assert we_rules([1.5, 1.2, -0.5, 1.1, 1.3], 4) == ["WE3"]
+    assert we_rules([0.2] * 8, 7) == ["WE4"] and we_rules([0.2] * 7 + [-0.1], 7) == []
+
+
+def test_spc_replay_opens_case_before_aoi_confirms(tmp_path):
+    from app.synthetic import generate
+    app = create_app(f"sqlite:///{tmp_path / 'spc.db'}")
+    Base.metadata.create_all(app.state.engine)
+    c = TestClient(app)
+    assert c.post("/monitoring/line-replay", json={"seed": 7}, headers=H("bob")).status_code == 403
+    r = c.post("/monitoring/line-replay", json={"seed": 7}, headers=H("alice")).json()
+    cid, a = r["case_id"], r["alarm"]
+    assert a["lot"] == "L02" and a["phase"] == "II" and a["rules"]
+    assert a["t"] < r["first_confirmed_defect_in_lot"]  # the drift signals before AOI + human confirm a defect
+    assert c.post("/monitoring/line-replay", json={"seed": 7}, headers=H("alice")).status_code == 409
+    assert [t["event"] for t in c.get(f"/cases/{cid}/timeline", headers=H("frank")).json()] == ["SPC_ALARM"]
+    m = c.get(f"/cases/{cid}/spc", headers=H("bob")).json()
+    assert m["reference_lot"] == "L01" and m["lots"]["L01"]["alarms"] == 0
+    assert m["lots"]["L02"]["cpk"] < m["lots"]["L01"]["cpk"]
+    claims = c.post(f"/cases/{cid}/ncr", json={}, headers=H("alice")).json()["claims"]
+    first = next(cl for cl in claims if cl["text"].startswith("Lot L02:") and "Western Electric" in cl["text"])
+    assert first["value"] == a["xbar"] and len(first["evidence_ids"]) == 8
+    c.post("/cases", json={"case_id": "S"}, headers=H("alice"))
+    c.post("/cases/S/sources", json=generate(7), headers=H("alice"))
+    assert c.get("/cases/S/spc", headers=H("alice")).status_code == 404  # no lots in the small fixture
+    app.state.engine.dispose()

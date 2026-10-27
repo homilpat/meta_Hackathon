@@ -11,17 +11,65 @@ from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import sessionmaker
 
-from app.db import Assignment, DataQualityIssue, Evidence, QualityCase, SourceAsset, SourceEvent
+from app import ncr, spc
+from app.db import (
+    Assignment,
+    DataQualityIssue,
+    Evidence,
+    QualityCase,
+    SourceAsset,
+    SourceEvent,
+    User,
+)
 from app.ingestion import SyntheticBundle, normalize
 from app.ml_api import make_ml_router
 from app.model_provider import MODEL, MetaProvider, ModelProvider
 from app.synthetic import LINE_VERSION, canonical, generate, generate_line, spi_correction
-from app.workflow import Actor, make_auth, make_router, require_case, require_role
+from app.workflow import DEMO_USERS, Actor, log, make_auth, make_router, require_case, require_role
 
 
 class Health(BaseModel):
     status: str
     stage: str
+
+
+class Replay(BaseModel):
+    seed: int = 7
+
+
+def store_bundle(session, case_id: str, bundle: SyntheticBundle, events: list[dict], issues: list[dict]) -> None:
+    asset_ids = {}
+    for source in bundle.assets:
+        stored = SourceAsset(
+            case_id=case_id, asset_id=source.asset_id, source_system=source.source_system,
+            entity_type=source.entity_type, source_version=source.source_version,
+            supersedes_asset_id=source.supersedes_asset_id, license_id=source.license_id,
+            data_origin=source.data_origin, sensitivity=source.sensitivity,
+            captured_at=source.captured_at.isoformat(), ingested_at=source.ingested_at.isoformat(),
+            content_sha256=source.content_sha256, raw_json=canonical(source.records),
+        )
+        session.add(stored)
+        session.flush()
+        asset_ids[source.asset_id] = stored.id
+    for row in events:
+        stored = SourceEvent(
+            case_id=case_id, source_asset_id=asset_ids[row["asset_id"]],
+            event_id=row["id"], original_row_id=row["original_row_id"],
+            entity_type=row["entity_type"], entity_key=row["entity_key"],
+            event_time=row["event_time"], source_updated_at=row["source_updated_at"],
+            ingested_at=row["ingested_at"], data_origin=row["data_origin"],
+            sensitivity=row["sensitivity"], validation_status=row["validation_status"],
+            raw_json=row["raw_json"],
+        )
+        session.add(stored)
+        session.flush()
+        session.add(Evidence(
+            case_id=case_id, source_event_id=stored.id, evidence_id=f"EV-{row['id']}",
+            classification="OBSERVED", validity=row["validation_status"],
+            content_sha256=hashlib.sha256(row["raw_json"].encode()).hexdigest(),
+        ))
+    for item in issues:
+        session.add(DataQualityIssue(case_id=case_id, **item))
 
 
 class CaseCreate(BaseModel):
@@ -96,40 +144,56 @@ def create_app(database_url: str = "sqlite:///qualityops.db",
             require_case(session, case_id, actor)
             if session.scalar(select(SourceAsset.id).where(SourceAsset.case_id == case_id).limit(1)):
                 raise HTTPException(409, "Sources already uploaded for this case")
-            asset_ids = {}
-            for source in bundle.assets:
-                stored = SourceAsset(
-                    case_id=case_id, asset_id=source.asset_id, source_system=source.source_system,
-                    entity_type=source.entity_type, source_version=source.source_version,
-                    supersedes_asset_id=source.supersedes_asset_id, license_id=source.license_id,
-                    data_origin=source.data_origin, sensitivity=source.sensitivity,
-                    captured_at=source.captured_at.isoformat(), ingested_at=source.ingested_at.isoformat(),
-                    content_sha256=source.content_sha256, raw_json=canonical(source.records),
-                )
-                session.add(stored)
-                session.flush()
-                asset_ids[source.asset_id] = stored.id
-            for event in events:
-                stored = SourceEvent(
-                    case_id=case_id, source_asset_id=asset_ids[event["asset_id"]],
-                    event_id=event["id"], original_row_id=event["original_row_id"],
-                    entity_type=event["entity_type"], entity_key=event["entity_key"],
-                    event_time=event["event_time"], source_updated_at=event["source_updated_at"],
-                    ingested_at=event["ingested_at"], data_origin=event["data_origin"],
-                    sensitivity=event["sensitivity"], validation_status=event["validation_status"],
-                    raw_json=event["raw_json"],
-                )
-                session.add(stored)
-                session.flush()
-                session.add(Evidence(
-                    case_id=case_id, source_event_id=stored.id, evidence_id=f"EV-{event['id']}",
-                    classification="OBSERVED", validity=event["validation_status"],
-                    content_sha256=hashlib.sha256(event["raw_json"].encode()).hexdigest(),
-                ))
-            for item in issues:
-                session.add(DataQualityIssue(case_id=case_id, **item))
+            store_bundle(session, case_id, bundle, events, issues)
         return {"asset_count": len(bundle.assets), "event_count": len(events),
                 "issue_counts": Counter(i["code"] for i in issues)}
+
+    @app.get("/cases/{case_id}/spc")
+    def get_spc(case_id: str, actor: Who) -> dict:
+        with sessions() as session:
+            require_case(session, case_id, actor)
+            m = spc.from_items(ncr.current(ncr._evidence(session, case_id)))
+        if m is None:
+            raise HTTPException(404, "No lot-traced SPI data in this case")
+        return m
+
+    @app.post("/monitoring/line-replay", status_code=201)
+    def line_replay(body: Replay, actor: Who) -> dict:
+        """Replay the synthetic line stream through the SPC monitor; the first phase II alarm opens a case."""
+        # ponytail: replays a whole generated run; a live line would push events (e.g. IPC-CFX) into the same monitor.
+        require_role(actor, "AUTHOR")
+        raw = generate_line(body.seed)
+        m = spc.from_bundle(raw)
+        alarm = m and m["first_alarm"]
+        if not alarm:
+            return {"case_id": None, "alarm": None, "limits": m and m["limits"]}
+        t = {a["entity_type"]: a["records"] for a in raw["assets"]}
+        lot_of = {r["panel_id"]: r["lot_id"] for r in t["panels"]}
+        confirmed = sorted(r["event_time"] for r in t["human_verifications"]
+                           if r["result"] == "DEFECT_CONFIRMED" and lot_of[r["panel_id"]] == alarm["lot"])
+        case_id = f"SPC-{body.seed}-{alarm['panel']}-{alarm['board']}"
+        bundle = SyntheticBundle.model_validate(raw)
+        events, issues = normalize(bundle)
+        lim = m["limits"]
+        detail = (f"{'+'.join(alarm['rules'])} at {alarm['panel']}/{alarm['board']} (lot {alarm['lot']}): X-bar "
+                  f"{alarm['xbar']} vs limits {lim['lcl']}..{lim['ucl']} mm3 from lot {m['reference_lot']}")
+        with sessions.begin() as session:
+            if session.get(QualityCase, case_id):
+                raise HTTPException(409, f"Case {case_id} already opened for this alarm")
+            session.add(QualityCase(id=case_id, domain="PCB", data_origin="SYNTHETIC"))
+            session.flush()
+            # demo team: the caller plus the first user of each approver role
+            team = [actor.id, *(next(u for u, (_, r) in DEMO_USERS.items() if r == role)
+                                for role in ("REVIEWER", "QA_PRODUCTION", "PROCESS_ENGINEER"))]
+            for u in team:
+                if session.get(User, u) is None:
+                    session.add(User(id=u, name=DEMO_USERS[u][0], role=DEMO_USERS[u][1]))
+                    session.flush()
+                session.add(Assignment(case_id=case_id, user_id=u))
+            store_bundle(session, case_id, bundle, events, issues)
+            log(session, case_id, actor, "SPC_ALARM", detail)
+        return {"case_id": case_id, "alarm": alarm, "limits": lim, "reference_lot": m["reference_lot"],
+                "first_confirmed_defect_in_lot": confirmed[0] if confirmed else None, "detail": detail}
 
     @app.get("/cases/{case_id}/sources")
     def get_sources(case_id: str, actor: Who) -> list[dict]:

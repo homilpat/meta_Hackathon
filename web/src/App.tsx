@@ -12,7 +12,7 @@ const KINDS = [['ncr', 'NCR', 'D2 부적합 보고서', 'bob'], ['containment', 
 const APPROVER_ROLE: Record<string, string> = { NCR: 'REVIEWER', CONTAINMENT: 'QA_PRODUCTION', RCA: 'PROCESS_ENGINEER' }
 
 const nav = [
-  ['dashboard', '개요', 'grid'], ['queue', '할 일', 'check'], ['data', '제조 데이터 · 증거', 'database'], ['prediction', '품질 예측 · XAI', 'chart'],
+  ['dashboard', '개요', 'grid'], ['queue', '할 일', 'check'], ['spc', 'SPC 라인 모니터링', 'pulse'], ['data', '제조 데이터 · 증거', 'database'], ['prediction', '품질 예측 · XAI', 'chart'],
   ['investigation', 'AI 품질 조사', 'spark'], ['history', '과거 품질 사례', 'history'], ['reports', '문서 · 결재', 'document'],
   ['impact', '변경 영향 분석', 'nodes'], ['audit', '감사 · 보안', 'shield'],
 ] as const
@@ -39,6 +39,7 @@ function Icon({ name, size = 18 }: { name: string; size?: number }) {
     check: <path d="m5 12 4 4L19 6"/>,
     warning: <><path d="M12 3 2 21h20z"/><path d="M12 9v5M12 18h.01"/></>,
     arrow: <><path d="M5 12h14M14 7l5 5-5 5"/></>,
+    pulse: <path d="M2 12h4l3-8 4 16 3-8h6"/>,
   }
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>
 }
@@ -55,7 +56,7 @@ function Page({ title, desc, action, children }: { title: string; desc: string; 
 }
 
 type Ctx = { cid: string; me: J; api: (path: string, method?: string, body?: unknown, idem?: boolean) => Promise<J>; refresh: () => void; tick: number
-  open: (cid: string, sel: string) => void; focus: string }
+  open: (cid: string, sel: string, screen?: string) => void; focus: string }
 
 function useLoad<T>(ctx: Ctx, path: string | null, init: T): T {
   const [v, setV] = useState<T>(init)
@@ -155,6 +156,47 @@ function DataWorkspace({ ctx }: { ctx: Ctx }) {
           return <tr key={e.event_id}><td><b>{e.entity_key.join('/')}</b></td><td>{e.record.inspection_id}</td><td>{e.record.result}</td><td>{v ?? '-'}</td><td><Badge tone={tone}>{label}</Badge></td></tr> })}
       </tbody></table></div></Card>
     </div>
+  </Page>
+}
+
+// X-bar chart: limits from the reference lot (phase I); signals in later lots open a case, they do not prove a defect.
+function ControlChart({ m }: { m: J }) {
+  const pts = m.points as J[], L = m.limits, W = 960, H = 240, pad = 34
+  const ys = [...pts.map(p => p.xbar), L.ucl, L.lcl], lo = Math.min(...ys) - 0.002, hi = Math.max(...ys) + 0.002
+  const x = (i: number) => pad + (i / (pts.length - 1)) * (W - pad - 8), y = (v: number) => 8 + (hi - v) / (hi - lo) * (H - 30)
+  const starts = pts.map((p, i) => [p.lot, i] as [string, number]).filter(([l], i) => !i || pts[i - 1].lot !== l)
+  const hline = (v: number, label: string, dash: boolean) => <g key={label}><line x1={pad} x2={W - 8} y1={y(v)} y2={y(v)} stroke={dash ? 'var(--red)' : 'var(--slate)'} strokeDasharray={dash ? '5 4' : undefined} strokeWidth={1}/>
+    <text x={2} y={y(v) + 3} fontSize={9} fill="var(--muted)">{label}</text></g>
+  return <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto' }} role="img" aria-label="SPI X-bar control chart">
+    {starts.map(([l, i]) => <g key={l}><line x1={x(i)} x2={x(i)} y1={4} y2={H - 20} stroke="var(--line)"/><text x={x(i) + 4} y={H - 6} fontSize={10} fill="var(--slate)">{l}{l === m.reference_lot ? ' (기준)' : ''}</text></g>)}
+    {hline(L.ucl, 'UCL', true)}{hline(L.cl, 'CL', false)}{hline(L.lcl, 'LCL', true)}
+    <polyline points={pts.map((p, i) => `${x(i)},${y(p.xbar)}`).join(' ')} fill="none" stroke="var(--blue)" strokeWidth={1.2} opacity={0.6}/>
+    {pts.map((p, i) => <circle key={i} cx={x(i)} cy={y(p.xbar)} r={p.rules.length && p.phase === 'II' ? 3.6 : 2.4}
+      fill={p.rules.length && p.phase === 'II' ? 'var(--red)' : 'var(--blue)'}><title>{`${p.panel}/${p.board} X̄ ${p.xbar} R ${p.r}${p.rules.length ? ' · ' + p.rules.join(', ') : ''}`}</title></circle>)}
+  </svg>
+}
+
+function Spc({ ctx }: { ctx: Ctx }) {
+  const m = useLoad<J>(ctx, ctx.cid ? `/cases/${ctx.cid}/spc` : null, null)
+  const [last, setLast] = useState<J>(null)
+  const replay = async () => {
+    const r = await ctx.api('/monitoring/line-replay', 'POST', { seed: 7 })
+    setLast(r); if (r.case_id) ctx.open(r.case_id, '', 'spc')
+  }
+  const lead = last?.first_confirmed_defect_in_lot && Math.round((Date.parse(last.first_confirmed_defect_in_lot) - Date.parse(last.alarm.t)) / 60000)
+  return <Page title="SPC 라인 모니터링" desc="SPI 솔더 체적을 보드 단위(핀 8개) X̄-R 관리도로 감시합니다. 기준 lot으로 관리한계를 잡고, 이후 lot의 Western Electric 규칙 위반이 첫 경보가 되면 사건을 자동으로 엽니다."
+    action={ctx.me?.role === 'AUTHOR' && <button className="button primary" onClick={replay}>라인 이벤트 재생 → 경보 시 사건 자동 생성</button>}>
+    {last && <div className="revision-alert"><Icon name="warning"/><div><b>{last.case_id ? `사건 ${last.case_id} 자동 생성` : '경보 없음'}</b><span>{last.detail}{lead != null && ` · 같은 lot의 첫 AOI 불량 확인보다 ${lead}분 먼저`}</span></div></div>}
+    {!m ? <Card><Empty>현재 사건에 lot 추적 SPI 데이터가 없습니다. 작성자 계정으로 라인 이벤트를 재생하거나 SMT 라인 사건을 만드세요.</Empty></Card> : <>
+      <Card className="mb"><SectionTitle title="X̄ 관리도 · SPI 체적 (mm³)" sub={`기준 lot ${m.reference_lot} · n=${m.n} · CL ${m.limits.cl} · LCL ${m.limits.lcl} · UCL ${m.limits.ucl} · R̄ ${m.limits.rbar}`}
+        action={m.first_alarm && <Badge tone="red">첫 경보 {m.first_alarm.panel}/{m.first_alarm.board} · {m.first_alarm.rules.join(', ')}</Badge>}/>
+        <ControlChart m={m}/>
+        <Note>관리도 신호는 공정이 기준에서 벗어났다는 통계적 신호입니다. 불량 판정도 원인 확정도 아니며, 원인은 D4에서 공정 엔지니어가 검증 근거로만 확정합니다.</Note></Card>
+      <Card><SectionTitle title="Lot별 공정능력 · 신호" sub={`가상 규격 ${m.spec[0]}–${m.spec[1]} mm³ · Cpk는 보드 내 산포(R̄/d2) 기준`}/><div className="table-wrap"><table><thead><tr><th>Lot</th><th>보드</th><th>평균 체적</th><th>Cpk</th><th>규칙 위반 보드</th><th>첫 신호</th></tr></thead><tbody>
+        {Object.entries(m.lots as Record<string, J>).map(([l, v]) => <tr key={l}><td><b className="id">{l}</b>{l === m.reference_lot && ' (기준)'}</td><td>{v.boards}</td><td>{v.mean}</td>
+          <td><Badge tone={v.cpk < 1.33 ? 'amber' : 'green'}>{v.cpk}</Badge></td><td>{v.alarms}</td>
+          <td className="wrap">{v.first_alarm ? `${v.first_alarm.panel}/${v.first_alarm.board} · ${v.first_alarm.rules.map((r: string) => `${r} (${m.rules[r]})`).join(', ')}` : '-'}</td></tr>)}
+      </tbody></table></div></Card></>}
   </Page>
 }
 
@@ -415,10 +457,10 @@ export default function App() {
     setCid(id); refresh()
   }
 
-  const open = useCallback((c: string, sel: string) => { setCid(c); setFocus(sel); setActive('reports') }, [])
+  const open = useCallback((c: string, sel: string, screen = 'reports') => { setCid(c); setFocus(sel); setActive(screen); refresh() }, [refresh])
   const ctx: Ctx = { cid, me, api, refresh, tick, open, focus }
   const screens: Record<string, ReactNode> = {
-    dashboard: <Dashboard ctx={ctx} cases={cases} onNew={newCase}/>, queue: <Queue ctx={ctx}/>, data: <DataWorkspace ctx={ctx}/>, prediction: <Prediction ctx={ctx}/>,
+    dashboard: <Dashboard ctx={ctx} cases={cases} onNew={newCase}/>, queue: <Queue ctx={ctx}/>, spc: <Spc ctx={ctx}/>, data: <DataWorkspace ctx={ctx}/>, prediction: <Prediction ctx={ctx}/>,
     investigation: <Investigation ctx={ctx} provider={provider}/>, history: <HistoryScreen ctx={ctx}/>, reports: <Reports ctx={ctx}/>, impact: <Impact ctx={ctx}/>, audit: <Audit ctx={ctx}/>,
   }
   return <div className="app">
@@ -433,7 +475,7 @@ export default function App() {
         <div className="header-actions"><Badge tone="blue">SYNTHETIC 데이터</Badge>
           <label className="user"><div className="avatar">{user[0].toUpperCase()}</div><span><small>데모 사용자 (X-User, 비밀번호 없음)</small><select value={user} onChange={e => setUser(e.target.value)}>{USERS.map(u => <option key={u[0]} value={u[0]}>{u[1]}</option>)}</select></span></label></div></header>
       {msg && <div className="error-bar" onClick={() => setMsg('')}>{msg}</div>}
-      {cid || active === 'dashboard' ? screens[active] : <main className="page"><Card><Empty>배정된 사건이 없습니다.</Empty></Card></main>}
+      {cid || active === 'dashboard' || active === 'spc' ? screens[active] : <main className="page"><Card><Empty>배정된 사건이 없습니다.</Empty></Card></main>}
     </div>
   </div>
 }

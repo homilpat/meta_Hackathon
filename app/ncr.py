@@ -13,6 +13,7 @@ from statistics import mean
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import spc
 from app.db import Evidence, ModelVersion, Prediction, SourceAsset, SourceEvent, XaiArtifact
 
 BUILDER = "DETERMINISTIC_TEMPLATE_NO_AI"
@@ -151,6 +152,18 @@ def build_claims(session: Session, case_id: str) -> list[dict]:
             add("CALCULATED", f"Lot {lot}: {len(v['fails'])} of {len(v['aoi'])} AOI inspections reported FAIL; "
                 f"{len(v['open'])} not cleared as false alarms.", [aoi[k]["ev"] for k in v["aoi"]],
                 float(len(v["fails"])), "count")
+    if m := spc.from_items(items):
+        lim = m["limits"]
+        add("CALCULATED", f"SPC X-bar chart of SPI volume per board (n={m['n']} pins), limits from reference lot "
+            f"{m['reference_lot']}: centre {lim['cl']}, LCL {lim['lcl']}, UCL {lim['ucl']} mm3.",
+            m["reference_ev"], lim["cl"], "mm3")
+        for lot, v in sorted(m["lots"].items()):
+            if a := v["first_alarm"]:
+                add("CALCULATED", f"Lot {lot}: {v['alarms']} of {v['boards']} boards signal on Western Electric/R "
+                    f"rules; first at {a['panel']}/{a['board']} ({', '.join(a['rules'])}) with X-bar {a['xbar']} mm3. "
+                    "A statistical signal, not a defect finding.", a["ev"], a["xbar"], "mm3")
+            add("CALCULATED", f"Cpk of SPI volume in lot {lot} against the fictional {spc.LSL}-{spc.USL} mm3 spec: "
+                f"{v['cpk']} (within-board sigma).", v["ev"], v["cpk"], "Cpk")
     for key in fails:
         panel, board, insp = key
         add("OBSERVED", f"AOI inspection {insp} on board {panel}/{board} reported FAIL.", [aoi[key]["ev"]])

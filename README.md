@@ -63,6 +63,15 @@ append-only log. Each document shows a *책임 추적* trail (who did what, in w
 simulated with `python -m scripts.concurrency_sim` ([results](docs/CONCURRENCY_RESULTS.md)): it found three
 race conditions, which are fixed and covered by a regression test.
 
+**Line monitoring (SPC → case):** *SPC 라인 모니터링* replays a synthetic SMT line run (3 lots, 144 boards, 1,152
+SPI pins, lot/shipment traceability). The monitor builds an X̄-R chart per board (n = 8 pins) with limits taken
+from the reference lot, then applies Western Electric rules 1–4 and an R-chart check. The first signal in a later lot
+opens a case automatically, logged as `SPC_ALARM` and assigned to the team. With seed 7 the worn-stencil lot L02
+signals at panel 2, 77 minutes before AOI plus human review confirm the first defect there. The NCR cites the
+limits, signals and per-lot Cpk as CALCULATED claims, and the containment plan proposes a lot-level hold of the
+unshipped panels plus a QA decision on the shipped ones. A signal is a statistical cue: it is not a defect finding
+and not a cause. The replay stands in for a live event feed such as IPC-CFX, which is not implemented.
+
 ## Security
 
 [SECURITY.md](SECURITY.md) lists each enforced control with the test that proves it (egress allowlist, least-privilege tools, output validation, prompt-injection test, separation of duties, hash-chained append-only audit with `GET /audit/verify`, investigation quota) and what a real deployment still needs (SSO, self-hosted model or provider contract for real data, encryption, external anchoring of the audit chain).

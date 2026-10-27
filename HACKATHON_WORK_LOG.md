@@ -189,3 +189,13 @@
 - Performance: drafting took 7–8 s per document at this scale. The cause: evidence joins loaded `source_assets.raw_json` (the whole asset) once per event. The column is now deferred: NCR 0.33 s, containment 0.29 s, RCA 0.42 s, predictions 1.25 s, revision impact 0.11 s.
 - UI: dashboard "SMT 라인 사건" button (`/synthetic/line/{seed}`); lot traceability table on the data screen; the SPI correction demo works on line cases (`spi-correction?line=true`).
 - Checks: pytest 120 passed (5 new in `tests/test_line.py`); ruff exit 0; `npm run build` exit 0; `scripts.eval_s7` re-run (impact P/R 1.0, unsupported claims 0/600).
+
+## 2026-10-27 KST — Level-up 2/4: SPC line monitoring opens a case automatically
+
+- `app/spc.py`: X̄-R chart of SPI volume per board (n=8; A2/D3/D4/d2 constants), phase I limits from the first lot, Western Electric rules 1–4 plus an R-chart range check, and Cpk per lot against a fictional 0.08–0.16 mm3 spec (within-board sigma R̄/d2).
+- `POST /monitoring/line-replay` (AUTHOR): replays the generated line run, and the first phase II signal creates case `SPC-<seed>-<panel>-<board>` with the line sources and the demo team, logging `SPC_ALARM` (append-only and hash-chained). Replaying the same alarm again returns 409. Seed 7: WE1 at L02-P02/B2, X̄ 0.1117 < LCL 0.11187, 77 min before the first AOI+human DEFECT_CONFIRMED in L02. L03 shows 5 WE4 signals (mean slightly under the reference), which are left visible as possible false signals.
+- `GET /cases/{id}/spc`; NCR adds CALCULATED claims for limits (cites the reference-lot SPI), the first signal per lot (cites that board's 8 pins) and Cpk per lot (L01 1.629, L02 1.014, L03 1.655). Wording says "statistical signal, not a defect finding".
+- UI: *SPC 라인 모니터링* screen with an inline-SVG X̄ chart (lot boundaries, CL/UCL/LCL, signals in red), lot Cpk/signal table and the replay button. After a replay the new case is selected and the screen stays on SPC. Checked in the browser.
+- Found while checking: the local `qualityops.db` is a pre-S0 file (old `title`/`board_no` columns) stamped at the latest migration, so it 500s. A fresh `alembic upgrade head` matches every model column (checked). The local file was not touched; the demo ran on a fresh DB.
+- Not built: a real CFX/MQTT feed, limits recalculation workflow, and alarms on data other than SPI.
+- Checks: pytest 122 passed (2 new: WE rule unit cases; replay → case, 403/409, timeline, NCR claim value = alarm X̄, 404 on non-lot case); ruff exit 0; `npm run build` exit 0.

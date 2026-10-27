@@ -1,0 +1,16 @@
+name: S0 checks
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e '.[dev]'
+      - run: python -m pytest -q
+      - run: python -m ruff check .
+      - run: alembic upgrade head
+      - run: python -c "from fastapi.testclient import TestClient; from app.main import app; assert TestClient(app).get('/health').json() == {'status':'ok','stage':'S0'}"
+

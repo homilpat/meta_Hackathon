@@ -31,3 +31,14 @@
 - G0 acceptance: **PASS via the documented LIVE-unconnected blocker path**. Actual Meta account access remains unverified until a key is provided and the synthetic-only smoke exits 0. PHM 2018 raw-use rights remain unverified; no real dataset is in this repository.
 - Remote repository is currently private; public visibility is a later submission requirement and was not changed in S0.
 
+## 2026-10-27 KST — S1
+
+- Started from remote `main` at `e957f1a72dc02b1ae3a7fb7f43587c91005c4f8b`; no older prototype files imported.
+- Implemented seeded, explicitly synthetic PCB multi-source generator and source/asset/event/evidence/issue persistence with composite manufacturing keys and v1/v2 source hashes. Added minimal case upload and inspection APIs. Synthetic historical rows carry reported but `UNVERIFIED` outcomes; no retrieval or agent behavior exists.
+- UCI Steel Plates Faults official page: 1,941 defect examples, 27 features, seven fault types, CC BY 4.0. Downloaded the ZIP to a temporary local file, verified 1,941 rows of 34 values and exactly one active fault label per row, recorded SHA-256 in `docs/UCI_STEEL_PLATES.md`, then deleted the ZIP. No real row was ingested or committed. Added adapter interface only. PHME/PHM 2018 restrictions remain as previously documented.
+- Clean S1 clone setup: `python -m venv .venv` exit 0; offline local wheelhouse `pip install --no-index --find-links ../wheels_s0 -e '.[dev]'` exit 0. Wheels are outside Git.
+- `python -m pytest -q`: exit 0, **19 passed, 1 Starlette TestClient deprecation warning**. Includes the four original S0 checks.
+- `python -m ruff check .`: exit 0; `python -m alembic upgrade head`: exit 0; `python -m alembic check`: exit 0, no schema drift.
+- Live local HTTP: `POST /cases` 201, `POST /cases/DEMO-1/sources` 201 with 12 assets / 42 events / five distinct issue types; `GET /data-issues`, filtered `/events`, `/sources`, `/evidence` returned 200. Source count 12 and evidence count 42. Local server stopped after the smoke.
+- Secret/data check and GitHub CI: to be recorded after staging/push. Meta API: **NOT TESTED** (S1 does not call it; `.env` is ignored and local only).
+

@@ -14,3 +14,9 @@ The challenge page links a [Google Drive archive](https://drive.google.com/file/
 
 To use PHM 2018 later, first obtain archive access and written or otherwise explicit rights for this project's use and external processing. If approved, label it as a distinct ion-mill equipment source and evaluate it on its own task. The S1 PCB demonstration remains explicitly synthetic unless a legally usable PCB multi-source dataset is obtained. Do not fabricate SPI/AOI records or connect unrelated manufacturing entities.
 
+## UCI Steel Plates Faults candidate — checked 2026-10-27 KST
+
+The [official UCI page](https://archive.ics.uci.edu/dataset/198/steel+plates+faults) identifies the dataset as CC BY 4.0, names its creators and DOI, and lists a downloadable ZIP. S1 downloaded the ZIP temporarily, verified 1,941 rows with 27 feature and seven one-hot label columns, recorded its hash, then deleted it. No source row entered Git or the app database. Attribution, source link, license link, and modification notice are required when sharing adapted data. See [UCI_STEEL_PLATES.md](UCI_STEEL_PLATES.md) for the field inspection and S1 adapter contract.
+
+This is a separate **real steel fault type** candidate. Its records cannot be joined to fictional PCB panels or used to compute good-vs-bad rates because the source lists defect classes and does not provide normal products. No UCI rows are committed or externally transmitted in S1.
+

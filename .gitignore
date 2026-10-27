@@ -12,4 +12,5 @@ __pycache__/
 *.zip
 data/
 artifacts/
+synthetic-pcb.json
 

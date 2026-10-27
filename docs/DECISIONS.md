@@ -9,3 +9,11 @@
 7. **2018 source request:** PHM Society 2018 is an ion-mill equipment fault dataset, not PCB inspection evidence. Its raw access and reuse/egress permission remain unverified. It cannot replace the PCB multi-source fixture by relabeling fields; see `DATASET_ACCESS.md`.
 8. **Repository:** `homilpat/meta_Hackathon` is the user-specified destination. Its existing `main` contained only an initial README commit dated 2026-10-27. Preserve that history when publishing S0.
 
+## S1 decisions — 2026-10-27 KST
+
+1. Build a new seeded PCB fixture with repeated board/component/pin IDs under different parents; always join on the full key and never infer a lot ID.
+2. Preserve corrected SPI as source v2 beside v1, with source hashes and event/evidence IDs. A missing AOI record is a coverage issue, not PASS. AOI/human disagreement is retained without inferring a physical cause.
+3. Accept only exact generator output through the S1 API. This prevents arbitrary uploaded records from gaining the `SYNTHETIC` label by assertion alone. Real-source adapters need a separate provenance policy.
+4. Synthetic historical examples have `UNVERIFIED` reported outcomes. Eligibility and outcome validation belong to S5.
+5. The official UCI Steel Plates Faults page states CC BY 4.0, 27 features, and seven fault classes. S1 records the row adapter interface only; it does not treat this defect-only dataset as a good-vs-bad or defect-rate benchmark.
+

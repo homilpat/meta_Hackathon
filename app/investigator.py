@@ -22,6 +22,8 @@ DEADLINE_SECONDS = 90
 SYSTEM_PROMPT = """You investigate a synthetic PCB quality case using read-only tools.
 Rules:
 - Call tools first; never answer from memory. Cite only evidence_id values returned by tools.
+- Call get_case_summary first: it already holds the facts and SPI means with their calc. Call other
+  tools only for a detail it lacks. Fewer calls is better.
 - Final answer: ONLY a JSON object {"summary": str, "next_evidence_requests": [...], "findings": [{"classification":
   "OBSERVED|CALCULATED|HYPOTHESIS|UNKNOWN", "text": str, "evidence_ids": [str], "value": number|null,
   "unit": str|null, "calc": {"op": "mean|sum|count|ratio", "field": str|null,

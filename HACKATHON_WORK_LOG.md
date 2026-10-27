@@ -164,3 +164,11 @@
 - Test: LightGBM accuracy 0.779 / macro F1 0.810 / log loss 0.569; logistic regression 0.689 / 0.699 / 0.788; majority class 0.347 / 0.074. Per-class F1 0.655 (Pastry) to 0.963 (Stains). TreeSHAP per class, max additivity error recorded.
 - Outputs: `docs/STEEL_MODEL_CARD.md`, `docs/steel_eval.json` (aggregates only, attribution included); `GET /reference-models/steel`; prediction screen card "실제 공개 데이터 검증", labelled REAL and separate from PCB cases. Steel rows never enter a case or a Meta prompt. THIRD_PARTY_NOTICES: dataset attribution.
 - Checks: pytest 109 passed (new: aggregates only, beats baselines, additivity); ruff exit 0; `npm run build` exit 0; `git status` shows no file under `data/`.
+
+## 2026-10-27 KST — LLM investigation: tool/prompt optimisation instead of fine-tuning (user-agreed)
+
+- Fine-tuning not pursued: no LIVE access, fine-tuning support for `muse-spark-1.3` unverified, and only synthetic cases to train on (would overfit the generator). The model runs on Meta's side, so the real costs are tokens, rounds and failed reports.
+- New first tool `get_case_summary`: server-computed facts per AOI FAIL (human verdict, repair, mean SPI with ready `calc` and evidence ids, model score), boards without AOI, data-issue counts. Same egress gate as raw tools (fails closed on restricted rows); prompt tells the model to call it first.
+- `python -m scripts.token_budget` (30 held-out cases, no model calls): tool calls 7 → 1; mean tool-result payload 11,953 → 1,055 chars (−91.2%, ≈2,988 → 264 tokens by chars/4 estimate); every evidence id the NCR template cites is in the summary in 30/30 cases. `docs/TOKEN_BUDGET.md`.
+- Not yet shown: that the LIVE model actually uses fewer calls or writes better reports — planned as an extra row in the A/B/C/D comparison once a key exists.
+- Checks: pytest 111 passed (2 new: summary covers NCR facts and matches its SPI mean, passes the gateway; denied on CONFIDENTIAL); ruff exit 0; `scripts.eval_s7` re-run (egress now also covers the summary tool).

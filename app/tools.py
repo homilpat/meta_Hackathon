@@ -35,6 +35,9 @@ def _fn(name: str, description: str, properties: dict, required: list[str] | Non
 
 
 SPECS = [
+    _fn("get_case_summary", "Start here. Server-computed facts for every AOI FAIL (human verdict, repair, mean SPI "
+        "volume with a ready calc), boards without AOI, data-issue counts and model scores, each with "
+        "evidence_ids. Latest source version per row. Use other tools only for details.", {}),
     _fn("get_case_context", "Case id, source assets with versions and hashes, and event counts per type.", {}),
     _fn("get_manufacturing_events",
         "List events with their evidence_id and record. Filter by entity_type, panel_id, board_id.",
@@ -83,6 +86,33 @@ class EvidenceTools:
         return [{"evidence_id": v.evidence_id, "entity_type": e.entity_type, "entity_key": e.entity_key,
                  "source_version": a.source_version, "validity": v.validity,
                  "record": json.loads(e.raw_json)} for v, e, a in rows]
+
+    def get_case_summary(self) -> dict:
+        """One compact call instead of paging raw events: fewer rounds and tokens, numbers the server can recheck."""
+        from app import ncr
+        self._rows()  # same egress gate as raw evidence
+        items = ncr.current(ncr._evidence(self.session, self.case_id))
+        aoi, spi = ncr._aoi(items), ncr.latest_spi_by_board(items)
+        preds = {tuple(p.target_key): p for p in self._predictions()}
+        fails = []
+        for key in sorted(k for k, i in aoi.items() if i["rec"]["result"] == "FAIL"):
+            human, repair = (ncr._linked(items, t, key) for t in ("human_verifications", "repair_dispositions"))
+            rows = spi.get(key[:2], [])
+            p = preds.get(key[:2])
+            fails.append({
+                "board": "/".join(key[:2]), "aoi": [key[2], aoi[key]["ev"]],
+                "human": [human["rec"]["result"], human["ev"]] if human else None,
+                "repair": [repair["rec"]["disposition"], repair["ev"]] if repair else None,
+                "spi": {"mean_mm3": round(sum(i["rec"]["volume_mm3"] for i in rows) / len(rows), 4),
+                        "evidence_ids": [i["ev"] for i in rows],
+                        "calc": {"op": "mean", "field": "volume_mm3"}} if rows else None,
+                "model": [f"PRED-{p.id}", round(p.risk_score, 4), round(p.threshold, 4)] if p else None})
+        issues = Counter(i.code for i in self.session.scalars(
+            select(DataQualityIssue).where(DataQualityIssue.case_id == self.case_id)))
+        return {"aoi_evidence_ids": [i["ev"] for i in aoi.values()], "aoi_fail": fails,
+                "no_aoi_record": [["/".join(b["key"]), b["ev"]] for b in ncr._uninspected(items, aoi)],
+                "data_issues": dict(issues),
+                "legend": "[value, evidence_id]; model = [PRED id, score, threshold] (model output, not inspection)"}
 
     def get_case_context(self) -> dict:
         case = self.session.get(QualityCase, self.case_id)

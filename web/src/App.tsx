@@ -58,7 +58,11 @@ type Ctx = { cid: string; me: J; api: (path: string, method?: string, body?: unk
 
 function useLoad<T>(ctx: Ctx, path: string | null, init: T): T {
   const [v, setV] = useState<T>(init)
-  useEffect(() => { if (path) ctx.api(path).then(setV).catch(() => setV(init)) }, [path, ctx.tick]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { // reload per user/case; ignore a late answer from a previous user or case
+    let live = true
+    if (path) ctx.api(path).then(x => live && setV(x)).catch(() => live && setV(init))
+    return () => { live = false }
+  }, [path, ctx.tick, ctx.api]) // eslint-disable-line react-hooks/exhaustive-deps
   return v
 }
 
@@ -244,7 +248,9 @@ function Impact({ ctx }: { ctx: Ctx }) {
   const [row, setRow] = useState('SPI-P02-B01-1')
   const imp = impacts[impacts.length - 1]
   const fix = async () => {
-    const version = Math.max(...sources.filter(s => s.source_system === 'SYNTHETIC_SPI_MEASUREMENTS').map(s => s.source_version)) + 1
+    const spi = sources.filter(s => s.source_system === 'SYNTHETIC_SPI_MEASUREMENTS')
+    if (!spi.length) return
+    const version = Math.max(...spi.map(s => s.source_version)) + 1
     const asset = await (await fetch(`/synthetic/7/spi-correction?row_id=${row}&version=${version}`)).json()
     await ctx.api(`/cases/${ctx.cid}/source-revisions`, 'POST', { asset, reason: `SPI 재측정 ${row}` }, true); ctx.refresh()
   }

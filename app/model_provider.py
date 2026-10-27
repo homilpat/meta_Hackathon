@@ -14,8 +14,9 @@ URL = "https://api.meta.ai/v1/chat/completions"
 SECRET_PATTERN = re.compile(r"(?i)bearer\s+[A-Za-z0-9._-]{8,}|\bsk-[A-Za-z0-9]{10,}|MODEL_API_KEY\s*=")
 # Backstop for the data-rights gate in tools.py: rows marked anything but SYNTHETIC/APPROVED_FOR_EXTERNAL
 # never leave, even if an upstream check is bypassed. Matches JSON nested inside tool-result strings too.
-RESTRICTED_PATTERN = re.compile(r'(?i)\\?"(?:data_origin|sensitivity|source_origin)\\?"\s*:\s*\\?"'
-                                r"(?!SYNTHETIC\b|APPROVED_FOR_EXTERNAL\b)|CONFIDENTIAL")
+# The marker word is matched in capitals only, so a model reply saying "no confidential data" does not abort a run.
+RESTRICTED_PATTERN = re.compile(r'(?i:\\?"(?:data_origin|sensitivity|source_origin)\\?"\s*:\s*\\?"'
+                                r"(?!SYNTHETIC\b|APPROVED_FOR_EXTERNAL\b))|\bCONFIDENTIAL")
 
 
 class ProviderError(Exception):

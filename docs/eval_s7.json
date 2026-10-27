@@ -1,0 +1,33 @@
+{
+  "cases": 30,
+  "revisions": 240,
+  "impact": {
+    "tp": 240,
+    "fp": 0,
+    "fn": 0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "failures": []
+  },
+  "template_claims": {
+    "total": 735,
+    "unsupported": 0
+  },
+  "validator": {
+    "seeded_bad_claims": 150,
+    "rejected": 150
+  },
+  "egress": {
+    "clean_tool_payloads": 150,
+    "clean_blocked": 0,
+    "network_attempts_for_clean": 150,
+    "confidential_rows": 30,
+    "tool_denied": 30,
+    "gateway_blocked": 30
+  },
+  "revision_latency_ms": {
+    "p50": 31.4,
+    "max": 1439.9
+  },
+  "containment_untouched_by_spi": 30
+}

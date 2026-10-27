@@ -109,3 +109,12 @@
 - `pytest -q --basetemp=...`: exit 0, **102 passed** (89 earlier + 13 S6: chain/role gates, exact-dependent reopening with approvals unchanged and NCR v2 → RCA v2 re-flow, uncited-row correction reopens nothing, held review + prediction propagation, revision validation/fail-closed/idempotency, append-only triggers incl. migration, gateway block x4 / pass, CONFIDENTIAL row absent from prompts/logs/run records, authorization sweep of every GET case route (401/403) plus role checks on create/decision). `ruff check .`: exit 0. Alembic upgrade/check/downgrade 0006/upgrade/check: exit 0. Secret scan of diff: no matches.
 - Meta LIVE: NOT TESTED (no key). Data: SYNTHETIC only.
 - G6: **PASS** for the implemented scope (one case completes NCR→Containment→RCA review; partial correction reopens exactly the dependent documents; audit records unchanged and DB-enforced append-only; 0 unapproved transmissions/reads in tests; UI before/after). Not claimed: executed containment, confirmed root cause, full 8D.
+
+## 2026-10-27 KST — S7 (partial: keyless items only)
+
+- S6 pushed: remote `main` `40fb35d..dc42e38`. No new features in S7.
+- `python -m scripts.eval_s7` (exit 0, ~27 s): 30 held-out synthetic cases (seeds 101–130), 240 cumulative SPI corrections. Revision impact precision 240/240, recall 240/240 vs a rule oracle (written by the same developer — consistency check, not an independent audit); containment untouched 30/30; unsupported template claims 0/735; ClaimValidator rejected 150/150 seeded bad claims; egress gate: 0/150 approved payloads wrongly blocked, CONFIDENTIAL denied at tools 30/30 and blocked at gateway 30/30; revision+impact latency p50 28.6 ms. Written to `docs/EVAL_RESULTS.md`, `docs/eval_s7.json`. Fixture structure is identical across seeds (only SPI volumes vary) — stated in the doc.
+- A/B/C/D (incl. History OFF/ON with the LLM): **NOT RUN** — no LIVE key; reported as such, no estimates.
+- README rewritten to the S6 state (stage table, UI demo walk-through, LIVE instructions, eval commands, limits). THIRD_PARTY_NOTICES: added NumPy, scikit-learn, LightGBM.
+- Checks: pytest 102 passed (exit 0); ruff exit 0; fresh-DB `alembic upgrade head` + `/health` = S6, `/ui` 200; `meta_smoke` exit 2 (no key, no call); secret scan of tracked files: no keys (only the README placeholder); no dataset/db/model files tracked.
+- G7: **BLOCKED/PARTIAL** — open: LIVE Meta run + A/B/C/D, 3-minute video, repository licence choice, Public repo, official submission (all user decisions/actions).

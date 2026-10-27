@@ -1,12 +1,25 @@
-# QualityOps AI — S1 source and evidence foundation
+# QualityOps AI — evidence-governed PCB quality investigation
 
-New code started on 2026-10-27 KST for the Meta Global AI Developer Hackathon. This repository contains S0 and S1 only. The older prototype at `homilpat/meta_-hackathon` is not copied or imported. The three planning documents in the parent workspace predate this implementation and are not submitted as newly built functionality.
+Built from 2026-10-27 KST for the Meta Global AI Developer Hackathon. All manufacturing data in this repository is
+**fictional and generated** (SYNTHETIC, `SELF_GENERATED` licence). There are no measured quality or business results.
 
-The intended product is an evidence governed manufacturing quality investigation system. S1 generates and ingests **fictional, labeled PCB multi-source records**, preserves source versions, and exposes evidence and data-quality issues. **ML, XAI, agent investigation, document approval, and historical retrieval are not implemented.** Historical cases in the fixture have unverified reported outcomes only. A 90+ score is a goal, not a forecast. There are no measured quality or business results.
+What it does, by stage (each stage's checks are in the [work log](HACKATHON_WORK_LOG.md)):
+
+| Stage | Built |
+|---|---|
+| S1 | Versioned multi-source PCB records (SPI, AOI, human verification, repair, revisions), evidence ids, data-quality issues |
+| S2 | NCR drafts from a deterministic template; every OBSERVED/CALCULATED claim cites evidence; review/approval bound to the content hash; audit timeline |
+| S3 | Meta `muse-spark-1.3` tool-calling investigator over read-only evidence tools; server-side ClaimValidator recomputes numbers and rejects causal certainty |
+| S4 | SPI-only risk model (LightGBM, synthetic label) with TreeSHAP; predictions are citable evidence, not inspection results |
+| S5 | Synthetic precedent bank with eligibility filter; next-evidence planner that warns about fixes that failed before |
+| S6 | NCR → Containment **plan** (QA/Production approval) → RCA **hypothesis** (Process Engineer approval); evidence dependency graph; a corrected source row reopens only the dependent documents; append-only audit tables; egress gateway |
+
+Containment items are proposals (`NOT_EXECUTED`) and the RCA stays `UNCONFIRMED`; the system never records an action
+as executed or a cause as confirmed. SHAP explains model scores, not physical causes.
 
 ## Run locally
 
-Use Python 3.12 or later:
+Python 3.12+:
 
 ```sh
 python -m venv .venv
@@ -17,33 +30,50 @@ alembic upgrade head
 uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-`GET http://127.0.0.1:8000/health` returns `{"status":"ok","stage":"S1"}`. This endpoint checks the web process only; it does not certify a database or Meta connection.
+`GET /health` returns `{"status":"ok","stage":"S6"}` (web process only). Open `http://127.0.0.1:8000/ui` and pick a
+demo user in the header: alice/dave (author), bob/carol (NCR reviewer), erin (QA/Production), frank (process
+engineer). Demo identities are selected by the `X-User` header with no password; this is not real authentication.
 
-Generate a fixture and upload one PCB case:
+## Demo walk-through (UI)
 
-```sh
-python -m scripts.generate_synthetic_pcb --seed 7 --output synthetic-pcb.json
-curl -X POST http://127.0.0.1:8000/cases -H "Content-Type: application/json" -d '{"case_id":"DEMO-1"}'
-curl -X POST http://127.0.0.1:8000/cases/DEMO-1/sources -H "Content-Type: application/json" --data-binary @synthetic-pcb.json
-curl http://127.0.0.1:8000/cases/DEMO-1/sources
-curl http://127.0.0.1:8000/cases/DEMO-1/events?entity_type=aoi_inspections
-curl http://127.0.0.1:8000/cases/DEMO-1/evidence
-curl http://127.0.0.1:8000/cases/DEMO-1/data-issues
-```
+1. As alice: **New synthetic PCB case**, then **Assign bob, erin, frank as reviewers**.
+2. **Score boards with SPI model** (optional) — click a `PRED-n`/`XAI-n` id for the SHAP view.
+3. **Lessons from past cases** shows next checks with history OFF vs ON and why a past fix is not adopted.
+4. **Create NCR draft** → request review → switch to bob → APPROVE.
+5. As alice **Create Containment plan draft** → erin approves; **Create RCA hypothesis draft** → frank approves.
+6. **Import SPI correction** re-measures one SPI row (v3). The *Source corrections and impact* table shows
+   before/after: the NCR and RCA that cite that row become `REVALIDATION_REQUIRED`, the Containment plan stays
+   `APPROVED`, affected claims are highlighted, and the approval records are unchanged.
+7. **Run investigation (LIVE Meta model)** needs a key (below); without one the API returns 503 — there is no mock.
 
-`synthetic-pcb.json` is generated test data; do not commit it as real manufacturing evidence. The API accepts only the exact reproducible generator output for S1. The default fixture contains missing AOI coverage, a duplicate SPI row, AOI/human disagreement, and a late SPI correction. These are **data quality observations**, not proven physical causes. See [data dictionary](docs/DATA_DICTIONARY.md).
+The same flow by API is covered by `tests/test_s6_followups.py`.
 
-## Meta LIVE smoke
+## Meta LIVE
 
-[Meta's model docs](https://dev.meta.ai/docs/models) list `muse-spark-1.3`. Account access is not established by that listing. The smoke script sends only a fixed synthetic sentence and asks for one structured JSON field, following [Meta's structured output documentation](https://dev.meta.ai/docs/cookbook/structured-output). It prints no key or model response body. **Running this may incur API charges.**
+Put `MODEL_API_KEY=...` in the git-ignored `.env` (see `.env.example`). **Calls may incur API charges.**
 
-Put `MODEL_API_KEY=...` in the local, Git ignored `.env` file (or set the environment variable), then run `python -m scripts.meta_smoke`. Exit code 0 means one validated LIVE response; 1 means LIVE failure; 2 means no key and no call. There is no mock path. Do not put production or restricted data in a prompt. The script does not implement the full outbound privacy gateway planned for later stages.
+- `python -m scripts.meta_smoke` — one fixed synthetic prompt. Exit 0 LIVE ok, 1 LIVE failure, 2 no key (no call).
+- `python -m scripts.meta_investigate_smoke` — one tool-calling investigation on a synthetic case.
+
+Only SYNTHETIC + APPROVED_FOR_EXTERNAL rows can reach the model: tools fail closed on anything else, and the
+provider blocks any outbound payload carrying another origin/sensitivity, the word CONFIDENTIAL, or secret-like
+text before the network call. **LIVE Meta has not been run in this repository yet.**
+
+## Evaluation
+
+- `python -m scripts.eval_s7` → [docs/EVAL_RESULTS.md](docs/EVAL_RESULTS.md): deterministic checks on 30 held-out
+  synthetic cases (revision impact precision/recall, unsupported template claims, validator recall on seeded bad
+  claims, egress gate). The A/B/C/D model comparison (incl. History OFF/ON) is **NOT RUN** until LIVE access exists.
+- `python -m scripts.train_model` → [docs/MODEL_CARD.md](docs/MODEL_CARD.md).
+- `python -m scripts.history_compare` → [docs/HISTORY_COMPARISON.md](docs/HISTORY_COMPARISON.md) (deterministic
+  planner log, not an LLM result).
 
 ## Data and scope
 
-PHME 2022 source access and usage rights are unresolved. PHM Society 2018 covers ion-mill equipment faults, not this PCB chain. [UCI Steel Plates Faults](docs/UCI_STEEL_PLATES.md) is a separate real-data candidate for **fault-type classification only**; S1 inspected and deleted its ZIP but defines only an adapter interface and does not ingest or commit its rows. [Dataset decisions](docs/DATASET_ACCESS.md) explain the boundaries. No manufacturing record is sent to Meta by this app or CI.
+PHME 2022 access and usage rights are unresolved and none of its content is included. [UCI Steel
+Plates](docs/UCI_STEEL_PLATES.md) is an adapter interface only; no rows are committed. See [dataset
+decisions](docs/DATASET_ACCESS.md) and the [data dictionary](docs/DATA_DICTIONARY.md).
 
-The [work log](HACKATHON_WORK_LOG.md) records actual local checks and unresolved Gate items. CI runs on GitHub Actions after pushing; local commands alone are not a CI result.
-
-Sources: [Meta event](https://dev.meta.ai/events/global-hackathon), [Meta API](https://dev.meta.ai/docs/overview), [PHME 2022](https://github.com/PHME-Datachallenge/Data-Challenge-2022). AI assisted coding was used. Dependencies and licenses are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-
+Sources: [Meta event](https://dev.meta.ai/events/global-hackathon), [Meta API](https://dev.meta.ai/docs/overview),
+[Meta models](https://dev.meta.ai/docs/models). AI-assisted coding was used. Dependencies and licences:
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). A repository licence has not been chosen yet.

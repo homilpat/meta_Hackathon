@@ -43,6 +43,7 @@ DEMO_USERS = {
 KINDS = {"ncr": "NCR", "containment": "CONTAINMENT", "rca": "RCA"}
 APPROVER = {"NCR": "REVIEWER", "CONTAINMENT": "QA_PRODUCTION", "RCA": "PROCESS_ENGINEER"}
 PREREQ = {"CONTAINMENT": "NCR", "RCA": "CONTAINMENT"}
+STEP = {"NCR": "D2", "CONTAINMENT": "D3", "RCA": "D4"}  # 8D: problem description, containment, root cause
 
 
 class DocKind(StringConvertor):
@@ -69,6 +70,12 @@ class Decision(BaseModel):
     decision: Literal["APPROVE", "REJECT", "REQUEST_INFO"]
     comment: str = ""
     content_sha256: str  # the exact version content the reviewer saw
+
+
+class BasisCheck(BaseModel):
+    decision: Literal["NO_SCOPE_IMPACT", "REVISE"]
+    comment: str = Field(min_length=3, max_length=300)
+    content_sha256: str
 
 
 class NcrCreate(BaseModel):
@@ -162,16 +169,25 @@ def _latest(session: Session, case_id: str, doc_type: str = "NCR") -> DocumentVe
         .order_by(DocumentVersion.version.desc()).limit(1))
 
 
-def _based_on(session: Session, case_id: str, doc_type: str) -> list[str]:
-    """The approved chain a new document builds on; any break (e.g. revalidation) holds the task."""
+def _based_on(session: Session, case_id: str, doc_type: str, approved: bool = True) -> list[str]:
+    """The upstream chain a document builds on. Drafts may be written ahead (e.g. all sections from one
+    AI run); review and approval need every upstream document APPROVED, so 8D steps cannot be skipped."""
     chain, t = [], doc_type
     while t := PREREQ.get(t):
         up = _latest(session, case_id, t)
-        if up is None or up.status != "APPROVED":
-            raise HTTPException(409, f"{doc_type} needs the latest {t} to be APPROVED "
+        if up is None or up.status in ("REJECTED", "SUPERSEDED") or (approved and up.status != "APPROVED"):
+            need = "APPROVED" if approved else "a live draft"
+            raise HTTPException(409, f"{doc_type} needs the latest {t} to be {need} "
                                      f"(is {up.status if up else 'missing'})")
         chain.append(f"{t} v{up.version}")
     return chain[::-1]
+
+
+def _require_basis(session: Session, doc: DocumentVersion) -> None:
+    chain = _based_on(session, doc.case_id, doc.doc_type)
+    if chain != doc.based_on:
+        raise HTTPException(409, f"{doc.doc_type} v{doc.version} was drafted on {', '.join(doc.based_on)}; the "
+                                 f"approved basis is now {', '.join(chain)}. Create a new draft.")
 
 
 def _impact_out(r: ChangeImpact) -> dict:
@@ -237,21 +253,21 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
 
         def run(session: Session) -> tuple[int, dict]:
             require_case(session, case_id, actor)
-            based_on = _based_on(session, case_id, doc_type)
+            based_on = _based_on(session, case_id, doc_type, approved=False)
             known = set(session.scalars(select(Evidence.evidence_id).where(Evidence.case_id == case_id)))
             if not known:
                 raise HTTPException(422, "Case has no evidence; upload sources first")
             if body.investigation_run_id is None:
                 claims, builder = ncr.BUILDERS[doc_type](session, case_id), ncr.BUILDER
-            elif doc_type != "NCR":
-                raise HTTPException(422, "Only an NCR can be built from an investigation run")
+            elif doc_type == "CONTAINMENT":
+                raise HTTPException(422, "Model findings carry no containment proposals; use the template")
             else:
                 mrun = session.get(ModelRun, body.investigation_run_id)
                 if mrun is None or mrun.case_id != case_id:
                     raise HTTPException(404, "Investigation run not found for this case")
                 if mrun.status != "VALIDATED":
-                    raise HTTPException(409, f"Run is {mrun.status}; only VALIDATED runs can become an NCR")
-                claims = investigator.report_claims(mrun)
+                    raise HTTPException(409, f"Run is {mrun.status}; only VALIDATED runs can become a draft")
+                claims = investigator.report_claims(mrun, doc_type)
                 builder = f"MODEL_{mrun.mode}:{mrun.model}:run{mrun.id}"
             claims += [{"value": None, "unit": None, "evidence_ids": [], **c,
                         "claim_id": f"C{len(claims) + i + 1}"} for i, c in enumerate(body.extra_claims)]
@@ -280,6 +296,24 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
             return 201, _doc_out(session, doc)
 
         return idempotent(f"create_{kind}:{case_id}", key, actor, run)
+
+    @router.get("/cases/{case_id}/stages")
+    def stages(case_id: str, actor: Who) -> list[dict]:
+        """8D progress: each step's latest version and whether its review/approval is open yet."""
+        with sessions() as session:
+            require_case(session, case_id, actor)
+            out = []
+            for kind, doc_type in KINDS.items():
+                doc, blocked = _latest(session, case_id, doc_type), None
+                try:
+                    _based_on(session, case_id, doc_type)
+                except HTTPException as exc:
+                    blocked = exc.detail
+                out.append({"kind": kind, "doc_type": doc_type, "step": STEP[doc_type],
+                            "approver_role": APPROVER[doc_type], "version": doc.version if doc else None,
+                            "status": doc.status if doc else None, "approval_open": blocked is None,
+                            "blocked_by": blocked})
+            return out
 
     @router.get("/cases/{case_id}/{kind:doc}")
     def list_docs(case_id: str, kind: str, actor: Who) -> list[dict]:
@@ -320,6 +354,7 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
             if not session.scalar(select(Assignment.id).where(
                     Assignment.case_id == case_id, Assignment.user_id == body.reviewer_id)):
                 raise HTTPException(422, "Reviewer is not assigned to this case")
+            _require_basis(session, doc)
             doc.status = "IN_REVIEW"
             session.add(Review(document_version_id=doc.id, requested_by=actor.id,
                                reviewer_id=body.reviewer_id, state="PENDING", created_at=now()))
@@ -348,6 +383,8 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
                 raise HTTPException(409, "A newer version exists; this one is stale")
             if doc.status != "IN_REVIEW" or body.content_sha256 != doc.content_sha256:
                 raise HTTPException(409, "Version is not in review or content changed since you read it")
+            if body.decision == "APPROVE":
+                _require_basis(session, doc)
             review.state = "DONE"
             doc.status = {"APPROVE": "APPROVED", "REJECT": "REJECTED", "REQUEST_INFO": "INFO_REQUESTED"}[
                 body.decision]
@@ -359,6 +396,31 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
             return 200, _doc_out(session, doc)
 
         return idempotent(f"decision:{case_id}:{kind}:{version}", key, actor, run)
+
+    @router.post("/cases/{case_id}/{kind:doc}/{version}/basis-check")
+    def basis_check(case_id: str, kind: str, version: int, body: BasisCheck, key: IdemKey, actor: Who):
+        """The approver of a BASIS_CHANGED document records whether its scope still holds on the new basis."""
+        doc_type = KINDS[kind]
+        require_role(actor, APPROVER[doc_type])
+
+        def run(session: Session) -> tuple[int, dict]:
+            require_case(session, case_id, actor)
+            doc = _get_doc(session, case_id, version, doc_type)
+            if doc.status != "BASIS_CHANGED" or body.content_sha256 != doc.content_sha256:
+                raise HTTPException(409, "Version is not BASIS_CHANGED or content changed since you read it")
+            if body.decision == "NO_SCOPE_IMPACT":
+                chain = _based_on(session, case_id, doc_type)  # upstream must be re-approved first
+                doc.status = "APPROVED"
+            else:
+                chain, doc.status = doc.based_on, "REVALIDATION_REQUIRED"
+            note = f"{body.comment} (basis checked: {', '.join(chain)})"
+            session.add(ApprovalEvent(document_version_id=doc.id, actor_id=actor.id, action=body.decision,
+                                      content_sha256=doc.content_sha256, comment=note, created_at=now()))
+            log(session, case_id, actor, "BASIS_CHECKED", f"{doc_type} v{version} {body.decision}: {note}", doc.id)
+            session.flush()
+            return 200, _doc_out(session, doc)
+
+        return idempotent(f"basis_check:{case_id}:{kind}:{version}", key, actor, run)
 
     @router.post("/cases/{case_id}/source-revisions")
     def import_revision(case_id: str, body: RevisionIn, key: IdemKey, actor: Who):
@@ -382,6 +444,10 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
                     log(session, case_id, actor, "REVALIDATION_REQUIRED",
                         f"{d['doc_type']} v{d['version']} was {d['status_before']}; claims "
                         f"{','.join(d['claims'])} cite corrected source rows", d["document_version_id"])
+            for d in found["basis_changed"]:
+                log(session, case_id, actor, "BASIS_CHANGED", f"{d['doc_type']} v{d['version']} cites no corrected "
+                    f"row but builds on a reopened document; {APPROVER[d['doc_type']]} must confirm its scope",
+                    d["document_version_id"])
             session.flush()
             return 201, _impact_out(row)
 

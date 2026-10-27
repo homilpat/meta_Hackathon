@@ -66,14 +66,23 @@ def status(c, kind, version=1):
     return c.get(f"/cases/C1/{kind}/{version}", headers={"X-User": "alice"}).json()["status"]
 
 
+def review(c, kind, version, reviewer=None):
+    return c.post(f"/cases/C1/{kind}/{version}/request-review", headers=H("alice"),
+                  json={"reviewer_id": reviewer or APPROVERS[kind]})
+
+
 def test_ncr_containment_rca_chain_with_role_gates(env):
     c = env
-    assert create(c, "containment").status_code == 409  # no approved NCR yet
+    assert create(c, "containment").status_code == 409  # no NCR draft to build on
     assert create(c, "ncr").status_code == 201
-    approve(c, "ncr", 1)
-    assert create(c, "rca").status_code == 409  # containment not approved yet
-    cont = create(c, "containment").json()
+    cont = create(c, "containment").json()  # drafts may be written ahead ...
     assert cont["based_on"] == ["NCR v1"] and "NOT_EXECUTED" in cont["note"]
+    assert review(c, "containment", 1).status_code == 409  # ... but D3 is not reviewed before D2 is approved
+    steps = c.get("/cases/C1/stages", headers={"X-User": "alice"}).json()
+    assert [(s["step"], s["approval_open"]) for s in steps] == [("D2", True), ("D3", False), ("D4", False)]
+    approve(c, "ncr", 1)
+    assert create(c, "rca").status_code == 201
+    assert review(c, "rca", 1).status_code == 409  # containment not approved yet
     assert any(cl["classification"] == "PROPOSAL" for cl in cont["claims"])
     assert not any(DONE_CLAIM.search(cl["text"]) for cl in cont["claims"])
     bad = c.post("/cases/C1/containment/1/request-review", json={"reviewer_id": "bob"}, headers=H("alice"))
@@ -84,7 +93,7 @@ def test_ncr_containment_rca_chain_with_role_gates(env):
     assert wrong.status_code == 403
     c.post("/cases/C1/containment/1/decision", headers=H("erin"),
            json={"decision": "APPROVE", "content_sha256": d["content_sha256"]})
-    rca = create(c, "rca").json()
+    rca = c.get("/cases/C1/rca/1", headers={"X-User": "alice"}).json()
     assert rca["based_on"] == ["NCR v1", "CONTAINMENT v1"] and "UNCONFIRMED" in rca["note"]
     assert any(cl["classification"] == "HYPOTHESIS" and "UNCONFIRMED" in cl["text"] for cl in rca["claims"])
     assert approve(c, "rca", 1)["status"] == "APPROVED"
@@ -103,7 +112,8 @@ def test_correction_reopens_exactly_the_dependent_documents(env):
     hit = {d["doc_type"]: d for d in r.json()["documents"]}
     assert set(hit) == {"NCR", "RCA"}  # the containment plan cites no SPI row
     assert all(d["status_before"] == "APPROVED" and d["status_after"] == "REVALIDATION_REQUIRED" for d in hit.values())
-    assert status(c, "containment") == "APPROVED"
+    assert [d["doc_type"] for d in r.json()["basis_changed"]] == ["CONTAINMENT"]  # content intact, basis moved
+    assert status(c, "containment") == "BASIS_CHANGED"
     ncr1 = c.get("/cases/C1/ncr/1", headers={"X-User": "alice"}).json()
     texts = {cl["claim_id"]: cl["text"] for cl in ncr1["claims"]}
     assert hit["NCR"]["claims"] and all("P02/B01" in texts[cid] for cid in hit["NCR"]["claims"])
@@ -113,15 +123,47 @@ def test_correction_reopens_exactly_the_dependent_documents(env):
         after = [(a.id, a.action, a.content_sha256, a.created_at) for a in s.scalars(select(ApprovalEvent))]
     assert after == before  # approvals are history, not rewritten
     events = [t["event"] for t in c.get("/cases/C1/timeline", headers={"X-User": "alice"}).json()]
-    assert events.count("REVALIDATION_REQUIRED") == 2 and "SOURCE_REVISED" in events
-    assert create(c, "rca").status_code == 409  # held until the NCR is re-approved
+    assert events.count("REVALIDATION_REQUIRED") == 2 and events.count("BASIS_CHANGED") == 1
+    assert "SOURCE_REVISED" in events
+    cont = c.get("/cases/C1/containment/1", headers={"X-User": "alice"}).json()
+
+    def check(user="erin", decision="NO_SCOPE_IMPACT"):
+        return c.post("/cases/C1/containment/1/basis-check", headers=H(user), json={
+            "decision": decision, "comment": "same boards held", "content_sha256": cont["content_sha256"]})
+
+    assert check().status_code == 409  # NCR v2 is not approved yet
     ncr2 = create(c, "ncr").json()
     mean_v1 = next(cl for cl in ncr1["claims"] if "Mean SPI" in cl["text"] and "P02/B01" in cl["text"])
     mean_v2 = next(cl for cl in ncr2["claims"] if "Mean SPI" in cl["text"] and "P02/B01" in cl["text"])
     assert mean_v2["value"] == round(mean_v1["value"] - 0.015, 4)  # one of two pins re-measured -0.03
     approve(c, "ncr", 2)
     assert create(c, "rca").json()["based_on"] == ["NCR v2", "CONTAINMENT v1"]
+    assert review(c, "rca", 2).status_code == 409  # containment scope not yet reconfirmed by QA
+    assert check("bob").status_code == 403 and check("frank").status_code == 403
+    done = check()
+    assert done.status_code == 200 and done.json()["status"] == "APPROVED"
+    assert done.json()["decisions"][-1]["action"] == "NO_SCOPE_IMPACT" and "NCR v2" in done.json()["decisions"][-1]["comment"]
+    assert approve(c, "rca", 2)["status"] == "APPROVED"
     assert c.get("/cases/C1/change-impact", headers={"X-User": "alice"}).json()[0]["changed_evidence"]
+
+
+def test_stale_draft_basis_and_revise_decision(env):
+    c = env
+    create(c, "ncr")
+    approve(c, "ncr", 1)
+    create(c, "containment")  # drafted on NCR v1
+    create(c, "ncr")
+    approve(c, "ncr", 2)
+    r = review(c, "containment", 1)
+    assert r.status_code == 409 and "Create a new draft" in r.json()["detail"]
+    assert create(c, "containment").json()["based_on"] == ["NCR v2"]
+    approve(c, "containment", 2)
+    revise(c, row_id="SPI-P01-B01-1")  # a false-alarm board: NCR cites it, containment does not
+    assert status(c, "containment", 2) == "BASIS_CHANGED"
+    sha = c.get("/cases/C1/containment/2", headers={"X-User": "alice"}).json()["content_sha256"]
+    out = c.post("/cases/C1/containment/2/basis-check", headers=H("erin"),
+                 json={"decision": "REVISE", "comment": "re-scope after NCR", "content_sha256": sha}).json()
+    assert out["status"] == "REVALIDATION_REQUIRED"
 
 
 def test_correction_on_an_uncited_row_reopens_nothing(env):

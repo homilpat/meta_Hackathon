@@ -6,26 +6,28 @@ tests and the demo use seed 7). No model was called. Raw output: `docs/eval_s7.j
 **Limits of this set:** the generator varies SPI volumes per seed but keeps the same board/AOI/verification
 structure, so these numbers test that the pipeline is consistent across inputs, not that it generalises to new
 failure patterns. Half of the cases (even seeds) were scored by the SPI model before documents were written.
+Documents are approved in 8D order (NCR D2 -> Containment D3 -> RCA D4); the API refuses any other order.
 
 ## Measured (deterministic)
 
 | metric | result |
 |---|---|
-| Revision impact precision (reopened documents that the rule oracle expects) | 240/240 = 1.000 |
-| Revision impact recall (expected documents that were reopened) | 240/240 = 1.000 |
-| Containment plans left APPROVED after all 8 SPI corrections | 30/30 |
-| Template claims that are OBSERVED/CALCULATED/PROPOSAL without evidence | 0/735 |
+| Revision impact precision (reopened documents that the rule oracle expects) | 180/180 = 1.000 |
+| Revision impact recall (expected documents that were reopened) | 180/180 = 1.000 |
+| Containment plans flagged BASIS_CHANGED (content kept, not reopened) after the NCR they build on reopened | 30/30 |
+| Template claims that are OBSERVED/CALCULATED/PROPOSAL without evidence | 0/600 |
 | ClaimValidator rejections of seeded bad claims (no evidence, fake id, executed action, confirmed cause) | 150/150 |
 | Approved-data tool payloads wrongly blocked by the egress gateway | 0/150 |
 | CONFIDENTIAL rows denied at the tool layer | 30/30 |
 | CONFIDENTIAL payloads blocked at the gateway before any network call | 30/30 |
-| Revision import + impact latency (local SQLite, 240 imports) | p50 31.4 ms, max 1439.9 ms |
+| Revision import + impact latency (local SQLite, 240 imports) | p50 15.2 ms, max 2181.7 ms |
 
-Oracle: a corrected SPI row must reopen the NCR if its board had an AOI FAIL or the case was scored (the NCR
-cites every board's prediction), and the RCA only for the confirmed-defect board P02/B01. Containment never
-cites SPI. Corrections are applied cumulatively (v3, v4, ...) within each case, so later rows also report
+Oracle: a corrected SPI row must reopen the NCR if its board had an AOI FAIL (the NCR is the D2 problem
+description and cites no model output), and the RCA only for the confirmed-defect board P02/B01 (model scores
+and SHAP live in the RCA). Containment never cites SPI; the first correction that reopens its NCR must flag it
+BASIS_CHANGED for QA to reconfirm, and no other correction may flag it. Corrections are applied cumulatively (v3, v4, ...) within each case, so later rows also report
 documents that were already REVALIDATION_REQUIRED; the metric counts the documents reached, not status flips.
-Mismatches: 0 (listed in the JSON).
+Mismatches: 30 (listed in the JSON).
 The oracle encodes the same template rules the code implements and was written by the same developer, so
 100% here shows the graph and templates agree with the stated rules; it is not an independent audit.
 

@@ -43,7 +43,7 @@
 @media(max-width:1380px){.capability-rail>div>.badge{display:none}.capability-rail p span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
 
 /* Live-data additions */
-.mt{margin-top:12px}.wrap{white-space:normal;line-height:1.5}.row-gap{display:flex;gap:8px;align-items:center}
+.mt{margin-top:12px}.mb{margin-bottom:12px}.wrap{white-space:normal;line-height:1.5}.row-gap{display:flex;gap:8px;align-items:center}
 .site-select select,.user select,.context-strip select,.row-gap select{font:inherit;font-size:11px;border:1px solid #344255;border-radius:6px;padding:3px 6px;background:#1a2a3d;color:#fff;max-width:190px}
 .user select,.context-strip select,.row-gap select{background:#fff;color:#25313e;border-color:var(--line)}
 .input{width:100%;margin-top:12px;height:34px;border:1px solid var(--line);border-radius:7px;padding:0 10px;font-size:11px}

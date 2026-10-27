@@ -143,13 +143,23 @@ def run_out(session: Session, run: ModelRun) -> dict:
                             "ok": c.ok, "error": c.error, "result_sha256": c.result_sha256} for c in calls]}
 
 
-def report_claims(run: ModelRun) -> list[dict]:
-    """NCR claims from a VALIDATED run, plus the standing statement that cause is undetermined."""
-    findings = json.loads(run.report_json)["findings"]
+def is_analysis(finding: dict) -> bool:
+    """8D D4 material: a cause candidate or anything resting on model output (PRED-n / XAI-n)."""
+    return finding["classification"] == "HYPOTHESIS" or any(
+        not e.startswith("EV-") for e in finding.get("evidence_ids") or [])
+
+
+TAIL = {"NCR": "Problem description (8D D2) only; cause candidates and model output from this run go to the "
+               "RCA hypothesis. Model findings require human verification.",
+        "RCA": "Cause status: UNCONFIRMED. Model findings are candidates for a Process Engineer to verify."}
+
+
+def report_claims(run: ModelRun, doc_type: str = "NCR") -> list[dict]:
+    """Claims for one document section from a VALIDATED run: facts to the NCR, analysis to the RCA."""
+    findings = [f for f in json.loads(run.report_json)["findings"] if is_analysis(f) == (doc_type == "RCA")]
     claims = [{"claim_id": f"C{n}", "classification": f["classification"], "text": f["text"],
                "value": f["value"], "unit": f["unit"], "evidence_ids": f["evidence_ids"]}
               for n, f in enumerate(findings, 1)]
     claims.append({"claim_id": f"C{len(claims) + 1}", "classification": "UNKNOWN", "value": None,
-                   "unit": None, "evidence_ids": [], "text": "Root cause, containment scope and lot impact "
-                   "are not determined; model findings require human verification."})
+                   "unit": None, "evidence_ids": [], "text": TAIL[doc_type]})
     return claims

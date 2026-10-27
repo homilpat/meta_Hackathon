@@ -56,7 +56,8 @@ def test_every_numeric_or_observed_claim_cites_existing_evidence(case):
     doc = draft(case)
     known = {e["evidence_id"] for e in call(case, "alice", "GET", "/cases/C1/evidence").json()}
     classes = {c["classification"] for c in doc["claims"]}
-    assert {"OBSERVED", "CALCULATED", "HYPOTHESIS", "UNKNOWN"} <= classes
+    assert {"OBSERVED", "CALCULATED", "UNKNOWN"} <= classes
+    assert "HYPOTHESIS" not in classes  # cause candidates belong to the D4 RCA, not the D2 problem description
     for c in doc["claims"]:
         assert set(c["evidence_ids"]) <= known
         if c["classification"] in ("OBSERVED", "CALCULATED") or c["value"] is not None:

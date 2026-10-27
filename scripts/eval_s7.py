@@ -28,15 +28,15 @@ APPROVERS = {"ncr": "bob", "containment": "erin", "rca": "frank"}
 ROWS = [f"SPI-{p}-{b}-{pin}" for p in ("P01", "P02") for b in ("B01", "B02") for pin in (1, 2)]
 
 
-def oracle(row: str, with_predictions: bool) -> set[str]:
+def oracle(row: str) -> set[str]:
     """Which documents must reopen, from the domain rules (not from the graph code).
 
-    NCR cites SPI of every AOI-FAIL board (P01/B01 false alarm, P02/B01 confirmed) and, when scored, every
-    board's prediction. RCA covers only the confirmed board P02/B01. Containment never cites SPI.
+    NCR (D2) cites SPI of every AOI-FAIL board (P01/B01 false alarm, P02/B01 confirmed) and no model output.
+    RCA (D4) covers only the confirmed board P02/B01, including its prediction. Containment never cites SPI.
     """
     board = row[4:11]
     out = set()
-    if board in ("P01-B01", "P02-B01") or with_predictions:
+    if board in ("P01-B01", "P02-B01"):
         out.add("NCR")
     if board == "P02-B01":
         out.add("RCA")
@@ -84,16 +84,21 @@ def main() -> None:
             d = call("alice", "POST", f"/cases/{cid}/{kind}/1/request-review", {"reviewer_id": who})
             call(who, "POST", f"/cases/{cid}/{kind}/1/decision",
                  {"decision": "APPROVE", "content_sha256": d["content_sha256"]})
+        cont_approved = True
         for version, row in enumerate(ROWS, 3):
             t0 = time.perf_counter()
             got = call("alice", "POST", f"/cases/{cid}/source-revisions",
                        {"asset": spi_correction(seed, row, 0.02, version), "reason": "eval"})
             latencies.append(time.perf_counter() - t0)
             reached = {d["doc_type"] for d in got["documents"]}
-            want = oracle(row, scored)
+            want = oracle(row)
             tp, fp, fn = tp + len(reached & want), fp + len(reached - want), fn + len(want - reached)
-            if reached != want:
-                failures.append({"case": cid, "row": row, "expected": sorted(want), "got": sorted(reached)})
+            flagged = {d["doc_type"] for d in got["basis_changed"]}
+            want_flag = {"CONTAINMENT"} if cont_approved and "NCR" in want else set()
+            cont_approved &= not want_flag
+            if reached != want or flagged != want_flag:
+                failures.append({"case": cid, "row": row, "expected": sorted(want), "got": sorted(reached),
+                                 "basis_changed_expected": sorted(want_flag), "basis_changed": sorted(flagged)})
         cont = call("alice", "GET", f"/cases/{cid}/containment/1")
         cases.append({"case": cid, "scored": scored, "containment_status_after_all": cont["status"]})
 
@@ -166,7 +171,7 @@ def main() -> None:
                    "network_attempts_for_clean": opener.sent, "confidential_rows": n, "tool_denied": denied,
                    "gateway_blocked": restricted_blocked},
         "revision_latency_ms": {"p50": round(1000 * lat[len(lat) // 2], 1), "max": round(1000 * lat[-1], 1)},
-        "containment_untouched_by_spi": sum(x["containment_status_after_all"] == "APPROVED" for x in cases),
+        "containment_basis_changed": sum(x["containment_status_after_all"] == "BASIS_CHANGED" for x in cases),
     }
     Path("docs/eval_s7.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
     Path("docs/EVAL_RESULTS.md").write_text(f"""# S7 evaluation results
@@ -177,6 +182,7 @@ tests and the demo use seed 7). No model was called. Raw output: `docs/eval_s7.j
 **Limits of this set:** the generator varies SPI volumes per seed but keeps the same board/AOI/verification
 structure, so these numbers test that the pipeline is consistent across inputs, not that it generalises to new
 failure patterns. Half of the cases (even seeds) were scored by the SPI model before documents were written.
+Documents are approved in 8D order (NCR D2 -> Containment D3 -> RCA D4); the API refuses any other order.
 
 ## Measured (deterministic)
 
@@ -184,7 +190,7 @@ failure patterns. Half of the cases (even seeds) were scored by the SPI model be
 |---|---|
 | Revision impact precision (reopened documents that the rule oracle expects) | {tp}/{tp + fp} = {precision:.3f} |
 | Revision impact recall (expected documents that were reopened) | {tp}/{tp + fn} = {recall:.3f} |
-| Containment plans left APPROVED after all {len(ROWS)} SPI corrections | {result['containment_untouched_by_spi']}/{n} |
+| Containment plans flagged BASIS_CHANGED (content kept, not reopened) after the NCR they build on reopened | {result['containment_basis_changed']}/{n} |
 | Template claims that are OBSERVED/CALCULATED/PROPOSAL without evidence | {claim_unsupported}/{claim_total} |
 | ClaimValidator rejections of seeded bad claims (no evidence, fake id, executed action, confirmed cause) | {caught}/{seeded} |
 | Approved-data tool payloads wrongly blocked by the egress gateway | {clean_blocked}/{clean_payloads} |
@@ -192,9 +198,10 @@ failure patterns. Half of the cases (even seeds) were scored by the SPI model be
 | CONFIDENTIAL payloads blocked at the gateway before any network call | {restricted_blocked}/{n} |
 | Revision import + impact latency (local SQLite, {len(latencies)} imports) | p50 {result['revision_latency_ms']['p50']} ms, max {result['revision_latency_ms']['max']} ms |
 
-Oracle: a corrected SPI row must reopen the NCR if its board had an AOI FAIL or the case was scored (the NCR
-cites every board's prediction), and the RCA only for the confirmed-defect board P02/B01. Containment never
-cites SPI. Corrections are applied cumulatively (v3, v4, ...) within each case, so later rows also report
+Oracle: a corrected SPI row must reopen the NCR if its board had an AOI FAIL (the NCR is the D2 problem
+description and cites no model output), and the RCA only for the confirmed-defect board P02/B01 (model scores
+and SHAP live in the RCA). Containment never cites SPI; the first correction that reopens its NCR must flag it
+BASIS_CHANGED for QA to reconfirm, and no other correction may flag it. Corrections are applied cumulatively (v3, v4, ...) within each case, so later rows also report
 documents that were already REVALIDATION_REQUIRED; the metric counts the documents reached, not status flips.
 Mismatches: {len(failures)} (listed in the JSON).
 The oracle encodes the same template rules the code implements and was written by the same developer, so

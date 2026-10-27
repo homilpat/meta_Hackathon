@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.db import Evidence, ModelVersion, Prediction, SourceAsset, SourceEvent, XaiArtifact
 
 BUILDER = "DETERMINISTIC_TEMPLATE_NO_AI"
-TEMPLATE_VERSION = "s6.0"
+TEMPLATE_VERSION = "s6.1"
 CLASSES = ("OBSERVED", "CALCULATED", "HYPOTHESIS", "UNKNOWN", "PROPOSAL")
 # A draft may propose; it may not report an action as done or a cause as established.
 DONE_CLAIM = re.compile(r"(?i)\b(?:been|was|were|is|are)\s+(?:executed|implemented|contained|quarantined|resolved|fixed)\b"
@@ -141,26 +141,11 @@ def build_claims(session: Session, case_id: str) -> list[dict]:
             avg = round(mean(i["rec"]["volume_mm3"] for i in spi), 4)
             add("CALCULATED", f"Mean SPI solder volume on {panel}/{board} is {avg} mm3 over {len(spi)} "
                 "pin measurements (latest source version per row).", [i["ev"] for i in spi], avg, "mm3")
-            if not human or human["rec"]["result"] != "FALSE_ALARM":
-                add("HYPOTHESIS", f"Solder paste deposit variation on {panel}/{board} is a candidate cause "
-                    "to investigate. Not verified; SPI values alone do not establish causation.",
-                    [i["ev"] for i in spi])
     for board in _uninspected(items, aoi):
         add("UNKNOWN", f"No AOI inspection recorded for board {'/'.join(board['key'])}; "
             "a missing record is not a PASS.", [board["ev"]])
-    for p in session.scalars(select(Prediction).where(Prediction.case_id == case_id).order_by(Prediction.id)):
-        mv = session.get(ModelVersion, p.model_version_id)
-        x = session.scalar(select(XaiArtifact).where(XaiArtifact.prediction_id == p.id))
-        board = "/".join(p.target_key)
-        add("CALCULATED", f"SPI risk model {mv.name} v{mv.id} scored {board} at {p.risk_score:.3f} "
-            f"(threshold {p.threshold:.3f}, {mv.label_kind}). Model output, not an inspection result.",
-            [f"PRED-{p.id}", *p.input_evidence_ids], round(p.risk_score, 4), "score")
-        top = sorted(x.contributions.items(), key=lambda kv: -abs(kv[1]))[:3]
-        add("CALCULATED", f"Largest SHAP contributions to the {board} score: "
-            + ", ".join(f"{k} {v:+.2f}" for k, v in top)
-            + " (log-odds). SHAP explains the model score, not the physical defect cause.", [f"XAI-{x.id}"])
-    add("UNKNOWN", "Root cause, containment scope and lot impact are not determined; "
-        "no investigation has been performed.", [])
+    add("UNKNOWN", "Problem description (8D D2) only. Containment scope is the D3 plan; model scores, SHAP and "
+        "cause candidates belong to the D4 RCA hypothesis.", [])
     return claims
 
 
@@ -216,9 +201,16 @@ def build_rca(session: Session, case_id: str) -> list[dict]:
             f"log review for {panel}/{board}.", ev)
     for p in session.scalars(select(Prediction).where(Prediction.case_id == case_id).order_by(Prediction.id)):
         if p.target_key in boards:
-            add("CALCULATED", f"SPI risk model scored {'/'.join(p.target_key)} at {p.risk_score:.3f}. A correlation "
-                "signal from model output, not causal evidence.", [f"PRED-{p.id}", *p.input_evidence_ids],
-                round(p.risk_score, 4), "score")
+            mv = session.get(ModelVersion, p.model_version_id)
+            x = session.scalar(select(XaiArtifact).where(XaiArtifact.prediction_id == p.id))
+            board = "/".join(p.target_key)
+            add("CALCULATED", f"SPI risk model {mv.name} v{mv.id} scored {board} at {p.risk_score:.3f} "
+                f"(threshold {p.threshold:.3f}, {mv.label_kind}). A correlation signal from model output, not "
+                "causal evidence.", [f"PRED-{p.id}", *p.input_evidence_ids], round(p.risk_score, 4), "score")
+            top = sorted(x.contributions.items(), key=lambda kv: -abs(kv[1]))[:3]
+            add("CALCULATED", f"Largest SHAP contributions to the {board} score: "
+                + ", ".join(f"{k} {v:+.2f}" for k, v in top)
+                + " (log-odds). SHAP explains the model score, not the physical defect cause.", [f"XAI-{x.id}"])
     add("UNKNOWN", "No verification result is recorded. Cause status: UNCONFIRMED until a Process Engineer "
         "records the verification outcome.", [])
     return claims

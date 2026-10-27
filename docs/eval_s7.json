@@ -2,15 +2,526 @@
   "cases": 30,
   "revisions": 240,
   "impact": {
-    "tp": 240,
+    "tp": 180,
     "fp": 0,
     "fn": 0,
     "precision": 1.0,
     "recall": 1.0,
-    "failures": []
+    "failures": [
+      {
+        "case": "EVAL-101",
+        "row": "SPI-P01-B01-1",
+        "expected": [
+          "NCR"
+        ],
+        "got": [
+          "NCR"
+        ],
+        "basis_changed_expected": [
+          "CONTAINMENT"
+        ],
+        "basis_changed": [
+          "CONTAINMENT",
+          "RCA"
+        ]
+      },
+      {
+        "case": "EVAL-102",
+        "row": "SPI-P01-B01-1",
+        "expected": [
+          "NCR"
+        ],
+        "got": [
+          "NCR"
+        ],
+        "basis_changed_expected": [
+          "CONTAINMENT"
+        ],
+        "basis_changed": [
+          "CONTAINMENT",
+          "RCA"
+        ]
+      },
+      {
+        "case": "EVAL-103",
+        "row": "SPI-P01-B01-1",
+        "expected": [
+          "NCR"
+        ],
+        "got": [
+          "NCR"
+        ],
+        "basis_changed_expected": [
+          "CONTAINMENT"
+        ],
+        "basis_changed": [
+          "CONTAINMENT",
+          "RCA"
+        ]
+      },
+      {
+        "case": "EVAL-104",
+        "row": "SPI-P01-B01-1",
+        "expected": [
+          "NCR"
+        ],
+        "got": [
+          "NCR"
+        ],
+        "basis_changed_expected": [
+          "CONTAINMENT"
+        ],
+        "basis_changed": [
+          "CONTAINMENT",
+          "RCA"
+        ]
+      },
+      {
+        "case": "EVAL-105",
+        "row": "SPI-P01-B01-1",
+        "expected": [
+          "NCR"
+        ],
+        "got": [
+          "NCR"
+        ],
+        "basis_changed_expected": [
+          "CONTAINMENT"
+        ],
+        "basis_changed": [
+          "CONTAINMENT",
+          "RCA"
+        ]
+      },
+      {
+        "case": "EVAL-106",
+        "row": "SPI-P01-B01-1",
+        "expected": [
+          "NCR"
+        ],
+        "got": [
+          "NCR"
+        ],
+        "basis_changed_expected": [
+          "CONTAINMENT"
+        ],
+        "basis_changed": [
+          "CONTAINMENT",
+          "RCA"
+        ]
+      },
+      {
+        "case": "EVAL-107",
+        "row": "SPI-P01-B01-1",
+        "expected": [
+          "NCR"
+        ],
+        "got": [
+          "NCR"
+        ],
+        "basis_changed_expected": [
+          "CONTAINMENT"
+        ],
+        "basis_changed": [
+          "CONTAINMENT",
+          "RCA"
+        ]
+      },
+      {
+        "case": "EVAL-108",
+        "row": "SPI-P01-B01-1",
+        "expected": [
+          "NCR"
+        ],
+        "got": [
+          "NCR"
+        ],
+        "basis_changed_expected": [
+          "CONTAINMENT"
+        ],
+        "basis_changed": [
+          "CONTAINMENT",
+          "RCA"
+        ]
+      },
+      {
+        "case": "EVAL-109",
+        "row": "SPI-P01-B01-1",
+        "expected": [
+          "NCR"
+        ],
+        "got": [
+          "NCR"
+        ],
+        "basis_changed_expected": [
+          "CONTAINMENT"
+        ],
+        "basis_changed": [
+          "CONTAINMENT",
+          "RCA"
+        ]
+      },
+      {
+        "case": "EVAL-110",
+        "row": "SPI-P01-B01-1",
+        "expected": [
+          "NCR"
+        ],
+        "got": [
+          "NCR"
+        ],
+        "basis_changed_expected": [
+          "CONTAINMENT"
+        ],
+        "basis_changed": [
+          "CONTAINMENT",
+          "RCA"
+        ]
+      },
+      {
+        "case": "EVAL-111",
+        "row": "SPI-P01-B01-1",
+        "expected": [
+          "NCR"
+        ],
+        "got": [
+          "NCR"
+        ],
+        "basis_changed_expected": [
+          "CONTAINMENT"
+        ],
+        "basis_changed": [
+          "CONTAINMENT",
+          "RCA"
+        ]
+      },
+      {
+        "case": "EVAL-112",
+        "row": "SPI-P01-B01-1",
+        "expected": [
+          "NCR"
+        ],
+        "got": [
+          "NCR"
+        ],
+        "basis_changed_expected": [
+          "CONTAINMENT"
+        ],
+        "basis_changed": [
+          "CONTAINMENT",
+          "RCA"
+        ]
+      },
+      {
+        "case": "EVAL-113",
+        "row": "SPI-P01-B01-1",
+        "expected": [
+          "NCR"
+        ],
+        "got": [
+          "NCR"
+        ],
+        "basis_changed_expected": [
+          "CONTAINMENT"
+        ],
+        "basis_changed": [
+          "CONTAINMENT",
+          "RCA"
+        ]
+      },
+      {
+        "case": "EVAL-114",
+        "row": "SPI-P01-B01-1",
+        "expected": [
+          "NCR"
+        ],
+        "got": [
+          "NCR"
+        ],
+        "basis_changed_expected": [
+          "CONTAINMENT"
+        ],
+        "basis_changed": [
+          "CONTAINMENT",
+          "RCA"
+        ]
+      },
+      {
+        "case": "EVAL-115",
+        "row": "SPI-P01-B01-1",
+        "expected": [
+          "NCR"
+        ],
+        "got": [
+          "NCR"
+        ],
+        "basis_changed_expected": [
+          "CONTAINMENT"
+        ],
+        "basis_changed": [
+          "CONTAINMENT",
+          "RCA"
+        ]
+      },
+      {
+        "case": "EVAL-116",
+        "row": "SPI-P01-B01-1",
+        "expected": [
+          "NCR"
+        ],
+        "got": [
+          "NCR"
+        ],
+        "basis_changed_expected": [
+          "CONTAINMENT"
+        ],
+        "basis_changed": [
+          "CONTAINMENT",
+          "RCA"
+        ]
+      },
+      {
+        "case": "EVAL-117",
+        "row": "SPI-P01-B01-1",
+        "expected": [
+          "NCR"
+        ],
+        "got": [
+          "NCR"
+        ],
+        "basis_changed_expected": [
+          "CONTAINMENT"
+        ],
+        "basis_changed": [
+          "CONTAINMENT",
+          "RCA"
+        ]
+      },
+      {
+        "case": "EVAL-118",
+        "row": "SPI-P01-B01-1",
+        "expected": [
+          "NCR"
+        ],
+        "got": [
+          "NCR"
+        ],
+        "basis_changed_expected": [
+          "CONTAINMENT"
+        ],
+        "basis_changed": [
+          "CONTAINMENT",
+          "RCA"
+        ]
+      },
+      {
+        "case": "EVAL-119",
+        "row": "SPI-P01-B01-1",
+        "expected": [
+          "NCR"
+        ],
+        "got": [
+          "NCR"
+        ],
+        "basis_changed_expected": [
+          "CONTAINMENT"
+        ],
+        "basis_changed": [
+          "CONTAINMENT",
+          "RCA"
+        ]
+      },
+      {
+        "case": "EVAL-120",
+        "row": "SPI-P01-B01-1",
+        "expected": [
+          "NCR"
+        ],
+        "got": [
+          "NCR"
+        ],
+        "basis_changed_expected": [
+          "CONTAINMENT"
+        ],
+        "basis_changed": [
+          "CONTAINMENT",
+          "RCA"
+        ]
+      },
+      {
+        "case": "EVAL-121",
+        "row": "SPI-P01-B01-1",
+        "expected": [
+          "NCR"
+        ],
+        "got": [
+          "NCR"
+        ],
+        "basis_changed_expected": [
+          "CONTAINMENT"
+        ],
+        "basis_changed": [
+          "CONTAINMENT",
+          "RCA"
+        ]
+      },
+      {
+        "case": "EVAL-122",
+        "row": "SPI-P01-B01-1",
+        "expected": [
+          "NCR"
+        ],
+        "got": [
+          "NCR"
+        ],
+        "basis_changed_expected": [
+          "CONTAINMENT"
+        ],
+        "basis_changed": [
+          "CONTAINMENT",
+          "RCA"
+        ]
+      },
+      {
+        "case": "EVAL-123",
+        "row": "SPI-P01-B01-1",
+        "expected": [
+          "NCR"
+        ],
+        "got": [
+          "NCR"
+        ],
+        "basis_changed_expected": [
+          "CONTAINMENT"
+        ],
+        "basis_changed": [
+          "CONTAINMENT",
+          "RCA"
+        ]
+      },
+      {
+        "case": "EVAL-124",
+        "row": "SPI-P01-B01-1",
+        "expected": [
+          "NCR"
+        ],
+        "got": [
+          "NCR"
+        ],
+        "basis_changed_expected": [
+          "CONTAINMENT"
+        ],
+        "basis_changed": [
+          "CONTAINMENT",
+          "RCA"
+        ]
+      },
+      {
+        "case": "EVAL-125",
+        "row": "SPI-P01-B01-1",
+        "expected": [
+          "NCR"
+        ],
+        "got": [
+          "NCR"
+        ],
+        "basis_changed_expected": [
+          "CONTAINMENT"
+        ],
+        "basis_changed": [
+          "CONTAINMENT",
+          "RCA"
+        ]
+      },
+      {
+        "case": "EVAL-126",
+        "row": "SPI-P01-B01-1",
+        "expected": [
+          "NCR"
+        ],
+        "got": [
+          "NCR"
+        ],
+        "basis_changed_expected": [
+          "CONTAINMENT"
+        ],
+        "basis_changed": [
+          "CONTAINMENT",
+          "RCA"
+        ]
+      },
+      {
+        "case": "EVAL-127",
+        "row": "SPI-P01-B01-1",
+        "expected": [
+          "NCR"
+        ],
+        "got": [
+          "NCR"
+        ],
+        "basis_changed_expected": [
+          "CONTAINMENT"
+        ],
+        "basis_changed": [
+          "CONTAINMENT",
+          "RCA"
+        ]
+      },
+      {
+        "case": "EVAL-128",
+        "row": "SPI-P01-B01-1",
+        "expected": [
+          "NCR"
+        ],
+        "got": [
+          "NCR"
+        ],
+        "basis_changed_expected": [
+          "CONTAINMENT"
+        ],
+        "basis_changed": [
+          "CONTAINMENT",
+          "RCA"
+        ]
+      },
+      {
+        "case": "EVAL-129",
+        "row": "SPI-P01-B01-1",
+        "expected": [
+          "NCR"
+        ],
+        "got": [
+          "NCR"
+        ],
+        "basis_changed_expected": [
+          "CONTAINMENT"
+        ],
+        "basis_changed": [
+          "CONTAINMENT",
+          "RCA"
+        ]
+      },
+      {
+        "case": "EVAL-130",
+        "row": "SPI-P01-B01-1",
+        "expected": [
+          "NCR"
+        ],
+        "got": [
+          "NCR"
+        ],
+        "basis_changed_expected": [
+          "CONTAINMENT"
+        ],
+        "basis_changed": [
+          "CONTAINMENT",
+          "RCA"
+        ]
+      }
+    ]
   },
   "template_claims": {
-    "total": 735,
+    "total": 600,
     "unsupported": 0
   },
   "validator": {
@@ -26,8 +537,8 @@
     "gateway_blocked": 30
   },
   "revision_latency_ms": {
-    "p50": 31.4,
-    "max": 1439.9
+    "p50": 15.2,
+    "max": 2181.7
   },
-  "containment_untouched_by_spi": 30
+  "containment_basis_changed": 30
 }

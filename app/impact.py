@@ -22,7 +22,8 @@ from app.db import (
 from app.ingestion import SourceAssetInput, SyntheticBundle, normalize
 from app.synthetic import canonical
 
-ACTIVE = ("DRAFT", "IN_REVIEW", "INFO_REQUESTED", "APPROVED")
+ACTIVE = ("DRAFT", "IN_REVIEW", "INFO_REQUESTED", "APPROVED", "BASIS_CHANGED")
+ORDER = ("NCR", "CONTAINMENT", "RCA")  # 8D D2 -> D3 -> D4; each is approved on top of the ones before it
 
 
 def link(session: Session, case_id: str, edges: set[tuple[str, str]]) -> None:
@@ -110,6 +111,8 @@ def import_revision(session: Session, case_id: str, asset: SourceAssetInput) -> 
 def reopen(session: Session, case_id: str, seeds: list[str]) -> dict:
     """Mark only the reachable active documents REVALIDATION_REQUIRED and hold their pending reviews.
 
+    An approved downstream document that cites none of the corrected rows keeps its content but is flagged
+    BASIS_CHANGED: its approver must confirm the scope still holds once the upstream is re-approved.
     Approval events are never touched; superseded/rejected versions are reported but left as they are.
     """
     nodes = reachable(session, case_id, seeds)
@@ -127,4 +130,16 @@ def reopen(session: Session, case_id: str, seeds: list[str]) -> dict:
                      "status_before": before, "status_after": doc.status,
                      "claims": sorted((n.split(":")[2] for n in claims if n.split(":")[1] == str(doc.id)),
                                       key=lambda cid: int(cid[1:]))})
-    return {"derived": [n for n in nodes if n.startswith(("PRED-", "XAI-"))], "claims": claims, "documents": docs}
+    reopened = {d["doc_type"] for d in docs if d["status_after"] != d["status_before"]}
+    flagged = []
+    for i, doc_type in enumerate(ORDER):
+        doc = session.scalar(select(DocumentVersion).where(
+            DocumentVersion.case_id == case_id, DocumentVersion.doc_type == doc_type)
+            .order_by(DocumentVersion.version.desc()).limit(1))
+        if doc and doc.status == "APPROVED" and reopened & set(ORDER[:i]):
+            doc.status = "BASIS_CHANGED"
+            reopened.add(doc_type)  # cascades: an RCA built on this plan is flagged too
+            flagged.append({"document_version_id": doc.id, "doc_type": doc_type, "version": doc.version,
+                            "status_before": "APPROVED", "status_after": "BASIS_CHANGED"})
+    return {"derived": [n for n in nodes if n.startswith(("PRED-", "XAI-"))], "claims": claims, "documents": docs,
+            "basis_changed": flagged}

@@ -118,12 +118,15 @@ def test_predictions_are_case_evidence_with_hashes(client):
     assert detail == p
 
 
-def test_ncr_cites_prediction_and_shap(client):
+def test_model_output_goes_to_the_rca_not_the_ncr(client):
     _, preds = scored(client)
-    doc = client.post("/cases/C1/ncr", json={}, headers={**A, **key()}).json()
-    cited = {e for c in doc["claims"] for e in c["evidence_ids"]}
-    assert {p["evidence_id"] for p in preds} <= cited and {p["xai_evidence_id"] for p in preds} <= cited
-    shap = [c for c in doc["claims"] if "SHAP" in c["text"]]
+    docs = {k: client.post(f"/cases/C1/{k}", json={}, headers={**A, **key()}).json()
+            for k in ("ncr", "containment", "rca")}
+    cited = {k: {e for c in d["claims"] for e in c["evidence_ids"]} for k, d in docs.items()}
+    assert not any(e.startswith(("PRED-", "XAI-")) for e in cited["ncr"] | cited["containment"])
+    target = next(p for p in preds if p["target_key"] == ["P02", "B01"])  # the confirmed-defect board
+    assert {target["evidence_id"], target["xai_evidence_id"]} <= cited["rca"]
+    shap = [c for c in docs["rca"]["claims"] if "SHAP" in c["text"]]
     assert shap and all("not the physical defect cause" in c["text"] for c in shap)
 
 

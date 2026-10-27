@@ -237,20 +237,27 @@ def test_retry_does_not_rerun(case):
     assert len(case.get("/cases/C1/investigations", headers={"X-User": "alice"}).json()) == 1
 
 
-def test_ncr_only_from_validated_run(case):
+def test_drafts_only_from_validated_run_split_by_section(case):
     good = outcome(case, LOOKUP, final(good_report(evidence(case))))
     bad = outcome(case, final("nope"))
     h = {"X-User": "alice"}
 
-    def ncr(run_id):
-        return case.post("/cases/C1/ncr", json={"investigation_run_id": run_id},
+    def draft(run_id, kind="ncr"):
+        return case.post(f"/cases/C1/{kind}", json={"investigation_run_id": run_id},
                          headers={**h, "Idempotency-Key": uuid.uuid4().hex})
 
-    assert ncr(bad["run_id"]).status_code == 409
-    assert ncr(999).status_code == 404
-    doc = ncr(good["run_id"]).json()
+    assert draft(bad["run_id"]).status_code == 409
+    assert draft(999).status_code == 404
+    assert draft(good["run_id"], "rca").status_code == 409  # no NCR/containment draft to build on yet
+    doc = draft(good["run_id"]).json()
     assert doc["builder"] == f"MODEL_TEST_DOUBLE:scripted-test-double:run{good['run_id']}"
-    assert doc["claims"][-1]["classification"] == "UNKNOWN" and len(doc["claims"]) == 6
+    assert doc["claims"][-1]["classification"] == "UNKNOWN" and len(doc["claims"]) == 5
+    assert "HYPOTHESIS" not in {c["classification"] for c in doc["claims"]}
+    assert draft(good["run_id"], "containment").status_code == 422  # model gives no containment proposals
+    case.post("/cases/C1/containment", json={}, headers={**h, "Idempotency-Key": uuid.uuid4().hex})
+    rca = draft(good["run_id"], "rca").json()
+    assert [c["classification"] for c in rca["claims"]] == ["HYPOTHESIS", "UNKNOWN"]
+    assert "UNCONFIRMED" in rca["claims"][-1]["text"]
     page = case.get("/cases/C1/ncr/1/html", headers=h).text
     assert "ClaimValidator" in page and "no AI model used" not in page
     r = case.post("/cases/C1/ncr/1/request-review", json={"reviewer_id": "bob"},

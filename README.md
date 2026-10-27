@@ -12,7 +12,7 @@ What it does, by stage (each stage's checks are in the [work log](HACKATHON_WORK
 | S3 | Meta `muse-spark-1.3` tool-calling investigator over read-only evidence tools; server-side ClaimValidator recomputes numbers and rejects causal certainty |
 | S4 | SPI-only risk model (LightGBM, synthetic label) with TreeSHAP; predictions are citable evidence, not inspection results |
 | S5 | Synthetic precedent bank with eligibility filter; next-evidence planner that warns about fixes that failed before |
-| S6 | NCR → Containment **plan** (QA/Production approval) → RCA **hypothesis** (Process Engineer approval); evidence dependency graph; a corrected source row reopens only the dependent documents; append-only audit tables; egress gateway |
+| S6 | 8D order: D2 NCR (facts only) → D3 Containment **plan** (QA/Production) → D4 RCA **hypothesis** with model scores/SHAP (Process Engineer); drafts may be written ahead, approval only in order; evidence dependency graph; a corrected source row reopens only the dependent documents and flags downstream plans `BASIS_CHANGED`; append-only audit tables; egress gateway |
 
 Containment items are proposals (`NOT_EXECUTED`) and the RCA stays `UNCONFIRMED`; the system never records an action
 as executed or a cause as confirmed. SHAP explains model scores, not physical causes.
@@ -49,8 +49,9 @@ not needed to run it. To change the UI: `cd web && npm install && npm run dev` (
 4. **Create NCR draft** → request review → switch to bob → APPROVE.
 5. As alice **Create Containment plan draft** → erin approves; **Create RCA hypothesis draft** → frank approves.
 6. **Import SPI correction** re-measures one SPI row (v3). The *Source corrections and impact* table shows
-   before/after: the NCR and RCA that cite that row become `REVALIDATION_REQUIRED`, the Containment plan stays
-   `APPROVED`, affected claims are highlighted, and the approval records are unchanged.
+   before/after: the NCR and RCA that cite that row become `REVALIDATION_REQUIRED`; the Containment plan cites no
+   SPI row, so it keeps its content but is flagged `BASIS_CHANGED`. After NCR v2 is approved, erin records
+   *no scope impact* (or *revise*) on `/app`; only then can the new RCA be approved. Approval records are unchanged.
 7. **Run investigation (LIVE Meta model)** needs a key (below); without one the API returns 503 — there is no mock.
 
 The same flow by API is covered by `tests/test_s6_followups.py`.

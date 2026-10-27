@@ -8,7 +8,7 @@ const USERS = [
   ['alice', '작성자 Alice', 'AUTHOR'], ['dave', '작성자 Dave', 'AUTHOR'], ['bob', 'NCR 검토자 Bob', 'REVIEWER'],
   ['carol', 'NCR 검토자 Carol', 'REVIEWER'], ['erin', 'QA/생산 Erin', 'QA_PRODUCTION'], ['frank', '공정 엔지니어 Frank', 'PROCESS_ENGINEER'],
 ] as const
-const KINDS = [['ncr', 'NCR', '부적합 보고서', 'bob'], ['containment', 'CONTAINMENT', '임시조치 계획', 'erin'], ['rca', 'RCA', '원인 가설', 'frank']] as const
+const KINDS = [['ncr', 'NCR', 'D2 부적합 보고서', 'bob'], ['containment', 'CONTAINMENT', 'D3 임시조치 계획', 'erin'], ['rca', 'RCA', 'D4 원인 가설', 'frank']] as const
 const APPROVER_ROLE: Record<string, string> = { NCR: 'REVIEWER', CONTAINMENT: 'QA_PRODUCTION', RCA: 'PROCESS_ENGINEER' }
 
 const nav = [
@@ -20,7 +20,7 @@ const nav = [
 const CLASS_TONE: Record<string, Tone> = { OBSERVED: 'green', CALCULATED: 'blue', HYPOTHESIS: 'violet', UNKNOWN: 'slate', PROPOSAL: 'teal' }
 const STATUS_TONE: Record<string, Tone> = {
   DRAFT: 'slate', IN_REVIEW: 'amber', APPROVED: 'green', REJECTED: 'red', INFO_REQUESTED: 'amber', SUPERSEDED: 'slate',
-  REVALIDATION_REQUIRED: 'red', VALIDATED: 'green', VALIDATION_FAILED: 'red', FAILED: 'red', JSON_ERROR: 'red', LIMIT_EXCEEDED: 'amber',
+  REVALIDATION_REQUIRED: 'red', BASIS_CHANGED: 'amber', VALIDATED: 'green', VALIDATION_FAILED: 'red', FAILED: 'red', JSON_ERROR: 'red', LIMIT_EXCEEDED: 'amber',
 }
 
 const uid = () => crypto.randomUUID()
@@ -66,13 +66,22 @@ function useLoad<T>(ctx: Ctx, path: string | null, init: T): T {
   return v
 }
 
+// 8D order from the API: drafts can be written ahead, review/approval opens only after the step before is APPROVED.
+function Stages({ ctx }: { ctx: Ctx }) {
+  const st = useLoad<J[]>(ctx, `/cases/${ctx.cid}/stages`, [])
+  return <div className="report-steps">{st.map(s => {
+    const done = s.status === 'APPROVED'
+    return <div key={s.kind} title={s.blocked_by ?? ''} className={done ? 'done' : s.approval_open ? 'active' : 'future'}><i>{done ? <Icon name="check" size={13}/> : s.step}</i>
+      <span>{KINDS.find(k => k[0] === s.kind)![2]}</span><small>{s.version ? `v${s.version} · ${s.status}` : '미작성'}{!s.approval_open && ' · 결재 잠금 (앞 단계 미승인)'}</small></div>
+  })}</div>
+}
+
 function Dashboard({ ctx, cases, onNew }: { ctx: Ctx; cases: J[]; onNew: () => void }) {
   const p = (x: string) => ctx.cid ? `/cases/${ctx.cid}/${x}` : null
   const ev = useLoad<J[]>(ctx, p('evidence'), []), iss = useLoad<J[]>(ctx, p('data-issues'), [])
   const preds = useLoad<J[]>(ctx, p('predictions'), []), runs = useLoad<J[]>(ctx, p('investigations'), [])
   const docs = [useLoad<J[]>(ctx, p('ncr'), []), useLoad<J[]>(ctx, p('containment'), []), useLoad<J[]>(ctx, p('rca'), [])]
-  const latest = docs.map(d => d[d.length - 1])
-  const reval = docs.flat().filter(d => d.status === 'REVALIDATION_REQUIRED').length
+  const reval = docs.flat().filter(d => d.status === 'REVALIDATION_REQUIRED' || d.status === 'BASIS_CHANGED').length
   return <Page title="품질 운영 현황" desc="선택한 사건의 근거, 모델 출력, 문서 결재 상태를 확인합니다." action={ctx.me?.role === 'AUTHOR' && <button className="button primary" onClick={onNew}>새 합성 PCB 사건 생성</button>}>
     <div className="demo-notice"><Icon name="spark" size={15}/><b>합성 데이터</b><span>모든 제조 기록은 생성기로 만든 가상의 PCB 데이터(SYNTHETIC, SELF_GENERATED)이며 실제 제조 성과가 아닙니다.</span></div>
     <div className="capability-rail">
@@ -86,10 +95,7 @@ function Dashboard({ ctx, cases, onNew }: { ctx: Ctx; cases: J[]; onNew: () => v
           ['AI 조사 실행', runs.length, 'violet'], ['재검토 필요 문서', reval, reval ? 'red' : 'green']] as const).map(x =>
           <Card key={x[0]}><span className="kpi-label">{x[0]}</span><div className="kpi-value">{x[1]} <i className={`dot ${x[2]}`}/></div></Card>)}
       </div>
-      <Card><SectionTitle title="문서 결재 흐름" sub="NCR → 임시조치 계획 → 원인 가설"/><div className="report-steps">{KINDS.map(([k, t, label], i) => {
-        const d = latest[i]
-        return <div key={k} className={d?.status === 'APPROVED' ? 'done' : d ? 'active' : 'future'}><i>{d?.status === 'APPROVED' ? <Icon name="check" size={13}/> : i + 1}</i><span>{label}</span><small>{d ? `${t} v${d.version} · ${d.status}` : '미작성'}</small></div>
-      })}</div></Card>
+      <Card><SectionTitle title="8D 결재 흐름" sub="D2 문제 기술 → D3 임시조치 → D4 원인 분석 · 앞 단계 승인 전에는 결재할 수 없습니다"/><Stages ctx={ctx}/></Card>
     </>}
     <Card className="mt"><SectionTitle title="배정된 사건" sub={`${cases.length}건 · 현재 사용자 기준`}/><div className="table-wrap"><table><thead><tr><th>사건 ID</th><th>도메인</th><th>데이터 출처</th></tr></thead>
       <tbody>{cases.map(c => <tr key={c.case_id}><td><b className="id">{c.case_id}</b></td><td>{c.domain}</td><td><Badge tone="blue">{c.data_origin}</Badge></td></tr>)}</tbody></table></div></Card>
@@ -152,7 +158,7 @@ function Investigation({ ctx, provider }: { ctx: Ctx; provider: J }) {
   const r = runs[runs.length - 1]
   const author = ctx.me?.role === 'AUTHOR'
   const run = async () => { await ctx.api(`/cases/${ctx.cid}/investigations`, 'POST', { use_history: history }, true); ctx.refresh() }
-  const toNcr = async () => { await ctx.api(`/cases/${ctx.cid}/ncr`, 'POST', { investigation_run_id: r.run_id }, true); ctx.refresh() }
+  const draft = async (k: string) => { await ctx.api(`/cases/${ctx.cid}/${k}`, 'POST', { investigation_run_id: r.run_id }, true); ctx.refresh() }
   return <Page title="AI 품질 조사" desc="Meta 모델이 읽기 전용 도구로 근거를 조회하고, 서버가 보고서를 검증합니다.">
     <div className="hero-banner"><div className="hero-icon"><Icon name="spark" size={22}/></div><div><b>{provider?.configured ? `LIVE · ${provider.model}` : `${provider?.model ?? 'Meta'} · 키 미설정`}</b>
       <span>{provider?.configured ? 'SYNTHETIC·외부 승인 데이터만 전송됩니다. 결론 승인과 원인 확정은 사람이 합니다.' : 'MODEL_API_KEY가 없어 조사를 실행할 수 없습니다. 대체(목) 응답은 없습니다.'}</span></div>
@@ -175,8 +181,9 @@ function Investigation({ ctx, provider }: { ctx: Ctx; provider: J }) {
           <div className="blocked-box" key={e}><Icon name="shield"/><div><span>{e}</span></div></div>)}</Card>}
       </div>
     </div>}
-    {r && <div className="action-bar"><div><Icon name="shield"/><span><b>사람 승인 필수</b> AI는 문서 승인이나 원인 확정을 하지 않습니다.</span></div>
-      <button className="button primary" disabled={!author || r.status !== 'VALIDATED'} onClick={toNcr}>이 실행으로 NCR 초안 생성</button></div>}
+    {r && <div className="action-bar"><div><Icon name="shield"/><span><b>사람 승인 필수</b> 사실 관측은 D2 NCR, 원인 후보와 모델 출력은 D4 원인 가설 초안으로 나뉩니다. 임시조치 계획은 템플릿으로 작성합니다.</span></div>
+      <span className="row-gap"><button className="button primary" disabled={!author || r.status !== 'VALIDATED'} onClick={() => draft('ncr')}>D2 NCR 초안</button>
+        <button className="button secondary" disabled={!author || r.status !== 'VALIDATED'} onClick={() => draft('rca')}>D4 원인 가설 초안</button></span></div>}
   </Page>
 }
 
@@ -203,6 +210,7 @@ function HistoryScreen({ ctx }: { ctx: Ctx }) {
 
 function Reports({ ctx }: { ctx: Ctx }) {
   const lists = KINDS.map(([k]) => useLoad<J[]>(ctx, `/cases/${ctx.cid}/${k}`, [])) // fixed order, safe for hooks
+  const stages = useLoad<J[]>(ctx, `/cases/${ctx.cid}/stages`, [])
   const all = KINDS.flatMap(([k], i) => lists[i].map(d => ({ ...d, kind: k })))
   const [selKey, setSelKey] = useState('')
   const [comment, setComment] = useState('')
@@ -211,9 +219,11 @@ function Reports({ ctx }: { ctx: Ctx }) {
   const create = async (k: string) => { const r = await ctx.api(`/cases/${ctx.cid}/${k}`, 'POST', {}, true); setSelKey(`${k}:${r.version}`); ctx.refresh() }
   const latestOf = (x: J) => { const l = lists[KINDS.findIndex(k => k[0] === x.kind)]; return l[l.length - 1]?.version === x.version }
   const approver = d && KINDS.find(k => k[0] === d.kind)![3]
+  const stage = d && stages.find(s => s.kind === d.kind)
   const act = async (path: string, body: J) => { await ctx.api(`/cases/${ctx.cid}/${d.kind}/${d.version}/${path}`, 'POST', body, true); setComment(''); ctx.refresh() }
-  return <Page title="문서 및 결재" desc="NCR → 임시조치 계획(QA/생산 승인) → 원인 가설(공정 엔지니어 승인). 각 버전은 내용 해시에 묶여 결재됩니다."
+  return <Page title="문서 및 결재" desc="8D 순서: D2 NCR(검토자) → D3 임시조치 계획(QA/생산) → D4 원인 가설(공정 엔지니어). 초안은 미리 쓸 수 있지만 결재는 앞 단계 승인 후에만 열립니다."
     action={author && <span>{KINDS.map(([k, t]) => <button key={k} className="button secondary" onClick={() => create(k)}>{t} 초안 생성</button>)}</span>}>
+    <Card className="mb"><Stages ctx={ctx}/></Card>
     <div className="report-layout">
       <Card><SectionTitle title="문서 목록" sub={`${all.length}개 버전`}/>{all.map(x => <div key={`${x.kind}:${x.version}`} className={`doc-row ${x === d ? 'selected' : ''}`} onClick={() => setSelKey(`${x.kind}:${x.version}`)}>
         <Icon name="document"/><div><b>{x.doc_type} <small>v{x.version}</small></b><span>근거 주장 {x.claims.length}개 · {x.author_id}</span></div><Badge tone={STATUS_TONE[x.status]}>{x.status}</Badge></div>)}
@@ -229,7 +239,13 @@ function Reports({ ctx }: { ctx: Ctx }) {
         {d.reviews.map((r: J, i: number) => <div className="reviewer" key={i}><div className="avatar">{r.reviewer_id[0].toUpperCase()}</div><div><b>{r.reviewer_id}</b><span>검토 요청 · {r.state}</span></div></div>)}
         {d.decisions.map((x: J, i: number) => <div className="detail-row" key={i}><span>{x.action} · {x.actor_id}</span><b>{x.comment || '-'}</b></div>)}
         <div className="role-note"><Icon name="shield"/><span>{d.doc_type} 승인 권한: {APPROVER_ROLE[d.doc_type]}</span></div>
-        {author && d.author_id === ctx.me.id && d.status === 'DRAFT' && latestOf(d) && <button className="button primary full" onClick={() => act('request-review', { reviewer_id: approver })}>{approver}에게 검토 요청</button>}
+        {d.status === 'DRAFT' && latestOf(d) && stage && !stage.approval_open && <Note>결재 잠금: {stage.blocked_by}</Note>}
+        {author && d.author_id === ctx.me.id && d.status === 'DRAFT' && latestOf(d) && <button className="button primary full" disabled={!stage?.approval_open} onClick={() => act('request-review', { reviewer_id: approver })}>{approver}에게 검토 요청</button>}
+        {d.status === 'BASIS_CHANGED' && <Note>기반 문서가 정정으로 재검토 중입니다. 이 문서의 내용은 정정된 행을 인용하지 않아 그대로이지만, {APPROVER_ROLE[d.doc_type]}가 새 기반에서 범위가 유효한지 확인해야 다음 단계 결재가 열립니다.</Note>}
+        {ctx.me?.role === APPROVER_ROLE[d.doc_type] && d.status === 'BASIS_CHANGED' && <>
+          <input className="input" placeholder="확인 의견 (3자 이상)" value={comment} onChange={e => setComment(e.target.value)}/>
+          <div className="dual"><button className="button success" onClick={() => act('basis-check', { decision: 'NO_SCOPE_IMPACT', comment, content_sha256: d.content_sha256 })}>범위 영향 없음</button>
+            <button className="button danger" onClick={() => act('basis-check', { decision: 'REVISE', comment, content_sha256: d.content_sha256 })}>재작성 필요</button></div></>}
         {ctx.me?.role === APPROVER_ROLE[d.doc_type] && d.status === 'IN_REVIEW' && latestOf(d) && <>
           <input className="input" placeholder="검토 의견" value={comment} onChange={e => setComment(e.target.value)}/>
           <div className="dual"><button className="button success" onClick={() => act('decision', { decision: 'APPROVE', comment, content_sha256: d.content_sha256 })}>승인</button>
@@ -262,6 +278,7 @@ function Impact({ ctx }: { ctx: Ctx }) {
       <div className="impact-layout">
         <Card><SectionTitle title="문서 상태 변화" sub="정정 전 → 후"/>{imp.documents.length ? imp.documents.map((d: J) =>
           <div key={d.document_version_id} className="compare-row amber"><span>{d.doc_type} v{d.version}</span><del>{d.status_before}</del><Icon name="arrow"/><b>{d.status_after}</b></div>) : <Empty>이 행에 의존하는 문서가 없어 재검토 대상이 없습니다.</Empty>}
+          {(imp.basis_changed ?? []).map((d: J) => <div key={d.document_version_id} className="compare-row amber"><span>{d.doc_type} v{d.version} (기반 변경)</span><del>{d.status_before}</del><Icon name="arrow"/><b>{d.status_after}</b></div>)}
           <div className="immutable"><Icon name="shield"/><span><b>원본 보존</b> 기존 승인 기록은 DB 수준에서 수정·삭제가 차단됩니다.</span></div></Card>
         <Card className="graph-card"><SectionTitle title="증거 의존성 경로" sub="영향받은 노드만 표시"/><div className="graph-cols">
           {col('정정된 원천 Evidence', imp.changed_evidence, 'affected')}{col('파생 (예측 · XAI)', imp.derived, 'affected')}
@@ -281,7 +298,7 @@ function Audit({ ctx }: { ctx: Ctx }) {
   return <Page title="감사 및 보안" desc="사건 타임라인과 서버가 강제하는 정책입니다.">
     <div className="security-grid">{policies.map(x => <Card key={x[0]}><div className={`security-icon ${x[2]}`}><Icon name="shield"/></div><b>{x[0]}</b><span className="muted">{x[1]}</span><Badge tone={x[2]}>서버 정책</Badge></Card>)}</div>
     <Card><SectionTitle title="감사 이벤트" sub={`${tl.length}건 · 추가만 가능한 기록`}/><div className="table-wrap"><table><thead><tr><th>시각</th><th>행위자</th><th>이벤트</th><th>내용</th></tr></thead><tbody>
-      {tl.map((t, i) => <tr key={i}><td>{t.at.slice(0, 19)}</td><td>{t.actor_id}</td><td><Badge tone={t.event.includes('REVALIDATION') ? 'red' : t.event === 'APPROVE' ? 'green' : 'slate'}>{t.event}</Badge></td><td className="wrap">{t.detail}</td></tr>)}
+      {tl.map((t, i) => <tr key={i}><td>{t.at.slice(0, 19)}</td><td>{t.actor_id}</td><td><Badge tone={t.event.includes('REVALIDATION') ? 'red' : t.event.startsWith('BASIS') ? 'amber' : t.event === 'APPROVE' ? 'green' : 'slate'}>{t.event}</Badge></td><td className="wrap">{t.detail}</td></tr>)}
     </tbody></table></div></Card>
   </Page>
 }

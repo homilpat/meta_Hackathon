@@ -6,7 +6,15 @@ from collections import Counter
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db import DataQualityIssue, Evidence, QualityCase, SourceAsset, SourceEvent
+from app.db import (
+    DataQualityIssue,
+    Evidence,
+    Prediction,
+    QualityCase,
+    SourceAsset,
+    SourceEvent,
+    XaiArtifact,
+)
 
 APPROVED = ("SYNTHETIC", "APPROVED_FOR_EXTERNAL")
 
@@ -35,6 +43,11 @@ SPECS = [
     _fn("get_evidence", "Fetch evidence rows by evidence_id (max 20).",
         {"evidence_ids": {"type": "array", "items": {"type": "string"}, "maxItems": 20}}, ["evidence_ids"]),
     _fn("check_data_integrity", "List recorded data-quality issues (duplicates, missing AOI, corrections).", {}),
+    _fn("get_prediction", "SPI-only risk model scores for this case's boards (citable as PRED-n). "
+        "Model output on a SYNTHETIC_LABEL, not an inspection result.",
+        {"panel_id": {"type": "string"}, "board_id": {"type": "string"}}),
+    _fn("explain_prediction", "TreeSHAP attribution of one prediction's score (citable as XAI-n). "
+        "Explains the model, not the physical cause.", {"prediction_id": {"type": "integer"}}, ["prediction_id"]),
 ]
 ARGS = {s["function"]["name"]: set(s["function"]["parameters"]["properties"]) for s in SPECS}
 
@@ -90,6 +103,33 @@ class EvidenceTools:
         found = self._rows(Evidence.evidence_id.in_(evidence_ids))
         have = {r["evidence_id"] for r in found}
         return {"evidence": found, "not_found": sorted(set(evidence_ids) - have)}
+
+    def _predictions(self) -> list[Prediction]:
+        self._rows()  # same egress gate as raw evidence: derived values inherit their sources' rights
+        return list(self.session.scalars(select(Prediction).where(Prediction.case_id == self.case_id)
+                                         .order_by(Prediction.id)))
+
+    def get_prediction(self, panel_id: str | None = None, board_id: str | None = None) -> dict:
+        rows = [p for p in self._predictions()
+                if (panel_id is None or p.target_key[0] == panel_id)
+                and (board_id is None or p.target_key[1] == board_id)]
+        return {"predictions": [{"evidence_id": f"PRED-{p.id}", "prediction_id": p.id, "target_key": p.target_key,
+                                 "risk_score": round(p.risk_score, 4), "threshold": round(p.threshold, 4),
+                                 "above_threshold": p.above_threshold, "input_evidence_ids": p.input_evidence_ids}
+                                for p in rows],
+                "note": "Model output on SYNTHETIC_LABEL data; not an inspection result."}
+
+    def explain_prediction(self, prediction_id: int) -> dict:
+        if not isinstance(prediction_id, int):
+            raise ToolError("prediction_id must be an integer")
+        p = next((p for p in self._predictions() if p.id == prediction_id), None)
+        if p is None:
+            raise ToolError("prediction not found in this case")
+        x = self.session.scalar(select(XaiArtifact).where(XaiArtifact.prediction_id == p.id))
+        return {"evidence_id": f"XAI-{x.id}", "method": x.method, "baseline_log_odds": round(x.baseline, 4),
+                "contributions_log_odds": {k: round(v, 4) for k, v in
+                                           sorted(x.contributions.items(), key=lambda kv: -abs(kv[1]))},
+                "note": "SHAP attributes the model score; it is not evidence of a physical defect cause."}
 
     def check_data_integrity(self) -> dict:
         issues = self.session.scalars(select(DataQualityIssue).where(

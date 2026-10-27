@@ -8,7 +8,7 @@ from statistics import mean
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db import Evidence, SourceAsset, SourceEvent
+from app.db import Evidence, ModelVersion, Prediction, SourceAsset, SourceEvent, XaiArtifact
 
 BUILDER = "DETERMINISTIC_TEMPLATE_NO_AI"
 CLASSES = ("OBSERVED", "CALCULATED", "HYPOTHESIS", "UNKNOWN")
@@ -44,6 +44,28 @@ def _evidence(session: Session, case_id: str) -> list[dict]:
              "rec": json.loads(e.raw_json), "version": a.source_version} for v, e, a in rows]
 
 
+def latest_spi_by_board(items: list[dict]) -> dict[tuple, list[dict]]:
+    """SPI evidence per (panel, board): one measurement per source row; the corrected version wins."""
+    latest: dict[tuple, dict[str, dict]] = {}
+    for i in items:
+        if i["type"] == "spi_measurements":
+            rows = latest.setdefault(tuple(i["key"][:2]), {})
+            old = rows.get(i["rec"]["original_row_id"])
+            if old is None or i["version"] > old["version"]:
+                rows[i["rec"]["original_row_id"]] = i
+    return {k: list(v.values()) for k, v in latest.items()}
+
+
+def derived_records(session: Session, case_id: str) -> dict[str, dict]:
+    """Citable model evidence (PRED-n, XAI-n) with the fields a claim may compute from."""
+    out: dict[str, dict] = {}
+    for p in session.scalars(select(Prediction).where(Prediction.case_id == case_id)):
+        out[f"PRED-{p.id}"] = {"risk_score": p.risk_score, "threshold": p.threshold, "target_key": p.target_key}
+        for x in session.scalars(select(XaiArtifact).where(XaiArtifact.prediction_id == p.id)):
+            out[f"XAI-{x.id}"] = {"baseline": x.baseline, "raw_score": x.raw_score, **x.contributions}
+    return out
+
+
 def build_claims(session: Session, case_id: str) -> list[dict]:
     items = _evidence(session, case_id)
     claims: list[dict] = []
@@ -55,6 +77,7 @@ def build_claims(session: Session, case_id: str) -> list[dict]:
     def of(kind: str) -> list[dict]:
         return [i for i in items if i["type"] == kind]
 
+    spi_by_board = latest_spi_by_board(items)
     aoi = {}
     for i in of("aoi_inspections"):  # first record wins; S1 already flags duplicate inspections
         aoi.setdefault((*i["key"], i["rec"]["inspection_id"]), i)
@@ -75,14 +98,8 @@ def build_claims(session: Session, case_id: str) -> list[dict]:
         if repair:
             add("OBSERVED", f"Repair disposition for {insp} on {panel}/{board}: {repair['rec']['disposition']}.",
                 [repair["ev"]])
-        latest: dict[str, dict] = {}  # one measurement per source row; the corrected version wins
-        for i in of("spi_measurements"):
-            if i["key"][:2] == (panel, board):
-                old = latest.get(i["rec"]["original_row_id"])
-                if old is None or i["version"] > old["version"]:
-                    latest[i["rec"]["original_row_id"]] = i
-        if latest:
-            spi = list(latest.values())
+        spi = spi_by_board.get((panel, board), [])
+        if spi:
             avg = round(mean(i["rec"]["volume_mm3"] for i in spi), 4)
             add("CALCULATED", f"Mean SPI solder volume on {panel}/{board} is {avg} mm3 over {len(spi)} "
                 "pin measurements (latest source version per row).", [i["ev"] for i in spi], avg, "mm3")
@@ -95,6 +112,17 @@ def build_claims(session: Session, case_id: str) -> list[dict]:
         if board["key"] not in inspected:
             add("UNKNOWN", f"No AOI inspection recorded for board {'/'.join(board['key'])}; "
                 "a missing record is not a PASS.", [board["ev"]])
+    for p in session.scalars(select(Prediction).where(Prediction.case_id == case_id).order_by(Prediction.id)):
+        mv = session.get(ModelVersion, p.model_version_id)
+        x = session.scalar(select(XaiArtifact).where(XaiArtifact.prediction_id == p.id))
+        board = "/".join(p.target_key)
+        add("CALCULATED", f"SPI risk model {mv.name} v{mv.id} scored {board} at {p.risk_score:.3f} "
+            f"(threshold {p.threshold:.3f}, {mv.label_kind}). Model output, not an inspection result.",
+            [f"PRED-{p.id}", *p.input_evidence_ids], round(p.risk_score, 4), "score")
+        top = sorted(x.contributions.items(), key=lambda kv: -abs(kv[1]))[:3]
+        add("CALCULATED", f"Largest SHAP contributions to the {board} score: "
+            + ", ".join(f"{k} {v:+.2f}" for k, v in top)
+            + " (log-odds). SHAP explains the model score, not the physical defect cause.", [f"XAI-{x.id}"])
     add("UNKNOWN", "Root cause, containment scope and lot impact are not determined; "
         "no investigation has been performed.", [])
     return claims

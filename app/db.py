@@ -63,7 +63,8 @@ class Evidence(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"))
-    source_event_id: Mapped[int] = mapped_column(ForeignKey("source_events.id"))
+    # NULL for derived evidence (MODEL_PREDICTION / XAI_EXPLANATION) that has no source row
+    source_event_id: Mapped[int | None] = mapped_column(ForeignKey("source_events.id"))
     evidence_id: Mapped[str] = mapped_column(String(30))
     classification: Mapped[str] = mapped_column(String(30))
     validity: Mapped[str] = mapped_column(String(30))
@@ -208,4 +209,54 @@ class ToolCall(Base):
     result_sha256: Mapped[str | None] = mapped_column(String(64))
     ok: Mapped[bool]
     error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class ModelVersion(Base):
+    __tablename__ = "model_versions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(60))
+    algorithm: Mapped[str] = mapped_column(String(40))
+    label_kind: Mapped[str] = mapped_column(String(30))  # SYNTHETIC_LABEL until a real label is validated
+    seed: Mapped[int] = mapped_column(Integer)
+    train_data_sha256: Mapped[str] = mapped_column(String(64))
+    feature_schema_sha256: Mapped[str] = mapped_column(String(64))
+    features: Mapped[list] = mapped_column(JSON)
+    split: Mapped[dict] = mapped_column(JSON)
+    metrics: Mapped[dict] = mapped_column(JSON)
+    threshold: Mapped[float]
+    artifact_sha256: Mapped[str] = mapped_column(String(64))
+    artifact_text: Mapped[str] = mapped_column(Text)
+    library_versions: Mapped[dict] = mapped_column(JSON)
+    trained_at: Mapped[str] = mapped_column(String(40))
+
+
+class Prediction(Base):
+    __tablename__ = "predictions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"))
+    model_version_id: Mapped[int] = mapped_column(ForeignKey("model_versions.id"))
+    target_key: Mapped[list] = mapped_column(JSON)  # [panel_id, board_id]
+    risk_score: Mapped[float]
+    threshold: Mapped[float]
+    above_threshold: Mapped[bool]
+    features: Mapped[dict] = mapped_column(JSON)
+    input_evidence_ids: Mapped[list] = mapped_column(JSON)
+    input_sha256: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class XaiArtifact(Base):
+    __tablename__ = "xai_artifacts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    prediction_id: Mapped[int] = mapped_column(ForeignKey("predictions.id"))
+    method: Mapped[str] = mapped_column(String(60))
+    baseline: Mapped[float]  # expected raw score (log-odds) over the training data
+    contributions: Mapped[dict] = mapped_column(JSON)  # feature -> log-odds contribution
+    raw_score: Mapped[float]
+    additivity_error: Mapped[float]
+    library_version: Mapped[str] = mapped_column(String(40))
     created_at: Mapped[str] = mapped_column(String(40))

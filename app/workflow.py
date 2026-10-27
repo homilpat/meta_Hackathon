@@ -129,6 +129,19 @@ def _latest(session: Session, case_id: str) -> DocumentVersion | None:
         .order_by(DocumentVersion.version.desc()).limit(1))
 
 
+def run_idempotent(sessions: sessionmaker, endpoint: str, key: str, actor: Actor,
+                   run: Callable[[Session], tuple[int, dict]]) -> JSONResponse:
+    """Run `run` once per (key, user, endpoint); a retry replays the stored response."""
+    with sessions.begin() as session:
+        seen = session.get(IdempotencyKey, (key, actor.id, endpoint))
+        if seen:
+            return JSONResponse(json.loads(seen.response_json), status_code=seen.status_code)
+        status, body = run(session)
+        session.add(IdempotencyKey(key=key, user_id=actor.id, endpoint=endpoint, status_code=status,
+                                   response_json=json.dumps(body)))
+        return JSONResponse(body, status_code=status)
+
+
 def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
                 provider: ModelProvider | None = None) -> APIRouter:
     router = APIRouter()
@@ -136,15 +149,7 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
     IdemKey = Annotated[str, Header(alias="Idempotency-Key", min_length=8, max_length=80)]
 
     def idempotent(endpoint: str, key: str, actor: Actor, run: Callable[[Session], tuple[int, dict]]):
-        """Run `run` once per (key, user, endpoint); a retry replays the stored response."""
-        with sessions.begin() as session:
-            seen = session.get(IdempotencyKey, (key, actor.id, endpoint))
-            if seen:
-                return JSONResponse(json.loads(seen.response_json), status_code=seen.status_code)
-            status, body = run(session)
-            session.add(IdempotencyKey(key=key, user_id=actor.id, endpoint=endpoint, status_code=status,
-                                       response_json=json.dumps(body)))
-            return JSONResponse(body, status_code=status)
+        return run_idempotent(sessions, endpoint, key, actor, run)
 
     @router.get("/me")
     def me(actor: Who) -> dict:

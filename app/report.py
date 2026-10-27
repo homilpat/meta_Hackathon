@@ -6,12 +6,14 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from app.ncr import _evidence
+from app.ncr import _evidence, derived_records
 
 CAUSAL_CERTAINTY = re.compile(
     r"(?i)\b(root cause (is|was|has been)|(is|was|are|were) caused by|caused by|proves?|proven|"
     r"definitely|certainly|confirmed (as )?(the )?(root )?cause)\b")
-EVIDENCE_REF = re.compile(r"\bEV-[0-9a-f]{20}\b")
+EVIDENCE_REF = re.compile(r"\b(?:EV-[0-9a-f]{20}|PRED-\d+|XAI-\d+)\b")
+SHAP_AS_CAUSE = re.compile(r"(?i)\b(shap|attribution|contribution)s?\b[^.]*\b(caused|causes|due to|"
+                           r"responsible for|led to|because)\b")
 URL = re.compile(r"(?i)https?://|www\.")
 TOLERANCE = 1e-4
 
@@ -60,7 +62,7 @@ def _expected(calc: Calc, finding: Finding, records: dict[str, dict]) -> float:
 
 def validate_report(session: Session, case_id: str, report: InvestigationReport) -> list[str]:
     """Return every rule violation; an empty list means the report may be used."""
-    records = {i["ev"]: i["rec"] for i in _evidence(session, case_id)}
+    records = {i["ev"]: i["rec"] for i in _evidence(session, case_id)} | derived_records(session, case_id)
     errors: list[str] = []
     for n, f in enumerate(report.findings, 1):
         tag = f"finding {n}"
@@ -92,6 +94,8 @@ def _text_errors(tag: str, text: str, records: dict[str, dict]) -> list[str]:
     errors = []
     if CAUSAL_CERTAINTY.search(text):
         errors.append(f"{tag}: causal certainty is not allowed")
+    if SHAP_AS_CAUSE.search(text):
+        errors.append(f"{tag}: SHAP attribution is not causal evidence")
     if URL.search(text):
         errors.append(f"{tag}: external source reference is not allowed")
     errors += [f"{tag}: text cites nonexistent {ref}" for ref in sorted(set(EVIDENCE_REF.findall(text)) - set(records))]

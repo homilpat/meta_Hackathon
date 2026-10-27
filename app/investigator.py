@@ -30,6 +30,8 @@ Rules:
   recompute it from the cited records. HYPOTHESIS = possible explanation, worded as a candidate.
   UNKNOWN = what the data cannot tell you (e.g. a board with no AOI record is NOT a pass).
 - Never state a root cause as established. SPI/AOI values alone do not prove causation.
+- get_prediction / explain_prediction return model output (PRED-n / XAI-n ids, citable). A risk score
+  is not an inspection result and SHAP explains the model score, not the physical defect cause.
 - Do not cite outside sources or URLs."""
 
 

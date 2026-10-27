@@ -29,20 +29,22 @@ async function api(path,method='GET',body,idem){
   const t=await r.text(); let j; try{j=JSON.parse(t)}catch{j=t}
   if(!r.ok){$('msg').textContent=r.status+': '+(j.detail?JSON.stringify(j.detail):t);throw new Error(r.status)} $('msg').textContent=''; return j}
 const note=b=>b==='DETERMINISTIC_TEMPLATE_NO_AI'?'no AI model used':'model output, accepted only after server-side ClaimValidator';
+const link=id=>/^(PRED|XAI)-\d+$/.test(id)?`<a href="#" data-ev="${id}">${id}</a>`:esc(id);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 async function loadCases(){ const cs=await api('/cases'); $('cases').innerHTML=cs.map(c=>`<div class="case ${c.case_id===cur?'sel':''}" data-id="${esc(c.case_id)}">${esc(c.case_id)}</div>`).join('')||'<i>none</i>';
   document.querySelectorAll('.case').forEach(e=>e.onclick=()=>{cur=e.dataset.id;loadCases();loadDetail()}); $('new').style.display=$('user').value in {alice:1,dave:1}?'':'none'}
 async function loadDetail(){
-  if(!cur)return; const me=await api('/me'); let ev,iss,docs,tl,runs;
-  try{[ev,iss,docs,tl,runs]=await Promise.all([api(`/cases/${cur}/evidence`),api(`/cases/${cur}/data-issues`),api(`/cases/${cur}/ncr`),api(`/cases/${cur}/timeline`),api(`/cases/${cur}/investigations`)])}
+  if(!cur)return; const me=await api('/me'); let ev,iss,docs,tl,runs,preds;
+  try{[ev,iss,docs,tl,runs,preds]=await Promise.all([api(`/cases/${cur}/evidence`),api(`/cases/${cur}/data-issues`),api(`/cases/${cur}/ncr`),api(`/cases/${cur}/timeline`),api(`/cases/${cur}/investigations`),api(`/cases/${cur}/predictions`)])}
   catch{$('detail').innerHTML='<section>No access to this case.</section>';return}
   const author=me.role==='AUTHOR', latest=docs[docs.length-1];
   let h=`<section><h2>Case ${esc(cur)}</h2>Evidence rows: ${ev.length} · data-quality issues: ${iss.length} (${[...new Set(iss.map(i=>i.code))].join(', ')})
    <br><button id="mk" ${author?'':'disabled'}>Create NCR draft</button><button id="as" ${author?'':'disabled'}>Assign bob as reviewer</button></section>`;
+  h+=`<section><h2>SPI risk model (synthetic label)</h2><button id="pr" ${author?'':'disabled'}>Score boards with SPI model</button><p style="font-size:12px">Model output, not an inspection result. SHAP explains the model score, not the physical cause.</p>`+(preds.length?`<table><tr><th>Board</th><th>Risk</th><th>Threshold</th><th>Evidence</th></tr>${preds.map(p=>`<tr><td>${esc(p.target_key.join('/'))}</td><td>${p.risk_score.toFixed(3)}${p.above_threshold?' ▲':''}</td><td>${p.threshold.toFixed(3)}</td><td>${link(p.evidence_id)} ${link(p.xai_evidence_id)}</td></tr>`).join('')}</table>`:'')+`<div id="pd"></div></section>`;
   h+=`<section><h2>Model investigations</h2><button id="inv" ${author?'':'disabled'}>Run investigation (LIVE Meta model)</button>`+runs.map(r=>`<div style="border-top:1px solid #d9dde3;margin-top:8px;padding-top:6px"><b>Run ${r.run_id}</b> <span class="${r.mode}">${r.mode==='LIVE'?'LIVE Meta call':'TEST DOUBLE — not a Meta call'}</span> ${esc(r.model)} · <b>${r.status}</b> · rounds ${r.rounds} · tokens ${r.prompt_tokens}/${r.completion_tokens}<br>Tool calls: ${r.tool_calls.map(c=>`${esc(c.tool_name)}${c.ok?'':' (failed)'}`).join(', ')||'none'}${r.error?`<br>Error: ${esc(r.error)}`:''}${r.validation_errors.length?`<br>Rejected: ${r.validation_errors.map(esc).join('; ')}`:''}${r.report?`<br>Summary: ${esc(r.report.summary)}`:''}${author&&r.status==='VALIDATED'?`<br><button data-run="${r.run_id}">Create NCR from run ${r.run_id}</button>`:''}</div>`).join('')+`</section>`;
   for(const d of docs){ const mine=d.author_id===me.id, isLatest=d===latest;
     h+=`<section><h2>NCR v${d.version} — ${d.status}</h2><div class="banner">Draft generator: ${esc(d.builder)} (${note(d.builder)}). Author: ${esc(d.author_id)}</div>
-    <table><tr><th>ID</th><th>Class</th><th>Statement</th><th>Evidence</th></tr>${d.claims.map(c=>`<tr><td>${c.claim_id}</td><td class="${c.classification}">${c.classification}</td><td>${esc(c.text)}</td><td>${esc(c.evidence_ids.join(', ')||'-')}</td></tr>`).join('')}</table>
+    <table><tr><th>ID</th><th>Class</th><th>Statement</th><th>Evidence</th></tr>${d.claims.map(c=>`<tr><td>${c.claim_id}</td><td class="${c.classification}">${c.classification}</td><td>${esc(c.text)}</td><td>${c.evidence_ids.map(link).join(', ')||'-'}</td></tr>`).join('')}</table>
     <p>SHA-256 <code>${d.content_sha256}</code> · <a href="#" data-html="${d.version}">open HTML</a></p>
     ${d.decisions.map(x=>`<p>${x.action} by ${esc(x.actor_id)}: ${esc(x.comment)}</p>`).join('')}
     ${author&&mine&&isLatest&&d.status==='DRAFT'?`<button data-rr="${d.version}">Request review from bob</button><button data-rr="${d.version}" data-who="carol">…from carol</button>`:''}
@@ -50,6 +52,8 @@ async function loadDetail(){
   h+=`<section><h2>Audit timeline</h2><table>${tl.map(t=>`<tr><td>${t.at}</td><td>${esc(t.actor_id)}</td><td>${t.event}</td><td>${esc(t.detail)}</td></tr>`).join('')}</table></section>`;
   $('detail').innerHTML=h;
   $('mk').onclick=async()=>{await api(`/cases/${cur}/ncr`,'POST',{},uid());loadDetail()};
+  $('pr').onclick=async()=>{await api('/models/train','POST',{seed:11});await api(`/cases/${cur}/predictions`,'POST',{},uid());loadDetail()};
+  document.querySelectorAll('[data-ev]').forEach(a=>a.onclick=e=>{e.preventDefault();showPred(a.dataset.ev,preds)});
   $('inv').onclick=async()=>{$('msg').textContent='Investigation running…';await api(`/cases/${cur}/investigations`,'POST',{},uid());loadDetail()};
   document.querySelectorAll('[data-run]').forEach(b=>b.onclick=async()=>{await api(`/cases/${cur}/ncr`,'POST',{investigation_run_id:+b.dataset.run},uid());loadDetail()});
   $('as').onclick=async()=>{await api(`/cases/${cur}/assignments`,'POST',{user_id:'bob'});loadDetail()};
@@ -57,6 +61,9 @@ async function loadDetail(){
   document.querySelectorAll('[data-dec]').forEach(b=>b.onclick=async()=>{const c=$('cm').value;await api(`/cases/${cur}/ncr/${b.dataset.v}/decision`,'POST',{decision:b.dataset.dec,comment:c,content_sha256:b.dataset.sha},uid());loadDetail()});
   document.querySelectorAll('[data-html]').forEach(a=>a.onclick=async e=>{e.preventDefault();const w=window.open('');w.document.write(await (await fetch(`/cases/${cur}/ncr/${a.dataset.html}/html`,{headers:{'X-User':$('user').value}})).text())});
 }
+function showPred(id,preds){const p=preds.find(p=>p.evidence_id===id||p.xai_evidence_id===id);const box=$('pd');if(!p){box.textContent='Not found';return}
+  const max=Math.max(...Object.values(p.xai.contributions).map(Math.abs));
+  box.innerHTML=`<h2>${esc(p.evidence_id)} / ${esc(p.xai_evidence_id)} — board ${esc(p.target_key.join('/'))}</h2>Risk ${p.risk_score.toFixed(4)} (threshold ${p.threshold.toFixed(4)}) · model v${p.model.model_version_id} ${esc(p.model.algorithm)} · ${esc(p.model.label_kind)}<br>Inputs: ${p.input_evidence_ids.map(esc).join(', ')}<br>Input hash <code>${p.input_sha256}</code> · artifact <code>${p.model.artifact_sha256}</code><br>${esc(p.xai.method)} · baseline ${p.xai.baseline.toFixed(3)} log-odds · additivity error ${p.xai.additivity_error.toExponential(1)}<table>${Object.entries(p.xai.contributions).map(([k,v])=>`<tr><td>${esc(k)}</td><td>${p.features[k].toFixed(4)}</td><td>${v>=0?'+':''}${v.toFixed(3)}</td><td><div style="height:8px;width:${Math.round(120*Math.abs(v)/max)}px;background:${v>=0?'#b5523b':'#3b6fb5'}"></div></td></tr>`).join('')}</table><p class="banner">${esc(p.note)}</p>`;box.scrollIntoView()}
 $('new').onclick=async()=>{const id='PCB-'+Date.now().toString(36).toUpperCase(); await api('/cases','POST',{case_id:id}); const b=await (await fetch('/synthetic/7')).json(); await api(`/cases/${id}/sources`,'POST',b); cur=id; await loadCases(); loadDetail()};
 $('user').onchange=()=>{loadCases();loadDetail()}; loadCases();
 </script></html>

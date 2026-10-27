@@ -34,7 +34,14 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000
 demo user in the header: alice/dave (author), bob/carol (NCR reviewer), erin (QA/Production), frank (process
 engineer). Demo identities are selected by the `X-User` header with no password; this is not real authentication.
 
-## Demo walk-through (UI)
+## Web UI
+
+`http://127.0.0.1:8000/app/` is the main UI (React + Vite, source in `web/`, design started in Figma Make and wired
+to the API; every value shown comes from the API). The built files are committed in `app/static/web/`, so Node is
+not needed to run it. To change the UI: `cd web && npm install && npm run dev` (proxies the API to :8000), then
+`npm run build` to update `app/static/web/`. The older single-file UI at `/ui` is kept as a fallback.
+
+## Demo walk-through (`/ui` labels; `/app` has the same steps)
 
 1. As alice: **New synthetic PCB case**, then **Assign bob, erin, frank as reviewers**.
 2. **Score boards with SPI model** (optional) — click a `PRED-n`/`XAI-n` id for the SHAP view.

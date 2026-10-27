@@ -6,6 +6,7 @@ from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
@@ -13,7 +14,7 @@ from sqlalchemy.orm import sessionmaker
 from app.db import Assignment, DataQualityIssue, Evidence, QualityCase, SourceAsset, SourceEvent
 from app.ingestion import SyntheticBundle, normalize
 from app.ml_api import make_ml_router
-from app.model_provider import MetaProvider, ModelProvider
+from app.model_provider import MODEL, MetaProvider, ModelProvider
 from app.synthetic import canonical, generate, spi_correction
 from app.workflow import Actor, make_auth, make_router, require_case, require_role
 
@@ -174,16 +175,25 @@ def create_app(database_url: str = "sqlite:///qualityops.db",
         return generate(seed)
 
     @app.get("/synthetic/{seed}/spi-correction")
-    def synthetic_correction(seed: int, row_id: str = "SPI-P02-B01-1") -> dict:
+    def synthetic_correction(seed: int, row_id: str = "SPI-P02-B01-1", version: int = 3) -> dict:
         try:
-            return spi_correction(seed, row_id)
+            return spi_correction(seed, row_id, version=version)
         except StopIteration:
             raise HTTPException(404, "No such SPI row in the fixture") from None
+
+    @app.get("/provider")
+    def provider_status() -> dict:
+        """What an investigation would call. No key or secret is ever returned."""
+        p = app.state.provider
+        return {"model": p.model if p else MODEL, "mode": p.mode if p else None, "configured": p is not None}
 
     @app.get("/ui", include_in_schema=False)
     def ui() -> FileResponse:
         return FileResponse(Path(__file__).parent / "static" / "index.html")
 
+    web = Path(__file__).parent / "static" / "web"  # built React UI (web/), if present
+    if web.is_dir():
+        app.mount("/app", StaticFiles(directory=web, html=True), name="web")
     return app
 
 

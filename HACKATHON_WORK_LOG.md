@@ -41,4 +41,5 @@
 - `python -m ruff check .`: exit 0; `python -m alembic upgrade head`: exit 0; `python -m alembic check`: exit 0, no schema drift.
 - Live local HTTP: `POST /cases` 201, `POST /cases/DEMO-1/sources` 201 with 12 assets / 42 events / five distinct issue types; `GET /data-issues`, filtered `/events`, `/sources`, `/evidence` returned 200. Source count 12 and evidence count 42. Local server stopped after the smoke.
 - Secret/data check and GitHub CI: to be recorded after staging/push. Meta API: **NOT TESTED** (S1 does not call it; `.env` is ignored and local only).
+- S1 implementation commit: `33a775b` (`Implement S1 synthetic PCB sources and evidence lineage`). Staged secret scan and `git diff --cached --check` found no matches/errors; UCI ZIP and synthetic output were absent from the commit.
 

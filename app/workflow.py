@@ -11,10 +11,11 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app import investigator, ncr
+from app import history, investigator, ncr
 from app.db import (
     ApprovalEvent,
     Assignment,
+    CaseLink,
     DocumentClaim,
     DocumentVersion,
     Evidence,
@@ -61,6 +62,16 @@ class NcrCreate(BaseModel):
 
 class Assign(BaseModel):
     user_id: str
+
+
+class InvestigateIn(BaseModel):
+    use_history: bool = True
+
+
+class LinkIn(BaseModel):
+    historical_case_id: str
+    decision: Literal["ACCEPTED", "REJECTED"]
+    note: str = ""
 
 
 def make_auth(sessions: sessionmaker) -> Callable[..., Actor]:
@@ -300,7 +311,8 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
         return idempotent(f"decision:{case_id}:{version}", key, actor, run)
 
     @router.post("/cases/{case_id}/investigations")
-    def start_investigation(case_id: str, key: IdemKey, actor: Who):
+    def start_investigation(case_id: str, key: IdemKey, actor: Who, body: InvestigateIn | None = None):
+        use_history = (body or InvestigateIn()).use_history
         require_role(actor, "AUTHOR")
         if provider is None:
             raise HTTPException(503, "LIVE model provider not configured (MODEL_API_KEY unset); no mock fallback")
@@ -311,13 +323,44 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
                 raise HTTPException(422, "Only SYNTHETIC cases may be sent to an external model")
             if not session.scalar(select(Evidence.id).where(Evidence.case_id == case_id).limit(1)):
                 raise HTTPException(422, "Case has no evidence; upload sources first")
-            mrun = investigator.investigate(session, case_id, actor.id, provider)
+            mrun = investigator.investigate(session, case_id, actor.id, provider, use_history)
             log(session, case_id, actor, "INVESTIGATION_RUN",
-                f"run{mrun.id} mode={mrun.mode} model={mrun.model} status={mrun.status}")
+                f"run{mrun.id} mode={mrun.mode} model={mrun.model} history={'ON' if use_history else 'OFF'} "
+                f"status={mrun.status}")
             session.flush()
             return 201, investigator.run_out(session, mrun)
 
         return idempotent(f"investigate:{case_id}", key, actor, run)
+
+    @router.get("/cases/{case_id}/history")
+    def case_history(case_id: str, actor: Who) -> dict:
+        with sessions.begin() as session:
+            require_case(session, case_id, actor)
+            prof = history.case_profile(session, case_id)
+            return {"profile": prof.boards, **history.retrieve(session, prof)}
+
+    @router.get("/cases/{case_id}/next-evidence")
+    def next_evidence(case_id: str, actor: Who, history_mode: Literal["on", "off"] = "on") -> dict:
+        with sessions.begin() as session:
+            require_case(session, case_id, actor)
+            prof = history.case_profile(session, case_id)
+            found = history.retrieve(session, prof) if history_mode == "on" else None
+            return {**history.plan_next_evidence(prof, found),
+                    "precedents": found["precedents"] if found else [], "status": found["status"] if found else None}
+
+    @router.post("/cases/{case_id}/history/links", status_code=201)
+    def link_precedent(case_id: str, body: LinkIn, actor: Who) -> dict:
+        require_role(actor, "AUTHOR")
+        with sessions.begin() as session:
+            require_case(session, case_id, actor)
+            eligible = {p["historical_case_id"] for p in
+                        history.retrieve(session, history.case_profile(session, case_id))["precedents"]}
+            if body.historical_case_id not in eligible:
+                raise HTTPException(422, "Precedent is not eligible for this case")
+            session.add(CaseLink(case_id=case_id, historical_case_id=body.historical_case_id,
+                                 decision=body.decision, note=body.note, actor_id=actor.id, created_at=now()))
+            log(session, case_id, actor, f"PRECEDENT_{body.decision}", f"{body.historical_case_id}: {body.note}")
+        return {"case_id": case_id, **body.model_dump()}
 
     @router.get("/cases/{case_id}/investigations")
     def list_investigations(case_id: str, actor: Who) -> list[dict]:

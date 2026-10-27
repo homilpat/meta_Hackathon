@@ -31,7 +31,7 @@ class CaseCreate(BaseModel):
 
 def create_app(database_url: str = "sqlite:///qualityops.db",
                provider: ModelProvider | None = None) -> FastAPI:
-    app = FastAPI(title="QualityOps AI", version="0.4.0")
+    app = FastAPI(title="QualityOps AI", version="0.5.0")
     engine = create_engine(database_url)
     sessions = sessionmaker(engine)
     app.state.engine = engine
@@ -44,7 +44,7 @@ def create_app(database_url: str = "sqlite:///qualityops.db",
 
     @app.get("/health", response_model=Health)
     def health() -> Health:
-        return Health(status="ok", stage="S4")
+        return Health(status="ok", stage="S5")
 
     @app.post("/cases", status_code=201)
     def create_case(payload: CaseCreate, actor: Who) -> dict:

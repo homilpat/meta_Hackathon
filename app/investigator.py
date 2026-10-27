@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.db import ModelRun, ToolCall
 from app.model_provider import ModelProvider, ProviderError
 from app.report import InvestigationReport, validate_report
-from app.tools import SPECS, EvidenceTools, ToolError
+from app.tools import EvidenceTools, ToolError
 
 MAX_ROUNDS = 5
 MAX_TOOL_CALLS = 8
@@ -22,7 +22,7 @@ DEADLINE_SECONDS = 90
 SYSTEM_PROMPT = """You investigate a synthetic PCB quality case using read-only tools.
 Rules:
 - Call tools first; never answer from memory. Cite only evidence_id values returned by tools.
-- Final answer: ONLY a JSON object {"summary": str, "findings": [{"classification":
+- Final answer: ONLY a JSON object {"summary": str, "next_evidence_requests": [...], "findings": [{"classification":
   "OBSERVED|CALCULATED|HYPOTHESIS|UNKNOWN", "text": str, "evidence_ids": [str], "value": number|null,
   "unit": str|null, "calc": {"op": "mean|sum|count|ratio", "field": str|null,
   "numerator_evidence_ids": [str], "denominator_evidence_ids": [str]}|null}], "open_questions": [str]}.
@@ -32,6 +32,10 @@ Rules:
 - Never state a root cause as established. SPI/AOI values alone do not prove causation.
 - get_prediction / explain_prediction return model output (PRED-n / XAI-n ids, citable). A risk score
   is not an inspection result and SHAP explains the model score, not the physical defect cause.
+- If history tools are offered: past incidents (H01...) are retrieval candidates, not evidence about
+  this case. Use them only to choose next_evidence_requests (check, reason, evidence_ids,
+  precedent_ids, discriminates). Never recommend an action whose past outcome was FAILED or
+  INSUFFICIENT, and never treat UNKNOWN outcomes as success.
 - Do not cite outside sources or URLs."""
 
 
@@ -46,10 +50,11 @@ def _parse_report(content: str) -> InvestigationReport:
     return InvestigationReport.model_validate(json.loads(text))
 
 
-def investigate(session: Session, case_id: str, user_id: str, provider: ModelProvider) -> ModelRun:
+def investigate(session: Session, case_id: str, user_id: str, provider: ModelProvider,
+                use_history: bool = False) -> ModelRun:
     """Run the loop and persist the run. Never raises for model/provider problems."""
     started = _now()
-    tools = EvidenceTools(session, case_id)
+    tools = EvidenceTools(session, case_id, use_history)
     messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT},
                             {"role": "user", "content": f"Investigate case {case_id}. Use the tools, then report."}]
     calls: list[dict] = []
@@ -61,7 +66,7 @@ def investigate(session: Session, case_id: str, user_id: str, provider: ModelPro
                 status, error = "LIMIT_EXCEEDED", "round, time or token limit reached without a final report"
                 break
             rounds += 1
-            reply = provider.chat(messages, SPECS)
+            reply = provider.chat(messages, tools.specs())
             usage = reply.get("usage") or {}
             ptok += int(usage.get("prompt_tokens") or 0)
             ctok += int(usage.get("completion_tokens") or 0)
@@ -84,11 +89,18 @@ def investigate(session: Session, case_id: str, user_id: str, provider: ModelPro
         status, error = "FAILED", f"provider: {exc}"
     errors: list[str] = []
     if report is not None:
-        errors = validate_report(session, case_id, report)
+        precedents = None
+        if use_history:
+            try:
+                precedents = tools.retrieve_historical_cases()["precedents"]
+            except ToolError:  # history unavailable (e.g. egress denied): nothing may be cited
+                precedents = []
+        errors = validate_report(session, case_id, report, precedents)
         if not any(c["ok"] for c in calls):
             errors.append("report was not grounded in any successful tool call")
         status = "VALIDATION_FAILED" if errors else "VALIDATED"
     run = ModelRun(case_id=case_id, requested_by=user_id, model=provider.model, mode=provider.mode,
+                   history_enabled=use_history,
                    status=status, rounds=rounds, prompt_tokens=ptok, completion_tokens=ctok, error=error,
                    report_json=report.model_dump_json() if report else None, validation_errors=errors,
                    started_at=started, finished_at=_now())
@@ -122,6 +134,7 @@ def _run_tool(tools: EvidenceTools, call: dict, over_budget: bool) -> dict:
 def run_out(session: Session, run: ModelRun) -> dict:
     calls = session.scalars(select(ToolCall).where(ToolCall.model_run_id == run.id).order_by(ToolCall.id)).all()
     return {"run_id": run.id, "case_id": run.case_id, "mode": run.mode, "model": run.model,
+            "history": "ON" if run.history_enabled else "OFF",
             "status": run.status, "rounds": run.rounds, "error": run.error,
             "prompt_tokens": run.prompt_tokens, "completion_tokens": run.completion_tokens,
             "validation_errors": run.validation_errors, "started_at": run.started_at,

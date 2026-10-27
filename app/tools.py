@@ -49,15 +49,24 @@ SPECS = [
     _fn("explain_prediction", "TreeSHAP attribution of one prediction's score (citable as XAI-n). "
         "Explains the model, not the physical cause.", {"prediction_id": {"type": "integer"}}, ["prediction_id"]),
 ]
-ARGS = {s["function"]["name"]: set(s["function"]["parameters"]["properties"]) for s in SPECS}
+HISTORY_SPECS = [
+    _fn("retrieve_historical_cases", "Eligible past incidents (same site, approved, available before this case, "
+        "external-approved) ranked by pattern similarity. Similarity is not causal evidence.", {}),
+    _fn("get_historical_case_outcome", "Checks, actions and verified outcome statuses for one eligible precedent.",
+        {"historical_case_id": {"type": "string"}}, ["historical_case_id"]),
+]
+ARGS = {s["function"]["name"]: set(s["function"]["parameters"]["properties"]) for s in SPECS + HISTORY_SPECS}
 
 
 class EvidenceTools:
-    def __init__(self, session: Session, case_id: str):
-        self.session, self.case_id = session, case_id
+    def __init__(self, session: Session, case_id: str, use_history: bool = False):
+        self.session, self.case_id, self.use_history = session, case_id, use_history
+
+    def specs(self) -> list[dict]:
+        return SPECS + HISTORY_SPECS if self.use_history else SPECS
 
     def call(self, name: str, args: dict) -> dict:
-        if name not in ARGS:
+        if name not in ARGS or (not self.use_history and name in {s["function"]["name"] for s in HISTORY_SPECS}):
             raise ToolError(f"unknown tool {name!r}")
         if not isinstance(args, dict) or set(args) - ARGS[name]:
             raise ToolError(f"invalid arguments for {name}")
@@ -130,6 +139,18 @@ class EvidenceTools:
                 "contributions_log_odds": {k: round(v, 4) for k, v in
                                            sorted(x.contributions.items(), key=lambda kv: -abs(kv[1]))},
                 "note": "SHAP attributes the model score; it is not evidence of a physical defect cause."}
+
+    def retrieve_historical_cases(self) -> dict:
+        from app import history
+        self._rows()
+        return history.retrieve(self.session, history.case_profile(self.session, self.case_id))
+
+    def get_historical_case_outcome(self, historical_case_id: str) -> dict:
+        found = next((p for p in self.retrieve_historical_cases()["precedents"]
+                      if p["historical_case_id"] == historical_case_id), None)
+        if found is None:
+            raise ToolError("precedent not found or not eligible for this case")
+        return found
 
     def check_data_integrity(self) -> dict:
         issues = self.session.scalars(select(DataQualityIssue).where(

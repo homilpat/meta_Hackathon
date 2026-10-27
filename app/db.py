@@ -188,6 +188,7 @@ class ModelRun(Base):
     model: Mapped[str] = mapped_column(String(60))
     mode: Mapped[str] = mapped_column(String(20))  # LIVE | TEST_DOUBLE
     status: Mapped[str] = mapped_column(String(24))  # VALIDATED VALIDATION_FAILED FAILED JSON_ERROR LIMIT_EXCEEDED
+    history_enabled: Mapped[bool] = mapped_column(default=False, server_default="0")
     rounds: Mapped[int] = mapped_column(Integer)
     prompt_tokens: Mapped[int] = mapped_column(Integer)
     completion_tokens: Mapped[int] = mapped_column(Integer)
@@ -259,4 +260,72 @@ class XaiArtifact(Base):
     raw_score: Mapped[float]
     additivity_error: Mapped[float]
     library_version: Mapped[str] = mapped_column(String(40))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class HistoricalCase(Base):
+    """One snapshot of a closed past incident. SYNTHETIC bank in this project."""
+
+    __tablename__ = "historical_cases"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    historical_case_id: Mapped[str] = mapped_column(String(20), unique=True)
+    snapshot_version: Mapped[int] = mapped_column(Integer)
+    family: Mapped[str] = mapped_column(String(20))
+    bank_version: Mapped[str] = mapped_column(String(30))
+    site: Mapped[str] = mapped_column(String(40))
+    source_origin: Mapped[str] = mapped_column(String(20))
+    sensitivity: Mapped[str] = mapped_column(String(40))
+    review_status: Mapped[str] = mapped_column(String(20))  # APPROVED | DRAFT | RETRACTED
+    superseded_by: Mapped[str | None] = mapped_column(String(20))
+    process_stage: Mapped[str] = mapped_column(String(40))
+    measurement_pattern: Mapped[str] = mapped_column(String(40))
+    aoi_pattern: Mapped[str] = mapped_column(String(40))
+    incident_at: Mapped[str] = mapped_column(String(40))
+    available_at: Mapped[str] = mapped_column(String(40))
+    summary: Mapped[str] = mapped_column(Text)
+    limitations: Mapped[list] = mapped_column(JSON)
+    source_version_hash: Mapped[str] = mapped_column(String(64))
+
+
+class HistoricalEvidence(Base):
+    __tablename__ = "historical_evidence"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    historical_case_id: Mapped[int] = mapped_column(ForeignKey("historical_cases.id"))
+    ref_id: Mapped[str] = mapped_column(String(30))
+    description: Mapped[str] = mapped_column(Text)
+
+
+class HistoricalOutcome(Base):
+    """A check that was run and/or an action that was taken, with its observed status."""
+
+    __tablename__ = "historical_outcomes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    historical_case_id: Mapped[int] = mapped_column(ForeignKey("historical_cases.id"))
+    check: Mapped[str] = mapped_column(String(40))
+    check_result: Mapped[str] = mapped_column(Text)
+    check_status: Mapped[str] = mapped_column(String(20))
+    action: Mapped[str | None] = mapped_column(String(40))
+    action_status: Mapped[str] = mapped_column(String(20))  # NONE | PROPOSED | EXECUTED
+    outcome_status: Mapped[str] = mapped_column(String(20))  # VERIFIED | INSUFFICIENT | FAILED | UNKNOWN
+    metric: Mapped[str | None] = mapped_column(String(60))
+    before: Mapped[float | None]
+    after: Mapped[float | None]
+    sample_count: Mapped[int | None] = mapped_column(Integer)
+    verified_at: Mapped[str | None] = mapped_column(String(40))
+
+
+class CaseLink(Base):
+    """Human decision to use (or reject) a precedent for a current case. Never automatic."""
+
+    __tablename__ = "case_links"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"))
+    historical_case_id: Mapped[str] = mapped_column(String(20))
+    decision: Mapped[str] = mapped_column(String(10))  # ACCEPTED | REJECTED
+    note: Mapped[str] = mapped_column(Text)
+    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[str] = mapped_column(String(40))

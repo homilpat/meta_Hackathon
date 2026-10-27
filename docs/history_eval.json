@@ -1,0 +1,844 @@
+{
+  "summary": {
+    "OFF": {
+      "top1": "6/15",
+      "hit3": "6/15",
+      "recommends_failed_fix": "0/20"
+    },
+    "ON": {
+      "top1": "15/15",
+      "hit3": "15/15",
+      "recommends_failed_fix": "0/20",
+      "warned_failed_fix": "6/7"
+    }
+  },
+  "queries": [
+    {
+      "query": "Q01",
+      "family": "QF-A",
+      "boards": [
+        [
+          "SPI_VOLUME_LOW",
+          "AOI_FAIL_CONFIRMED"
+        ]
+      ],
+      "needed": "STENCIL_APERTURE_INSPECTION",
+      "avoid": null,
+      "OFF": {
+        "checks": [
+          "XRAY_CROSS_SECTION"
+        ],
+        "top1": false,
+        "hit3": false,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": []
+      },
+      "ON": {
+        "checks": [
+          "STENCIL_APERTURE_INSPECTION",
+          "XRAY_CROSS_SECTION"
+        ],
+        "top1": true,
+        "hit3": true,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": [
+          "H01"
+        ]
+      },
+      "retrieval_status": "OK"
+    },
+    {
+      "query": "Q02",
+      "family": "QF-A",
+      "boards": [
+        [
+          "SPI_VOLUME_LOW",
+          "AOI_FAIL_CONFIRMED"
+        ],
+        [
+          "NORMAL",
+          "AOI_PASS"
+        ]
+      ],
+      "needed": "STENCIL_APERTURE_INSPECTION",
+      "avoid": null,
+      "OFF": {
+        "checks": [
+          "XRAY_CROSS_SECTION"
+        ],
+        "top1": false,
+        "hit3": false,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": []
+      },
+      "ON": {
+        "checks": [
+          "STENCIL_APERTURE_INSPECTION",
+          "XRAY_CROSS_SECTION"
+        ],
+        "top1": true,
+        "hit3": true,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": [
+          "H01"
+        ]
+      },
+      "retrieval_status": "OK"
+    },
+    {
+      "query": "Q03",
+      "family": "QF-B",
+      "boards": [
+        [
+          "SPI_VOLUME_HIGH",
+          "AOI_FAIL_CONFIRMED"
+        ]
+      ],
+      "needed": "STENCIL_THICKNESS_CHECK",
+      "avoid": null,
+      "OFF": {
+        "checks": [
+          "XRAY_CROSS_SECTION"
+        ],
+        "top1": false,
+        "hit3": false,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": []
+      },
+      "ON": {
+        "checks": [
+          "STENCIL_THICKNESS_CHECK",
+          "XRAY_CROSS_SECTION"
+        ],
+        "top1": true,
+        "hit3": true,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": [
+          "H05"
+        ]
+      },
+      "retrieval_status": "OK"
+    },
+    {
+      "query": "Q04",
+      "family": "QF-B",
+      "boards": [
+        [
+          "SPI_VOLUME_HIGH",
+          "AOI_FAIL_CONFIRMED"
+        ],
+        [
+          "SPI_VOLUME_HIGH",
+          "AOI_PASS"
+        ]
+      ],
+      "needed": "STENCIL_THICKNESS_CHECK",
+      "avoid": null,
+      "OFF": {
+        "checks": [
+          "XRAY_CROSS_SECTION"
+        ],
+        "top1": false,
+        "hit3": false,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": []
+      },
+      "ON": {
+        "checks": [
+          "STENCIL_THICKNESS_CHECK",
+          "XRAY_CROSS_SECTION"
+        ],
+        "top1": true,
+        "hit3": true,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": [
+          "H05"
+        ]
+      },
+      "retrieval_status": "OK"
+    },
+    {
+      "query": "Q05",
+      "family": "QF-C",
+      "boards": [
+        [
+          "SPI_VOLUME_SCATTER",
+          "AOI_FAIL_CONFIRMED"
+        ]
+      ],
+      "needed": "SPI_CALIBRATION_LOG",
+      "avoid": null,
+      "OFF": {
+        "checks": [
+          "XRAY_CROSS_SECTION"
+        ],
+        "top1": false,
+        "hit3": false,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": []
+      },
+      "ON": {
+        "checks": [
+          "SPI_CALIBRATION_LOG",
+          "XRAY_CROSS_SECTION"
+        ],
+        "top1": true,
+        "hit3": true,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": [
+          "H03"
+        ]
+      },
+      "retrieval_status": "OK"
+    },
+    {
+      "query": "Q06",
+      "family": "QF-C",
+      "boards": [
+        [
+          "SPI_VOLUME_SCATTER",
+          "AOI_FALSE_ALARM"
+        ]
+      ],
+      "needed": "REFLOW_PROFILE_LOG",
+      "avoid": "REFLOW_PROFILE_CHANGE",
+      "OFF": {
+        "checks": [],
+        "top1": false,
+        "hit3": false,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": []
+      },
+      "ON": {
+        "checks": [
+          "REFLOW_PROFILE_LOG"
+        ],
+        "top1": true,
+        "hit3": true,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": true,
+        "precedents_used": [
+          "H08"
+        ]
+      },
+      "retrieval_status": "OK"
+    },
+    {
+      "query": "Q07",
+      "family": "QF-D",
+      "boards": [
+        [
+          "SPI_VOLUME_LOW",
+          "AOI_FALSE_ALARM"
+        ]
+      ],
+      "needed": null,
+      "avoid": "PRINTER_PRESSURE_ADJUST",
+      "OFF": {
+        "checks": [],
+        "top1": null,
+        "hit3": null,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": []
+      },
+      "ON": {
+        "checks": [],
+        "top1": null,
+        "hit3": null,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": true,
+        "precedents_used": []
+      },
+      "retrieval_status": "OK"
+    },
+    {
+      "query": "Q08",
+      "family": "QF-D",
+      "boards": [
+        [
+          "SPI_VOLUME_LOW",
+          "AOI_FALSE_ALARM"
+        ],
+        [
+          "SPI_VOLUME_LOW",
+          "AOI_PASS"
+        ]
+      ],
+      "needed": null,
+      "avoid": "PRINTER_PRESSURE_ADJUST",
+      "OFF": {
+        "checks": [],
+        "top1": null,
+        "hit3": null,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": []
+      },
+      "ON": {
+        "checks": [],
+        "top1": null,
+        "hit3": null,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": true,
+        "precedents_used": []
+      },
+      "retrieval_status": "OK"
+    },
+    {
+      "query": "Q09",
+      "family": "QF-E",
+      "boards": [
+        [
+          "NORMAL",
+          "AOI_FALSE_ALARM"
+        ]
+      ],
+      "needed": "AOI_LIBRARY_REVIEW",
+      "avoid": "AOI_THRESHOLD_TUNE",
+      "OFF": {
+        "checks": [],
+        "top1": false,
+        "hit3": false,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": []
+      },
+      "ON": {
+        "checks": [
+          "AOI_LIBRARY_REVIEW"
+        ],
+        "top1": true,
+        "hit3": true,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": true,
+        "precedents_used": [
+          "H04"
+        ]
+      },
+      "retrieval_status": "OK"
+    },
+    {
+      "query": "Q10",
+      "family": "QF-F",
+      "boards": [
+        [
+          "SPI_VOLUME_LOW",
+          "AOI_MISSING"
+        ]
+      ],
+      "needed": "AOI_RERUN",
+      "avoid": null,
+      "OFF": {
+        "checks": [
+          "AOI_RERUN"
+        ],
+        "top1": true,
+        "hit3": true,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": []
+      },
+      "ON": {
+        "checks": [
+          "AOI_RERUN"
+        ],
+        "top1": true,
+        "hit3": true,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": []
+      },
+      "retrieval_status": "OK"
+    },
+    {
+      "query": "Q11",
+      "family": "QF-F",
+      "boards": [
+        [
+          "NORMAL",
+          "AOI_MISSING"
+        ]
+      ],
+      "needed": "AOI_RERUN",
+      "avoid": null,
+      "OFF": {
+        "checks": [
+          "AOI_RERUN"
+        ],
+        "top1": true,
+        "hit3": true,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": []
+      },
+      "ON": {
+        "checks": [
+          "AOI_RERUN"
+        ],
+        "top1": true,
+        "hit3": true,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": []
+      },
+      "retrieval_status": "OK"
+    },
+    {
+      "query": "Q12",
+      "family": "QF-G",
+      "boards": [
+        [
+          "SPI_VOLUME_LOW",
+          "AOI_FAIL_UNVERIFIED"
+        ]
+      ],
+      "needed": "OPERATOR_ADJUDICATION",
+      "avoid": "PRINTER_PRESSURE_ADJUST",
+      "OFF": {
+        "checks": [
+          "OPERATOR_ADJUDICATION"
+        ],
+        "top1": true,
+        "hit3": true,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": []
+      },
+      "ON": {
+        "checks": [
+          "OPERATOR_ADJUDICATION"
+        ],
+        "top1": true,
+        "hit3": true,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": []
+      },
+      "retrieval_status": "NO_RELEVANT_PRECEDENT"
+    },
+    {
+      "query": "Q13",
+      "family": "QF-G",
+      "boards": [
+        [
+          "SPI_VOLUME_HIGH",
+          "AOI_FAIL_UNVERIFIED"
+        ]
+      ],
+      "needed": "OPERATOR_ADJUDICATION",
+      "avoid": null,
+      "OFF": {
+        "checks": [
+          "OPERATOR_ADJUDICATION"
+        ],
+        "top1": true,
+        "hit3": true,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": []
+      },
+      "ON": {
+        "checks": [
+          "OPERATOR_ADJUDICATION"
+        ],
+        "top1": true,
+        "hit3": true,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": []
+      },
+      "retrieval_status": "NO_RELEVANT_PRECEDENT"
+    },
+    {
+      "query": "Q14",
+      "family": "QF-H",
+      "boards": [
+        [
+          "NORMAL",
+          "AOI_FAIL_CONFIRMED"
+        ]
+      ],
+      "needed": "XRAY_CROSS_SECTION",
+      "avoid": null,
+      "OFF": {
+        "checks": [
+          "XRAY_CROSS_SECTION"
+        ],
+        "top1": true,
+        "hit3": true,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": []
+      },
+      "ON": {
+        "checks": [
+          "XRAY_CROSS_SECTION"
+        ],
+        "top1": true,
+        "hit3": true,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": []
+      },
+      "retrieval_status": "OK"
+    },
+    {
+      "query": "Q15",
+      "family": "QF-H",
+      "boards": [
+        [
+          "NO_SPI",
+          "AOI_FAIL_CONFIRMED"
+        ]
+      ],
+      "needed": "XRAY_CROSS_SECTION",
+      "avoid": null,
+      "OFF": {
+        "checks": [
+          "XRAY_CROSS_SECTION"
+        ],
+        "top1": true,
+        "hit3": true,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": []
+      },
+      "ON": {
+        "checks": [
+          "XRAY_CROSS_SECTION"
+        ],
+        "top1": true,
+        "hit3": true,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": []
+      },
+      "retrieval_status": "OK"
+    },
+    {
+      "query": "Q16",
+      "family": "QF-I",
+      "boards": [
+        [
+          "SPI_VOLUME_HIGH",
+          "AOI_FALSE_ALARM"
+        ]
+      ],
+      "needed": null,
+      "avoid": null,
+      "OFF": {
+        "checks": [],
+        "top1": null,
+        "hit3": null,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": []
+      },
+      "ON": {
+        "checks": [],
+        "top1": null,
+        "hit3": null,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": []
+      },
+      "retrieval_status": "OK"
+    },
+    {
+      "query": "Q17",
+      "family": "QF-J",
+      "boards": [
+        [
+          "SPI_VOLUME_LOW",
+          "AOI_FAIL_CONFIRMED"
+        ],
+        [
+          "SPI_VOLUME_LOW",
+          "AOI_FALSE_ALARM"
+        ]
+      ],
+      "needed": "STENCIL_APERTURE_INSPECTION",
+      "avoid": "PRINTER_PRESSURE_ADJUST",
+      "OFF": {
+        "checks": [
+          "XRAY_CROSS_SECTION"
+        ],
+        "top1": false,
+        "hit3": false,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": []
+      },
+      "ON": {
+        "checks": [
+          "STENCIL_APERTURE_INSPECTION",
+          "XRAY_CROSS_SECTION"
+        ],
+        "top1": true,
+        "hit3": true,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": true,
+        "precedents_used": [
+          "H01"
+        ]
+      },
+      "retrieval_status": "OK"
+    },
+    {
+      "query": "Q18",
+      "family": "QF-J",
+      "boards": [
+        [
+          "SPI_VOLUME_SCATTER",
+          "AOI_FAIL_CONFIRMED"
+        ],
+        [
+          "SPI_VOLUME_SCATTER",
+          "AOI_FALSE_ALARM"
+        ]
+      ],
+      "needed": "SPI_CALIBRATION_LOG",
+      "avoid": "REFLOW_PROFILE_CHANGE",
+      "OFF": {
+        "checks": [
+          "XRAY_CROSS_SECTION"
+        ],
+        "top1": false,
+        "hit3": false,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": []
+      },
+      "ON": {
+        "checks": [
+          "SPI_CALIBRATION_LOG",
+          "REFLOW_PROFILE_LOG",
+          "XRAY_CROSS_SECTION"
+        ],
+        "top1": true,
+        "hit3": true,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": true,
+        "precedents_used": [
+          "H03",
+          "H08"
+        ]
+      },
+      "retrieval_status": "OK"
+    },
+    {
+      "query": "Q19",
+      "family": "QF-K",
+      "boards": [
+        [
+          "NORMAL",
+          "AOI_PASS"
+        ]
+      ],
+      "needed": null,
+      "avoid": null,
+      "OFF": {
+        "checks": [],
+        "top1": null,
+        "hit3": null,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": []
+      },
+      "ON": {
+        "checks": [],
+        "top1": null,
+        "hit3": null,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": []
+      },
+      "retrieval_status": "NO_RELEVANT_PRECEDENT"
+    },
+    {
+      "query": "Q20",
+      "family": "QF-K",
+      "boards": [
+        [
+          "SPI_VOLUME_LOW",
+          "AOI_PASS"
+        ]
+      ],
+      "needed": null,
+      "avoid": null,
+      "OFF": {
+        "checks": [],
+        "top1": null,
+        "hit3": null,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": []
+      },
+      "ON": {
+        "checks": [],
+        "top1": null,
+        "hit3": null,
+        "recommends_failed_fix": false,
+        "warned_failed_fix": false,
+        "precedents_used": []
+      },
+      "retrieval_status": "NO_RELEVANT_PRECEDENT"
+    }
+  ],
+  "demo_case": {
+    "off": {
+      "next_checks": [
+        {
+          "check": "AOI_RERUN",
+          "who": "AOI technician",
+          "what": "Run or retrieve the AOI inspection for the board with no AOI record",
+          "reason": "P01/B02 has no AOI record",
+          "evidence_ids": [
+            "EV-e92af0d526b1509fdf0a",
+            "EV-976f69c47412adabd19b"
+          ],
+          "precedent_ids": [],
+          "discriminates": []
+        },
+        {
+          "check": "XRAY_CROSS_SECTION",
+          "who": "Failure analysis",
+          "what": "X-ray or cross-section the confirmed defective joint",
+          "reason": "P02/B01 has a confirmed defect; physical analysis discriminates causes",
+          "evidence_ids": [
+            "EV-f753d494597b3ad654f3",
+            "EV-1043e1d5d9867d8c82de",
+            "EV-8983db0a51c191e7ec0b",
+            "EV-20e9121d1aa67cf00a65"
+          ],
+          "precedent_ids": [],
+          "discriminates": [
+            "P02/B01: candidate placement or reflow (SPI looked normal); not verified."
+          ]
+        }
+      ],
+      "warnings": [],
+      "precedents_used": [],
+      "known": [
+        {
+          "text": "P01/B01: AOI_FALSE_ALARM, SPI pattern SPI_VOLUME_LOW.",
+          "evidence_ids": [
+            "EV-d83a9b1d60e4639e9a43",
+            "EV-84ed3b896754362b60f2",
+            "EV-0bf47784edb5fac85f93",
+            "EV-b07caca53eac21718588"
+          ]
+        },
+        {
+          "text": "P02/B01: AOI_FAIL_CONFIRMED, SPI pattern NORMAL.",
+          "evidence_ids": [
+            "EV-f753d494597b3ad654f3",
+            "EV-1043e1d5d9867d8c82de",
+            "EV-8983db0a51c191e7ec0b",
+            "EV-20e9121d1aa67cf00a65"
+          ]
+        }
+      ],
+      "unknown": [
+        {
+          "text": "No AOI record for P01/B02; absence is not a PASS.",
+          "evidence_ids": [
+            "EV-e92af0d526b1509fdf0a",
+            "EV-976f69c47412adabd19b"
+          ]
+        }
+      ]
+    },
+    "on": {
+      "next_checks": [
+        {
+          "check": "AOI_RERUN",
+          "who": "AOI technician",
+          "what": "Run or retrieve the AOI inspection for the board with no AOI record",
+          "reason": "P01/B02 has no AOI record",
+          "evidence_ids": [
+            "EV-e92af0d526b1509fdf0a",
+            "EV-976f69c47412adabd19b"
+          ],
+          "precedent_ids": [],
+          "discriminates": []
+        },
+        {
+          "check": "XRAY_CROSS_SECTION",
+          "who": "Failure analysis",
+          "what": "X-ray or cross-section the confirmed defective joint",
+          "reason": "P02/B01 has a confirmed defect; physical analysis discriminates causes",
+          "evidence_ids": [
+            "EV-f753d494597b3ad654f3",
+            "EV-1043e1d5d9867d8c82de",
+            "EV-8983db0a51c191e7ec0b",
+            "EV-20e9121d1aa67cf00a65"
+          ],
+          "precedent_ids": [],
+          "discriminates": [
+            "P02/B01: candidate placement or reflow (SPI looked normal); not verified."
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "text": "H02: PRINTER_PRESSURE_ADJUST was executed and its outcome was FAILED; do not adopt it as a proven fix.",
+          "precedent_ids": [
+            "H02"
+          ]
+        }
+      ],
+      "precedents_used": [],
+      "known": [
+        {
+          "text": "P01/B01: AOI_FALSE_ALARM, SPI pattern SPI_VOLUME_LOW.",
+          "evidence_ids": [
+            "EV-d83a9b1d60e4639e9a43",
+            "EV-84ed3b896754362b60f2",
+            "EV-0bf47784edb5fac85f93",
+            "EV-b07caca53eac21718588"
+          ]
+        },
+        {
+          "text": "P02/B01: AOI_FAIL_CONFIRMED, SPI pattern NORMAL.",
+          "evidence_ids": [
+            "EV-f753d494597b3ad654f3",
+            "EV-1043e1d5d9867d8c82de",
+            "EV-8983db0a51c191e7ec0b",
+            "EV-20e9121d1aa67cf00a65"
+          ]
+        },
+        {
+          "text": "H02's verified check (OPERATOR_ADJUDICATION) is already answered for P01/B01.",
+          "evidence_ids": [
+            "EV-d83a9b1d60e4639e9a43",
+            "EV-84ed3b896754362b60f2",
+            "EV-0bf47784edb5fac85f93",
+            "EV-b07caca53eac21718588"
+          ]
+        }
+      ],
+      "unknown": [
+        {
+          "text": "No AOI record for P01/B02; absence is not a PASS.",
+          "evidence_ids": [
+            "EV-e92af0d526b1509fdf0a",
+            "EV-976f69c47412adabd19b"
+          ]
+        }
+      ]
+    }
+  }
+}

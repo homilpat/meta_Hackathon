@@ -40,7 +40,8 @@
 - `python -m pytest -q`: exit 0, **19 passed, 1 Starlette TestClient deprecation warning**. Includes the four original S0 checks.
 - `python -m ruff check .`: exit 0; `python -m alembic upgrade head`: exit 0; `python -m alembic check`: exit 0, no schema drift.
 - Live local HTTP: `POST /cases` 201, `POST /cases/DEMO-1/sources` 201 with 12 assets / 42 events / five distinct issue types; `GET /data-issues`, filtered `/events`, `/sources`, `/evidence` returned 200. Source count 12 and evidence count 42. Local server stopped after the smoke.
-- Secret/data check and GitHub CI: to be recorded after staging/push. Meta API: **NOT TESTED** (S1 does not call it; `.env` is ignored and local only).
+- Meta API: **NOT TESTED** (S1 does not call it; `.env` is ignored and local only).
 - S1 implementation commit: `33a775b` (`Implement S1 synthetic PCB sources and evidence lineage`). Staged secret scan and `git diff --cached --check` found no matches/errors; UCI ZIP and synthetic output were absent from the commit.
 - First S1 GitHub Actions run [40435213984](https://github.com/homilpat/meta_Hackathon/actions/runs/40435213984): **FAILED**. Install, pytest, Ruff, and Alembic passed; the final CI smoke still asserted the S0 health-stage string. Updated that assertion to S1; a fresh run is required before G1 can be reported as green.
+- Corrected S1 GitHub Actions run [40435309636](https://github.com/homilpat/meta_Hackathon/actions/runs/40435309636) for commit `34d9edb`: **SUCCESS**. All steps including the S1 health smoke passed. G1 is PASS on the reproducible synthetic fixture and documented API evidence; UCI ML validation and Meta LIVE access are not S1 claims.
 

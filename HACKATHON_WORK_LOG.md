@@ -26,5 +26,8 @@
 - `.venv/Scripts/python -m alembic upgrade head`: exit 0, revision `0001_s0` applied to ignored local SQLite database.
 - Ran Uvicorn on `127.0.0.1:8765`; `curl.exe -sS -i http://127.0.0.1:8765/health` returned HTTP 200 and `{"status":"ok","stage":"S0"}`. Stopped the local server afterward.
 - Meta LIVE call: **NOT TESTED**; `.env` remains empty. No mock call was made.
-- GitHub Actions status and remote commit: pending push and remote run verification.
+- Local follow-up commit: `9b6a615`. Published the same S0 files to the user-specified GitHub `main` while preserving its 2026-10-27 initial commit. Remote S0 commit: `92109cbd24d372d03d14580f7875e5f3a7f6b2e9` (different SHA because the initial local and remote histories were separate).
+- [GitHub Actions run 40433263681](https://github.com/homilpat/meta_Hackathon/actions/runs/40433263681) for that remote commit: **success**. Remote tree contains the 20 S0 tracked files; `.env`, SQLite DB, and downloaded wheels are absent.
+- G0 acceptance: **PASS via the documented LIVE-unconnected blocker path**. Actual Meta account access remains unverified until a key is provided and the synthetic-only smoke exits 0. PHM 2018 raw-use rights remain unverified; no real dataset is in this repository.
+- Remote repository is currently private; public visibility is a later submission requirement and was not changed in S0.
 

@@ -183,7 +183,14 @@ def test_pcb_adapter_maps_line_case_without_moving_source_rows(tmp_path):
         ctx, objs, meas = _contract(PcbAdapter(), s, "L")
     assert ctx["equipment"] == ["STN-1", "STN-2", "STN-3"]
     assert {o["object_id"] for o in objs if o["object_type"] == "LOT"} == {"L01", "L02", "L03"}
-    assert sum(o["shipment_state"] == "SHIPPED" for o in objs) == 12  # first third of each lot
+    panels = [o for o in objs if o["object_type"] == "PANEL"]
+    assert sum(o["shipment_state"] == "SHIPPED" for o in panels) == 12  # first third of each lot
+    boards = [o for o in objs if o["object_type"] == "BOARD"]
+    assert len(boards) == 144 and all(b["object_id"].startswith(b["parent_id"] + "/") for b in boards)
+    ships = [o for o in objs if o["object_type"] == "SHIPMENT"]
+    assert ships and all(s["identity_source"].startswith("EV-") for s in ships)
+    state = {p["object_id"]: p["shipment_state"] for p in panels}
+    assert all(b["shipment_state"] == state[b["parent_id"]] for b in boards)  # a board ships with its panel
     assert len(meas) == 1152 and {m["unit"] for m in meas} == {"mm3"}
     pc = c.get("/cases/L/process-context", headers=H("bob")).json()
     assert pc["process_type"] == "PCB_SMT" and pc["config_hash"] == config_hash(ctx, objs)

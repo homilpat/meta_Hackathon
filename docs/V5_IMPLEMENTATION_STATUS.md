@@ -8,7 +8,7 @@ Stopped after G4 at the user's request (2026-10-28). Nothing is pushed.
 | G1 Meta LIVE | **BLOCKED_NO_CREDENTIALS** | `docs/META_LIVE_LOG.md`; `/provider` `live_status`; `tests/test_meta_smoke.py` |
 | G2 policy / evidence quality / adapters | BUILT | `app/policy.py`, `app/quality.py`, `app/process.py`; `/policies`, `/cases/{id}/gates`, `/evidence-quality`, `/process-context`; `tests/test_v5_g2_foundation.py` |
 | G3 D0 / urgent / D1 | BUILT | `app/eightd.py`, `app/actions.py`; `/triage`, `/urgent-actions`, `/team`, `/actions/{id}/events`; `tests/test_v5_g3_d0_d1.py`; UI "D0~D8 진행" |
-| G4 D2 / D3 | BUILT (API) | `app/factcheck.py`; `/problem-definition`, `POST /actions`; `tests/test_v5_g4_d2_d3.py` |
+| G4 D2 / D3 | BUILT | `app/factcheck.py`, `ncr._five_w2h` (5W2H / IS-IS NOT inside the NCR, under the approval hash); `/problem-definition`, `POST /actions` (LOT/panel/board/shipment-row targets); UI: 5W2H card + D3 action button; `tests/test_v5_g4_d2_d3.py`; HTTP check on a live server |
 | G5–G10 | NOT STARTED | — |
 
 ## Spec §9 acceptance tests now
@@ -26,4 +26,8 @@ Stopped after G4 at the user's request (2026-10-28). Nothing is pushed.
 - All data and every action execution are SYNTHETIC / SIMULATED. Source-DB match is not physical ground truth.
 - Evidence quality rules cannot see calibration or time sync (not in the sources): recorded as `NOT_IN_SOURCE`.
 - The S6 document routes still use their fixed chain; the policy is consulted at the new v5 entry points only.
-- Author claim numbers are not recomputed yet (only lot/unit/superseded checks).
+- Author claim numbers are not recomputed yet (only lot/unit/superseded checks): claims carry a value but not how
+  it was computed, so the server cannot redo it. Structured calculation predicates are G8; editing a draft is G9.
+- NCR template is now `v5.g4` (adds 5W2H / IS-IS NOT claims); stored versions show the template they were built with.
+- Affected objects are a snapshot taken when the process context is recorded; contexts recorded before this
+  change have LOT/PANEL objects only.

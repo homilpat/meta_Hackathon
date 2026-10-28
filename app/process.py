@@ -69,14 +69,23 @@ class PcbAdapter:
         out: list[Obj] = [{"object_type": "LOT", "object_id": i["rec"]["lot_id"], "parent_id": None,
                            "location": i["rec"].get("line_id"), "shipment_state": "UNKNOWN",
                            "identity_source": i["ev"]} for i in items if i["type"] == "lots"]
+        def state(panel_id: str) -> str:
+            ship = shipped.get(panel_id)
+            return "SHIPPED" if ship and ship["rec"]["status"] == "SHIPPED" else "IN_PLANT"
+
         for i in items:
-            if i["type"] != "panels":
-                continue
-            ship = shipped.get(i["rec"]["panel_id"])
-            out.append({"object_type": "PANEL", "object_id": i["rec"]["panel_id"], "parent_id": i["rec"].get("lot_id"),
-                        "location": None,
-                        "shipment_state": "SHIPPED" if ship and ship["rec"]["status"] == "SHIPPED" else "IN_PLANT",
-                        "identity_source": i["ev"]})
+            r = i["rec"]
+            if i["type"] == "panels":
+                out.append({"object_type": "PANEL", "object_id": r["panel_id"], "parent_id": r.get("lot_id"),
+                            "location": None, "shipment_state": state(r["panel_id"]), "identity_source": i["ev"]})
+            elif i["type"] == "boards":  # a board ships with its panel
+                out.append({"object_type": "BOARD", "object_id": f"{r['panel_id']}/{r['board_id']}",
+                            "parent_id": r["panel_id"], "location": None, "shipment_state": state(r["panel_id"]),
+                            "identity_source": i["ev"]})
+            elif i["type"] == "shipments":
+                out.append({"object_type": "SHIPMENT", "object_id": r["original_row_id"], "parent_id": r["panel_id"],
+                            "location": None, "shipment_state": "SHIPPED" if r["status"] == "SHIPPED" else "IN_PLANT",
+                            "identity_source": i["ev"]})
         return out
 
     def measurements(self, session: Session, case_id: str) -> list[Measurement]:

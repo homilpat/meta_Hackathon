@@ -172,7 +172,8 @@ def _doc_out(session: Session, doc: DocumentVersion) -> dict:
     return {
         "case_id": doc.case_id, "doc_type": doc.doc_type, "version": doc.version, "status": doc.status,
         "author_id": doc.author_id, "builder": doc.builder, "content_sha256": doc.content_sha256,
-        "created_at": doc.created_at, "based_on": doc.based_on, "template_version": ncr.TEMPLATE_VERSION,
+        "created_at": doc.created_at, "based_on": doc.based_on,
+        "template_version": ncr.template_version(doc.builder, claims),
         "note": ncr.DOC_NOTE.get(doc.doc_type, ""),
         "claims": [{"claim_id": c.claim_id, "classification": c.classification, "text": c.text,
                     "value": c.value, "unit": c.unit, "evidence_ids": c.evidence_ids} for c in claims],

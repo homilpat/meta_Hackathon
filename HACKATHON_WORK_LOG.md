@@ -209,3 +209,10 @@
 - **G4** `app/factcheck.py`: all document claims (template, author, model) are checked for lot named vs lot of cited rows, unit vs cited measurement, superseded source rows → 422. `GET /cases/{id}/problem-definition` (5W2H, IS/IS NOT, denominator, unknown scope, source versions). D3 actions (`POST /cases/{id}/actions`) bound to the containment plan and exact objects; D3 stage reads `PLAN_APPROVED` until every D3 action is independently verified.
 - Checks (G4 commit): pytest 167 passed; ruff exit 0; fresh `alembic upgrade head` exit 0; migrated schema == models (autogenerate diff empty); `npm run build` exit 0 (G1, G3).
 - Not built: G5–G10 (D4 experiments/decisions, D5/D6, D7/D8, full claim predicates/RAG/TemplateContract, Docs editing/signature binding, DOCX/PDF). No UI yet for D3 action creation or problem definition (API only). Numeric recompute of author claims is G8 work. Nothing pushed.
+
+## 2026-10-28 KST — G4 completed (user-requested: finish, review, push)
+
+- NCR template `v5.g4`: 5W2H (what/when/how many/how detected with AOI denominator, unknown-scope count, effective source versions) and IS / IS NOT by lot are claims inside the NCR, so they are reviewed and bound to the approval hash. `GET /problem-definition` uses the same function (`ncr.problem_definition`). Containment/RCA templates unchanged (`s6.1`); each stored version reports the template it was built with, so earlier approvals keep their label.
+- PCB adapter adds BOARD (inherits its panel's shipment state) and SHIPMENT-row affected objects; D3 actions can target boards and shipment rows; holds on shipped boards/shipments are refused.
+- UI "D0~D8 진행": D2 5W2H card, "D3 조치 제안 (계획서 기반)" button.
+- Checks: pytest 169 passed; ruff exit 0; fresh `alembic upgrade head` exit 0; `npm run build` exit 0; HTTP check against uvicorn on a freshly migrated DB: 17/17 steps as expected (health, /app bundle contains the new screen texts, NCR with 5W2H, wrong-lot claim 422, D3 board action, execute-before-plan 409, D3 PLAN_APPROVED → DONE only after independent verification, self-verification 403, audit chain ok). No browser screenshot taken.

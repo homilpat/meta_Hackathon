@@ -17,7 +17,7 @@ from app import spc
 from app.db import Evidence, ModelVersion, Prediction, SourceAsset, SourceEvent, XaiArtifact
 
 BUILDER = "DETERMINISTIC_TEMPLATE_NO_AI"
-TEMPLATE_VERSION = "s6.1"
+TEMPLATE_VERSION = "v5.g4"  # NCR gained 5W2H / IS-IS NOT claims; s6.1 before
 CLASSES = ("OBSERVED", "CALCULATED", "HYPOTHESIS", "UNKNOWN", "PROPOSAL")
 # A draft may propose; it may not report an action as done or a cause as established.
 DONE_CLAIM = re.compile(r"(?i)\b(?:been|was|were|is|are)\s+(?:executed|implemented|contained|quarantined|resolved|fixed)\b"
@@ -138,6 +138,86 @@ def lot_view(items: list[dict], aoi: dict) -> dict[str, dict]:
     return lots
 
 
+def template_version(builder: str, claims: list) -> str | None:
+    """Template a stored version was built with (from its own content, so older approvals keep their label)."""
+    if builder != BUILDER:
+        return None  # built from a model run, not the template
+    return TEMPLATE_VERSION if any(c.text.startswith("5W2H ") for c in claims) else "s6.1"
+
+
+def lot_index(items: list[dict]) -> dict[str, str | None]:
+    """evidence id -> lot, from the row itself or its panel (never guessed from the id text)."""
+    panel_lot = {i["rec"]["panel_id"]: i["rec"]["lot_id"] for i in items
+                 if i["type"] == "panels" and i["rec"].get("lot_id")}
+    return {i["ev"]: i["rec"].get("lot_id") or panel_lot.get(i["rec"].get("panel_id")) for i in items}
+
+
+def problem_definition(items: list[dict]) -> dict:
+    """D2 5W2H and IS / IS NOT over current source rows. Slots the data cannot fill are UNKNOWN."""
+    lots = lot_index(items)
+    aoi = [i for i in items if i["type"] == "aoi_inspections"]
+    confirmed = [i for i in items if i["type"] == "human_verifications" and i["rec"]["result"] == "DEFECT_CONFIRMED"]
+    inspected = {(i["rec"]["panel_id"], i["rec"]["board_id"]) for i in aoi}
+    uninspected = [b for b in items if b["type"] == "boards"
+                   and (b["rec"]["panel_id"], b["rec"]["board_id"]) not in inspected]
+    lot_rows = {i["rec"]["lot_id"]: i["ev"] for i in items if i["type"] == "lots"}
+    is_lots = sorted({lots[i["ev"]] for i in confirmed} - {None})
+    versions: dict[str, int] = {}
+    for i in items:
+        versions[i["type"]] = max(versions.get(i["type"], 0), i["version"])
+    times = sorted(i["rec"]["event_time"] for i in confirmed)
+    hv = [i["ev"] for i in confirmed]
+
+    def slot(value, ids, known=True):
+        return {"value": value, "evidence_ids": ids,
+                "status": "KNOWN" if known and value not in (None, [], {}) else "UNKNOWN"}
+
+    return {
+        "what": slot(f"{len(confirmed)} human-confirmed defects" if confirmed else None, hv),
+        "where": slot(is_lots, hv, bool(lot_rows)),
+        "when": slot({"first": times[0], "last": times[-1]} if times else None, hv),
+        "who_detected": slot("AOI inspection, then human verification" if aoi else None, [i["ev"] for i in aoi[:1]]),
+        "how_many": slot({"confirmed": len(confirmed), "denominator_aoi_inspections": len(aoi),
+                          "boards_without_aoi": len(uninspected)} if aoi else None, [i["ev"] for i in aoi]),
+        "is": slot({"lots": is_lots}, hv, bool(lot_rows) and bool(is_lots)),
+        "is_not": slot({"lots": sorted(set(lot_rows) - set(is_lots))},
+                       [ev for lot, ev in sorted(lot_rows.items()) if lot not in is_lots], bool(lot_rows)),
+        "unknown_scope": [f"board {b['rec']['panel_id']}/{b['rec']['board_id']} has no AOI record"
+                          for b in uninspected],
+        "effective_source_versions": versions,
+        "note": "Computed from current source rows. A count is a source-DB match, not physical ground truth.",
+    }
+
+
+def _five_w2h(items: list[dict], add: Callable[..., None]) -> None:
+    """The D2 problem statement as claims, so it is part of the reviewed and hash-approved NCR."""
+    p = problem_definition(items)
+    rev = ", ".join(f"{k} v{v}" for k, v in sorted(p["effective_source_versions"].items()))
+    if p["what"]["status"] == "KNOWN":
+        n = p["how_many"]["value"]["confirmed"]
+        add("CALCULATED", f"5W2H What: {n} defects confirmed by human verification.", p["what"]["evidence_ids"],
+            float(n), "count")
+        add("OBSERVED", f"5W2H When: first confirmed defect at {p['when']['value']['first']}, last at "
+            f"{p['when']['value']['last']}.", p["when"]["evidence_ids"])
+    else:
+        add("UNKNOWN", "5W2H What/When: no human-confirmed defect in the sources; an AOI FAIL or SPC signal is not "
+            "a confirmed defect.", [])
+    if p["how_many"]["status"] == "KNOWN":
+        hm = p["how_many"]["value"]
+        add("CALCULATED", f"5W2H How many / how detected: {hm['confirmed']} confirmed of "
+            f"{hm['denominator_aoi_inspections']} AOI inspections (AOI, then human verification); "
+            f"{hm['boards_without_aoi']} boards have no AOI record, so their status is unknown. Source versions: "
+            f"{rev}.", p["how_many"]["evidence_ids"], float(hm["denominator_aoi_inspections"]), "count")
+    if p["is"]["status"] == "KNOWN":
+        add("OBSERVED", f"IS: confirmed defects are in lot {', '.join(p['is']['value']['lots'])}.",
+            p["is"]["evidence_ids"])
+    else:
+        add("UNKNOWN", "IS / IS NOT by lot: not determinable (no lot records or no confirmed defect).", [])
+    if p["is"]["status"] == "KNOWN" and p["is_not"]["value"]["lots"]:
+        add("OBSERVED", f"IS NOT: no human-confirmed defect recorded in lot {', '.join(p['is_not']['value']['lots'])}.",
+            p["is_not"]["evidence_ids"])
+
+
 def build_claims(session: Session, case_id: str) -> list[dict]:
     items = current(_evidence(session, case_id))
     claims, add = _collector()
@@ -185,6 +265,7 @@ def build_claims(session: Session, case_id: str) -> list[dict]:
     for board in _uninspected(items, aoi):
         add("UNKNOWN", f"No AOI inspection recorded for board {'/'.join(board['key'])}; "
             "a missing record is not a PASS.", [board["ev"]])
+    _five_w2h(items, add)
     add("UNKNOWN", "Problem description (8D D2) only. Containment scope is the D3 plan; model scores, SHAP and "
         "cause candidates belong to the D4 RCA hypothesis.", [])
     return claims

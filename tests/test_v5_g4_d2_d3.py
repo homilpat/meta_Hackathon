@@ -121,6 +121,38 @@ def test_d3_scope_binds_to_exact_objects_and_refuses_shipped(c):
         "action_type": "HOLD", "description": "Hold unshipped panels", "targets": ["L02-P09"]}).status_code == 403
 
 
+def test_d3_binds_board_and_shipment_rows(c):
+    plan(c)
+    a = d3(c, targets=["L02-P09/B1", "L02-P09/B2"]).json()
+    assert [s["object_type"] for s in a["target_snapshot"]] == ["BOARD", "BOARD"]
+    assert d3(c, targets=["L02-P01/B1"]).status_code == 422  # board of a shipped panel
+    ship = c.post("/cases/L/actions", headers=H("alice"), json={
+        "action_type": "CUSTOMER_NOTIFY_REQUEST", "description": "Ask QA to decide customer notice for shipment",
+        "targets": ["SHIP-L02-P01"]})
+    assert ship.status_code == 201 and ship.json()["target_snapshot"][0]["object_type"] == "SHIPMENT"
+    assert ship.json()["target_snapshot"][0]["shipment_state"] == "SHIPPED"
+    hold_ship = c.post("/cases/L/actions", headers=H("alice"), json={
+        "action_type": "HOLD", "description": "Hold the shipment in plant", "targets": ["SHIP-L02-P01"]})
+    assert hold_ship.status_code == 422
+
+
+def test_ncr_states_5w2h_and_is_is_not_inside_the_approved_document(c):
+    doc = ncr(c).json()
+    texts = [x["text"] for x in doc["claims"]]
+    assert any(t.startswith("5W2H What:") for t in texts) and any(t.startswith("5W2H When:") for t in texts)
+    how = next(x for x in doc["claims"] if x["text"].startswith("5W2H How many"))
+    p = c.get("/cases/L/problem-definition", headers=H("bob")).json()
+    assert how["value"] == p["how_many"]["value"]["denominator_aoi_inspections"]  # same computation
+    assert "IS: confirmed defects are in lot L02." in texts
+    assert "IS NOT: no human-confirmed defect recorded in lot L01, L03." in texts
+    assert doc["template_version"] == "v5.g4"
+    approve(c, "ncr", "bob")  # the problem statement is under the approval hash
+    got = c.get("/cases/L/ncr/1", headers=H("bob")).json()
+    assert got["status"] == "APPROVED" and got["decisions"][0]["content_sha256"] == doc["content_sha256"]
+    cont = c.post("/cases/L/containment", json={}, headers=H("alice")).json()
+    assert cont["template_version"] == "s6.1"  # unchanged template keeps its label
+
+
 def test_existing_d2_d3_stage_review_unchanged(c):
     plan(c)
     stages = {s["doc_type"]: s for s in c.get("/cases/L/stages", headers=H("alice")).json()}

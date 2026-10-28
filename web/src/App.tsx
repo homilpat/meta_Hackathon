@@ -436,6 +436,7 @@ function EightD({ ctx }: { ctx: Ctx }) {
   const [team, setTeam] = useState<J>(null)
   const [acts, setActs] = useState<J[]>([])
   const [pc, setPc] = useState<J>(null)
+  const [pd, setPd] = useState<J>(null)
   const [f, setF] = useState<Record<string, string>>({ signal_kind: 'SPC_SIGNAL', observed_defect: 'SIGNAL_ONLY', route: 'FULL_8D', severity: 'MEDIUM', scope_lots: '', rationale: '', evidence_ids: '',
     responsibility: 'QUALITY', user_id: 'bob', action_type: 'HOLD', targets: '', description: '', note: '', evidence: '' })
   const set = (k: string) => (e: { target: { value: string } }) => setF(x => ({ ...x, [k]: e.target.value }))
@@ -446,6 +447,7 @@ function EightD({ ctx }: { ctx: Ctx }) {
     api(`/cases/${cid}/team`).then(setTeam).catch(() => setTeam(null))
     api(`/cases/${cid}/actions`).then(setActs).catch(() => setActs([]))
     api(`/cases/${cid}/process-context`).then(setPc).catch(() => setPc(null))
+    api(`/cases/${cid}/problem-definition`).then(setPd).catch(() => setPd(null))
   }, [cid, api, tick])
   const run = (p: Promise<unknown>) => p.then(refresh).catch(() => undefined)
   const t = tri[tri.length - 1]
@@ -487,13 +489,21 @@ function EightD({ ctx }: { ctx: Ctx }) {
           <select value={f.user_id} onChange={set('user_id')}>{USERS.map(u => <option key={u[0]} value={u[0]}>{u[1]}</option>)}</select>
           <button className="button secondary" onClick={() => run(api(`/cases/${cid}/team`, 'POST', { event: 'ASSIGN', responsibility: f.responsibility, user_id: f.user_id }))}>배정</button></div>}
       </Card>
-      <Card><SectionTitle title="긴급 봉쇄 요청" sub="D0 이후 D1/D2 완료 전에도 가능 · QA/생산 권한"/>
+      <Card><SectionTitle title="봉쇄 조치 요청" sub="긴급: D0 이후 D1/D2 전에도 가능 (QA/생산) · D3: 격리 계획서 기반 (작성자)"/>
         <div className="dual"><Field label="조치"><select value={f.action_type} onChange={set('action_type')}>{['HOLD', 'SORT', 'STOP_SHIP', 'QUARANTINE', 'CUSTOMER_NOTIFY_REQUEST', 'OTHER'].map(x => <option key={x}>{x}</option>)}</select></Field>
           <Field label="대상 (쉼표 구분)"><input className="input" style={{ marginTop: 0 }} placeholder="L02-P09" value={f.targets} onChange={set('targets')}/></Field></div>
         <input className="input" placeholder="조치 설명 (10자 이상)" value={f.description} onChange={set('description')}/>
-        <button className="button primary full" disabled={role !== 'QA_PRODUCTION'} onClick={() => run(api(`/cases/${cid}/urgent-actions`, 'POST', { action_type: f.action_type, targets: list(f.targets), description: f.description }))}>긴급 봉쇄 요청</button>
+        <div className="dual"><button className="button primary" disabled={role !== 'QA_PRODUCTION'} onClick={() => run(api(`/cases/${cid}/urgent-actions`, 'POST', { action_type: f.action_type, targets: list(f.targets), description: f.description }))}>긴급 봉쇄 요청</button>
+          <button className="button secondary" disabled={role !== 'AUTHOR'} onClick={() => run(api(`/cases/${cid}/actions`, 'POST', { action_type: f.action_type, targets: list(f.targets), description: f.description }))}>D3 조치 제안 (계획서 기반)</button></div>
+        <p className="muted wrap">대상은 LOT·패널(L02-P09)·보드(L02-P09/B1)·출하 행(SHIP-L02-P01). 출하된 대상은 HOLD 불가 → CUSTOMER_NOTIFY_REQUEST.</p>
       </Card>
     </div>
+    {pd && <Card className="mb"><SectionTitle title="D2 문제 정의 (5W2H · IS / IS NOT)" sub="현재 원본 행에서 서버가 계산 · NCR 문서에도 같은 내용이 클레임으로 들어가 승인 해시에 묶입니다"/>
+      <div className="table-wrap"><table><thead><tr><th>항목</th><th>값</th><th>상태</th><th>근거</th></tr></thead><tbody>
+        {['what', 'where', 'when', 'who_detected', 'how_many', 'is', 'is_not'].map(k => <tr key={k}><td>{k}</td><td className="wrap">{typeof pd[k].value === 'string' ? pd[k].value : JSON.stringify(pd[k].value)}</td>
+          <td><Badge tone={pd[k].status === 'KNOWN' ? 'green' : 'slate'}>{pd[k].status}</Badge></td><td>{pd[k].evidence_ids.length}건</td></tr>)}
+      </tbody></table></div>
+      <p className="muted wrap mt">범위 미상 {pd.unknown_scope.length}건 · 원본 버전 {Object.entries(pd.effective_source_versions).map(([k, v]) => `${k} v${v}`).join(', ')} · {pd.note}</p></Card>}
     <Card className="mb"><SectionTitle title="조치 실행 기록" sub="REQUESTED → (PLAN_APPROVED) → EXECUTED → INDEPENDENTLY_VERIFIED · 실행자와 확인자는 달라야 함"/>
       <div className="dual"><input className="input" placeholder="실행/확인 메모 (실행은 10자 이상)" value={f.note} onChange={set('note')}/><input className="input" placeholder="확인 근거 (쉼표 구분, EV-... 또는 REF:...)" value={f.evidence} onChange={set('evidence')}/></div>
       <div className="table-wrap mt"><table><thead><tr><th>#</th><th>단계</th><th>조치</th><th>대상</th><th>상태</th><th>이력</th><th>기록</th></tr></thead><tbody>

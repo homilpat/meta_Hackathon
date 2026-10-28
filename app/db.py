@@ -391,8 +391,75 @@ class AuditChain(Base):
     sha256: Mapped[str] = mapped_column(String(64))
 
 
+class WorkflowPolicy(Base):
+    """A versioned 8D policy: who may draft/execute/approve/close what. New behaviour = new version row."""
+
+    __tablename__ = "workflow_policies"
+    __table_args__ = (UniqueConstraint("policy_id", "version"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    policy_id: Mapped[str] = mapped_column(String(60))
+    version: Mapped[int] = mapped_column(Integer)
+    applicability: Mapped[dict] = mapped_column(JSON)  # site/customer/process_type/severity, "*" = any
+    body: Mapped[dict] = mapped_column(JSON)
+    policy_hash: Mapped[str] = mapped_column(String(64))
+    effective_from: Mapped[str] = mapped_column(String(40))
+    approved_by: Mapped[str] = mapped_column(String(40))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class EvidenceQuality(Base):
+    """EvidenceQualityAssessment: one row per state change (rules or a named person); latest version wins."""
+
+    __tablename__ = "evidence_quality"
+    __table_args__ = (UniqueConstraint("case_id", "evidence_id", "version"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"))
+    evidence_id: Mapped[str] = mapped_column(String(30), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    quality_state: Mapped[str] = mapped_column(String(12))  # VALID SUSPECT CONFLICTED SUPERSEDED UNVERIFIED
+    reason: Mapped[str] = mapped_column(Text)
+    measurements: Mapped[dict] = mapped_column(JSON)  # the checks behind the state
+    checked_by: Mapped[str] = mapped_column(String(40))  # SYSTEM_RULES or a user id
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class ProcessContext(Base):
+    __tablename__ = "process_contexts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"), unique=True)
+    site: Mapped[str] = mapped_column(String(40))
+    customer: Mapped[str] = mapped_column(String(60))
+    process_type: Mapped[str] = mapped_column(String(40))
+    adapter_version: Mapped[str] = mapped_column(String(40))
+    operation: Mapped[str] = mapped_column(String(60))
+    equipment: Mapped[list] = mapped_column(JSON)
+    recipe: Mapped[str | None] = mapped_column(String(60))
+    config_hash: Mapped[str] = mapped_column(String(64))
+    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class AffectedObject(Base):
+    """Process-neutral view of lots/panels/parts in scope, with shipment state, snapshotted from adapter output."""
+
+    __tablename__ = "affected_objects"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"), index=True)
+    object_type: Mapped[str] = mapped_column(String(30))
+    object_id: Mapped[str] = mapped_column(String(80))
+    parent_id: Mapped[str | None] = mapped_column(String(80))
+    location: Mapped[str | None] = mapped_column(String(60))
+    shipment_state: Mapped[str] = mapped_column(String(20))  # IN_PLANT SHIPPED UNKNOWN
+    identity_source: Mapped[str] = mapped_column(String(30))  # evidence id the identity comes from
+
+
 # Audit rows are append-only at the database level, not just by convention.
-APPEND_ONLY = ("approval_events", "workflow_events", "doc_comments", "audit_chain")
+APPEND_ONLY = ("approval_events", "workflow_events", "doc_comments", "audit_chain",
+               "workflow_policies", "evidence_quality", "process_contexts", "affected_objects")
 
 
 def append_only_ddl(table: str) -> list[str]:

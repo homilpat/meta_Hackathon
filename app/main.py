@@ -22,6 +22,7 @@ from app.db import (
     SourceEvent,
     User,
 )
+from app.eightd import make_v5_router
 from app.ingestion import SyntheticBundle, normalize
 from app.ml_api import make_ml_router
 from app.model_provider import MODEL, MetaProvider, ModelProvider
@@ -107,6 +108,7 @@ def create_app(database_url: str = "sqlite:///qualityops.db",
     app.state.provider = provider or MetaProvider.from_env()  # None -> investigations return 503
     app.include_router(make_router(sessions, current_user, app.state.provider))
     app.include_router(make_ml_router(sessions, current_user))
+    app.include_router(make_v5_router(sessions, current_user))
 
     @app.get("/health", response_model=Health)
     def health() -> Health:

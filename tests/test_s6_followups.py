@@ -10,7 +10,7 @@ from sqlalchemy import create_engine, select, text
 from sqlalchemy.exc import DatabaseError
 from sqlalchemy.orm import Session
 
-from app.db import ApprovalEvent, Base, SourceEvent, ToolCall, WorkflowEvent
+from app.db import APPEND_ONLY, ApprovalEvent, Base, SourceEvent, ToolCall, WorkflowEvent
 from app.main import create_app
 from app.model_provider import MODEL, EgressBlocked, MetaProvider
 from app.ncr import DONE_CLAIM
@@ -236,8 +236,8 @@ def test_audit_tables_are_append_only(env, tmp_path):
     with engine.connect() as conn:
         triggers = set(conn.scalars(text("SELECT name FROM sqlite_master WHERE type='trigger'")))
     engine.dispose()
-    assert triggers == {f"{t}_no_{op}" for t in ("approval_events", "workflow_events", "doc_comments", "audit_chain")
-                        for op in ("update", "delete")}
+    assert triggers == {f"{t}_no_{op}" for t in APPEND_ONLY for op in ("update", "delete")}  # migrations == models
+    assert {"approval_events", "workflow_events", "doc_comments", "audit_chain"} <= set(APPEND_ONLY)
 
 
 REPLY = {"model": MODEL, "choices": [{"message": {"role": "assistant", "content": "{}"}}], "usage": {}}

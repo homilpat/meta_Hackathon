@@ -64,7 +64,7 @@ def test_default_policy_and_s6_chain_agree_on_rca_without_d3_actions(c):
     assert g["state"]["D3"] == "PLAN_APPROVED"  # containment itself is still not done
     assert g["approve"]["D4"]["result"] == "PASS"
     approve(c, "rca", "frank")
-    assert gates(c, "frank")["state"]["D4"] == "APPROVED"
+    assert gates(c, "frank")["state"]["D4"] == "NO_CONFIRMED_CAUSE"  # approved hypotheses, no cause decided
 
 
 def test_policy_drives_the_s6_route_not_a_hardcoded_role(c):

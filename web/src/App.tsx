@@ -437,8 +437,10 @@ function EightD({ ctx }: { ctx: Ctx }) {
   const [acts, setActs] = useState<J[]>([])
   const [pc, setPc] = useState<J>(null)
   const [pd, setPd] = useState<J>(null)
+  const [d4, setD4] = useState<J>(null)
   const [f, setF] = useState<Record<string, string>>({ signal_kind: 'SPC_SIGNAL', observed_defect: 'SIGNAL_ONLY', route: 'FULL_8D', severity: 'MEDIUM', scope_lots: '', rationale: '', evidence_ids: '',
-    responsibility: 'QUALITY', user_id: 'bob', action_type: 'HOLD', targets: '', description: '', note: '', evidence: '' })
+    responsibility: 'QUALITY', user_id: 'bob', action_type: 'HOLD', targets: '', description: '', note: '', evidence: '',
+    cause_type: 'OCCURRENCE', category: 'MACHINE', htext: '', hev: '' })
   const set = (k: string) => (e: { target: { value: string } }) => setF(x => ({ ...x, [k]: e.target.value }))
   useEffect(() => {
     if (!cid) return
@@ -448,6 +450,7 @@ function EightD({ ctx }: { ctx: Ctx }) {
     api(`/cases/${cid}/actions`).then(setActs).catch(() => setActs([]))
     api(`/cases/${cid}/process-context`).then(setPc).catch(() => setPc(null))
     api(`/cases/${cid}/problem-definition`).then(setPd).catch(() => setPd(null))
+    api(`/cases/${cid}/hypotheses`).then(setD4).catch(() => setD4(null))
   }, [cid, api, tick])
   const run = (p: Promise<unknown>) => p.then(refresh).catch(() => undefined)
   const t = tri[tri.length - 1]
@@ -504,6 +507,23 @@ function EightD({ ctx }: { ctx: Ctx }) {
           <td><Badge tone={pd[k].status === 'KNOWN' ? 'green' : 'slate'}>{pd[k].status}</Badge></td><td>{pd[k].evidence_ids.length}건</td></tr>)}
       </tbody></table></div>
       <p className="muted wrap mt">범위 미상 {pd.unknown_scope.length}건 · 원본 버전 {Object.entries(pd.effective_source_versions).map(([k, v]) => `${k} v${v}`).join(', ')} · {pd.note}</p></Card>}
+    {d4 && <Card className="mb"><SectionTitle title="D4 원인 가설 → 실험 → 판정" sub="원인 확정은 독립된 공정 엔지니어가 지지 실험(VALID 증거)으로만 기록 · SHAP·선례·AI 제안만으로는 확정 불가"/>
+      <div className="table-wrap"><table><thead><tr><th>#</th><th>6M</th><th>유형</th><th>가설</th><th>출처</th><th>실험</th><th>상태</th><th>판정</th></tr></thead><tbody>
+        {d4.hypotheses.map((h: J) => { const sup = h.experiments.filter((e: J) => e.result === 'SUPPORTS').map((e: J) => e.experiment_id)
+          return <tr key={h.hypothesis_id}><td className="id">H{h.hypothesis_id}</td><td>{h.category}</td><td>{h.cause_type}</td><td className="wrap">{h.text}</td><td>{h.origin}</td>
+            <td className="wrap">{h.experiments.map((e: J) => `E${e.experiment_id} ${e.result} n=${e.sample_size} (${e.performed_by}, ${e.execution_mode})`).join(' · ') || '-'}</td>
+            <td><Badge tone={h.status === 'CONFIRMED' ? 'green' : h.status === 'REJECTED' ? 'red' : 'amber'}>{h.status}</Badge></td>
+            <td>{role === 'PROCESS_ENGINEER' && h.status === 'OPEN' && <div className="row-gap">
+              <button className="button success" style={{ height: 26, padding: '0 6px' }} onClick={() => run(api(`/cases/${cid}/causal-decisions`, 'POST', { hypothesis_id: h.hypothesis_id, decision: 'CONFIRMED', basis_experiment_ids: sup, rationale: f.note || 'supporting experiment reviewed' }))}>CONFIRMED</button>
+              <button className="button secondary" style={{ height: 26, padding: '0 6px' }} onClick={() => run(api(`/cases/${cid}/causal-decisions`, 'POST', { hypothesis_id: h.hypothesis_id, decision: 'INCONCLUSIVE', rationale: f.note || 'evidence insufficient' }))}>INCONCLUSIVE</button></div>}</td></tr> })}
+        {!d4.hypotheses.length && <tr><td colSpan={8}><Empty>가설이 없습니다.</Empty></td></tr>}
+      </tbody></table></div>
+      <div className="row-gap mt" style={{ flexWrap: 'wrap' }}><select value={f.category} onChange={set('category')}>{['MAN', 'MACHINE', 'MATERIAL', 'METHOD', 'MEASUREMENT', 'ENVIRONMENT'].map(x => <option key={x}>{x}</option>)}</select>
+        <select value={f.cause_type} onChange={set('cause_type')}>{['OCCURRENCE', 'NON_DETECTION', 'SYSTEMIC'].map(x => <option key={x}>{x}</option>)}</select>
+        <input className="input" style={{ flex: 2, marginTop: 0 }} placeholder="가설 (10자 이상)" value={f.htext} onChange={set('htext')}/>
+        <input className="input" style={{ flex: 1, marginTop: 0 }} placeholder="근거 EV-... (쉼표)" value={f.hev} onChange={set('hev')}/>
+        <button className="button secondary" onClick={() => run(api(`/cases/${cid}/hypotheses`, 'POST', { category: f.category, cause_type: f.cause_type, text: f.htext, evidence_ids: list(f.hev) }))}>가설 추가</button></div>
+      <p className="muted wrap">확정 원인 {d4.confirmed.length}건 · 5-Why 연결 {d4.why_links.length}건 · 판정 메모는 위 "실행/확인 메모" 칸을 사용합니다.</p></Card>}
     <Card className="mb"><SectionTitle title="조치 실행 기록" sub="REQUESTED → (PLAN_APPROVED) → EXECUTED → INDEPENDENTLY_VERIFIED · 실행자와 확인자는 달라야 함"/>
       <div className="dual"><input className="input" placeholder="실행/확인 메모 (실행은 10자 이상)" value={f.note} onChange={set('note')}/><input className="input" placeholder="확인 근거 (쉼표 구분, EV-... 또는 REF:...)" value={f.evidence} onChange={set('evidence')}/></div>
       <div className="table-wrap mt"><table><thead><tr><th>#</th><th>단계</th><th>조치</th><th>대상</th><th>상태</th><th>이력</th><th>기록</th></tr></thead><tbody>

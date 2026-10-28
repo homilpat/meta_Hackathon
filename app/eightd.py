@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app import actions, factcheck, ncr, policy, process, quality
+from app import actions, causes, factcheck, ncr, policy, process, quality
 from app.db import (
     Action,
     AffectedObject,
@@ -88,6 +88,8 @@ def stage_state(session: Session, case_id: str, documents_only: bool = False) ->
         live = [x for x in st if x != "CANCELLED"]
         done = live and all(x in ("INDEPENDENTLY_VERIFIED", "RELEASED") for x in live)
         state["D3"] = "DONE" if done else "PLAN_APPROVED"
+    if state["D4"] == "APPROVED" and not documents_only:  # an approved hypothesis document is not a known cause
+        state["D4"] = "DONE" if causes.confirmed(session, case_id) else "NO_CONFIRMED_CAUSE"
     return state
 
 

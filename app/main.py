@@ -12,6 +12,7 @@ from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import sessionmaker
 
 from app import ncr, spc
+from app.causes import make_d4_router
 from app.db import (
     Assignment,
     DataQualityIssue,
@@ -109,6 +110,7 @@ def create_app(database_url: str = "sqlite:///qualityops.db",
     app.include_router(make_router(sessions, current_user, app.state.provider))
     app.include_router(make_ml_router(sessions, current_user))
     app.include_router(make_v5_router(sessions, current_user))
+    app.include_router(make_d4_router(sessions, current_user))
 
     @app.get("/health", response_model=Health)
     def health() -> Health:

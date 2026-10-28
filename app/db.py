@@ -528,10 +528,81 @@ class ActionEvent(Base):
     policy_hash: Mapped[str] = mapped_column(String(64))
 
 
+class CauseHypothesis(Base):
+    """D4 candidate cause (4M/6M branch, occurrence / non-detection / systemic). Status comes from decisions."""
+
+    __tablename__ = "cause_hypotheses"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"), index=True)
+    cause_type: Mapped[str] = mapped_column(String(20))  # OCCURRENCE NON_DETECTION SYSTEMIC
+    category: Mapped[str] = mapped_column(String(20))  # MAN MACHINE MATERIAL METHOD MEASUREMENT ENVIRONMENT
+    text: Mapped[str] = mapped_column(Text)
+    evidence_ids: Mapped[list] = mapped_column(JSON)
+    counter_evidence_ids: Mapped[list] = mapped_column(JSON)
+    origin: Mapped[str] = mapped_column(String(20))  # HUMAN RCA_DRAFT AI_PROPOSED SHAP PRECEDENT
+    source_claim: Mapped[str | None] = mapped_column(String(40))  # "RCA v1:C7" when taken from an RCA draft
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class WhyLink(Base):
+    """One 5-Why step: parent happened because of child. Needs grounding and a way to falsify it."""
+
+    __tablename__ = "why_links"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"), index=True)
+    parent_id: Mapped[int] = mapped_column(ForeignKey("cause_hypotheses.id"))
+    child_id: Mapped[int] = mapped_column(ForeignKey("cause_hypotheses.id"))
+    supporting_ids: Mapped[list] = mapped_column(JSON)
+    falsification_criteria: Mapped[str] = mapped_column(Text)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class Experiment(Base):
+    """A documented test of one hypothesis. In this repository every experiment is SYNTHETIC (simulated)."""
+
+    __tablename__ = "experiments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"), index=True)
+    hypothesis_id: Mapped[int] = mapped_column(ForeignKey("cause_hypotheses.id"), index=True)
+    method: Mapped[str] = mapped_column(Text)
+    controlled_conditions: Mapped[list] = mapped_column(JSON)
+    baseline: Mapped[dict] = mapped_column(JSON)
+    intervention: Mapped[dict] = mapped_column(JSON)
+    sample_size: Mapped[int] = mapped_column(Integer)
+    acceptance_rule: Mapped[str] = mapped_column(Text)
+    evidence_ids: Mapped[list] = mapped_column(JSON)
+    result: Mapped[str] = mapped_column(String(14))  # SUPPORTS CONTRADICTS INCONCLUSIVE
+    synthetic: Mapped[bool] = mapped_column(default=True)
+    performed_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class CausalDecision(Base):
+    """Human cause decision (CONFIRMED / REJECTED / INCONCLUSIVE / REOPENED); the latest row per hypothesis wins."""
+
+    __tablename__ = "causal_decisions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"), index=True)
+    hypothesis_id: Mapped[int] = mapped_column(ForeignKey("cause_hypotheses.id"), index=True)
+    decision: Mapped[str] = mapped_column(String(14))
+    basis_experiment_ids: Mapped[list] = mapped_column(JSON)
+    rationale: Mapped[str] = mapped_column(Text)
+    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    policy_hash: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
 # Audit rows are append-only at the database level, not just by convention.
 APPEND_ONLY = ("approval_events", "workflow_events", "doc_comments", "audit_chain",
                "workflow_policies", "evidence_quality", "process_contexts", "affected_objects",
-               "triage_assessments", "team_events", "actions", "action_events")
+               "triage_assessments", "team_events", "actions", "action_events",
+               "cause_hypotheses", "why_links", "experiments", "causal_decisions")
 
 
 def append_only_ddl(table: str) -> list[str]:

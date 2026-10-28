@@ -507,6 +507,7 @@ class Action(Base):
     targets: Mapped[list] = mapped_column(JSON)  # affected object ids, bound at creation
     target_snapshot: Mapped[list] = mapped_column(JSON)  # their shipment state + identity evidence at creation
     cause_ids: Mapped[list] = mapped_column(JSON, default=list)  # D5: confirmed cause hypothesis ids
+    details: Mapped[dict | None] = mapped_column(JSON)  # D5: feasibility, risk_analysis, side_effects
     document_version_id: Mapped[int | None] = mapped_column(ForeignKey("document_versions.id"))
     created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[str] = mapped_column(String(40))
@@ -598,11 +599,50 @@ class CausalDecision(Base):
     created_at: Mapped[str] = mapped_column(String(40))
 
 
+class EffectivenessPlan(Base):
+    """D6 criteria for one D5 action, registered before execution. A later row is a new plan, never an edit."""
+
+    __tablename__ = "effectiveness_plans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"), index=True)
+    action_id: Mapped[int] = mapped_column(ForeignKey("actions.id"), index=True)
+    metric: Mapped[str] = mapped_column(String(40))
+    baseline_lots: Mapped[list] = mapped_column(JSON)
+    post_from: Mapped[str | None] = mapped_column(String(40))  # None: the window opens at execution
+    post_to: Mapped[str | None] = mapped_column(String(40))
+    min_sample: Mapped[int] = mapped_column(Integer)
+    acceptance: Mapped[dict] = mapped_column(JSON)  # {"op": ">=" | "<=", "value": float}
+    inspection_conditions: Mapped[dict] = mapped_column(JSON)
+    monitoring: Mapped[str] = mapped_column(Text)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class EffectivenessResult(Base):
+    """Server-computed comparison for a plan plus the reviewer's decision (EFFECTIVE only if criteria are met)."""
+
+    __tablename__ = "effectiveness_results"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"), index=True)
+    plan_id: Mapped[int] = mapped_column(ForeignKey("effectiveness_plans.id"), index=True)
+    action_id: Mapped[int] = mapped_column(ForeignKey("actions.id"))
+    computed: Mapped[str] = mapped_column(String(20))  # MEETS_CRITERIA FAILS_CRITERIA INCONCLUSIVE
+    observed: Mapped[dict] = mapped_column(JSON)
+    reasons: Mapped[list] = mapped_column(JSON)
+    decision: Mapped[str] = mapped_column(String(14))  # EFFECTIVE NOT_EFFECTIVE INCONCLUSIVE
+    reviewer_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    note: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
 # Audit rows are append-only at the database level, not just by convention.
 APPEND_ONLY = ("approval_events", "workflow_events", "doc_comments", "audit_chain",
                "workflow_policies", "evidence_quality", "process_contexts", "affected_objects",
                "triage_assessments", "team_events", "actions", "action_events",
-               "cause_hypotheses", "why_links", "experiments", "causal_decisions")
+               "cause_hypotheses", "why_links", "experiments", "causal_decisions",
+               "effectiveness_plans", "effectiveness_results")
 
 
 def append_only_ddl(table: str) -> list[str]:

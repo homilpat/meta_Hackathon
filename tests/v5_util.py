@@ -49,3 +49,29 @@ def evidence(c: TestClient, case_id: str, kind: str, **match) -> list[str]:
 
     with Session(c.app_ref.state.engine) as s:
         return [i["ev"] for i in ncr.current(ncr._evidence(s, case_id)) if i["type"] == kind and ok(i["rec"])]
+
+
+def valid(c: TestClient, case_id: str, kind: str, **match) -> list[str]:
+    """Like evidence(), restricted to rows whose effective quality state is VALID."""
+    ok = {i["evidence_id"] for i in c.get(f"/cases/{case_id}/evidence-quality?state=VALID",
+                                          headers=H("alice")).json()["items"]}
+    return [e for e in evidence(c, case_id, kind, **match) if e in ok]
+
+
+def confirmed_cause(c: TestClient, case_id: str = "L", text: str = "Worn stencil STN-2 under-deposits paste in L02",
+                    category: str = "MACHINE") -> int:
+    """A D4 cause CONFIRMED the legitimate way: hypothesis, supporting experiment by alice, decision by frank."""
+    ev = valid(c, case_id, "equipment_events")[:1] + valid(c, case_id, "lots", lot_id="L02")[:1]
+    h = c.post(f"/cases/{case_id}/hypotheses", headers=H("alice"), json={
+        "cause_type": "OCCURRENCE", "category": category, "text": text, "evidence_ids": ev}).json()["hypothesis_id"]
+    e = c.post(f"/cases/{case_id}/experiments", headers=H("alice"), json={
+        "hypothesis_id": h, "method": "Swap STN-2 for a fresh stencil, same paste lot, compare SPI volume",
+        "controlled_conditions": ["paste lot unchanged", "same line"], "baseline": {"stencil": "STN-2"},
+        "intervention": {"stencil": "fresh"}, "sample_size": 32, "acceptance_rule": "mean SPI 0.11-0.13 mm3",
+        "evidence_ids": valid(c, case_id, "spi_measurements", panel_id="L02*")[:8],
+        "result": "SUPPORTS"}).json()["experiment_id"]
+    r = c.post(f"/cases/{case_id}/causal-decisions", headers=H("frank"), json={
+        "hypothesis_id": h, "decision": "CONFIRMED", "basis_experiment_ids": [e],
+        "rationale": "independent fresh-stencil run restored the SPI volume"})
+    assert r.status_code == 201, r.text
+    return h

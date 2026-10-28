@@ -1,6 +1,7 @@
 import hashlib
 import json
 from collections import Counter
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -8,12 +9,13 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from sqlalchemy import create_engine, event, select
+from sqlalchemy import create_engine, event, func, select
 from sqlalchemy.orm import sessionmaker
 
-from app import ncr, spc
+from app import effect, ncr, spc
 from app.causes import make_d4_router
 from app.db import (
+    Action,
     Assignment,
     DataQualityIssue,
     Evidence,
@@ -23,11 +25,19 @@ from app.db import (
     SourceEvent,
     User,
 )
+from app.effect import make_d6_router
 from app.eightd import make_v5_router
 from app.ingestion import SyntheticBundle, normalize
 from app.ml_api import make_ml_router
 from app.model_provider import MODEL, MetaProvider, ModelProvider
-from app.synthetic import LINE_VERSION, canonical, generate, generate_line, spi_correction
+from app.synthetic import (
+    LINE_VERSION,
+    canonical,
+    generate,
+    generate_line,
+    generate_post_window,
+    spi_correction,
+)
 from app.workflow import DEMO_USERS, Actor, log, make_auth, make_router, require_case, require_role
 
 
@@ -111,6 +121,7 @@ def create_app(database_url: str = "sqlite:///qualityops.db",
     app.include_router(make_ml_router(sessions, current_user))
     app.include_router(make_v5_router(sessions, current_user))
     app.include_router(make_d4_router(sessions, current_user))
+    app.include_router(make_d6_router(sessions, current_user))
 
     @app.get("/health", response_model=Health)
     def health() -> Health:
@@ -151,6 +162,35 @@ def create_app(database_url: str = "sqlite:///qualityops.db",
                 raise HTTPException(409, "Sources already uploaded for this case")
             store_bundle(session, case_id, bundle, events, issues)
         return {"asset_count": len(bundle.assets), "event_count": len(events),
+                "issue_counts": Counter(i["code"] for i in issues)}
+
+    class PostWindowIn(BaseModel):
+        action_id: int
+        effective: bool = True  # fixture choice: fresh stencil, or the same drift continues
+
+    @app.post("/cases/{case_id}/synthetic/post-window", status_code=201)
+    def post_window(case_id: str, body: PostWindowIn, actor: Who) -> dict:
+        """D6 monitoring data: one generated lot (L04) produced after the D5 action's EXECUTED event. SYNTHETIC."""
+        require_role(actor, "AUTHOR")
+        with sessions.begin() as session:
+            require_case(session, case_id, actor)
+            a = session.get(Action, body.action_id)
+            if a is None or a.case_id != case_id or a.stage != "D5":
+                raise HTTPException(404, "D5 action not found")
+            at = effect.executed_at(session, a.id)
+            if at is None:
+                raise HTTPException(409, "post-window data follows an EXECUTED corrective action")
+            if session.scalar(select(SourceAsset.id).where(SourceAsset.case_id == case_id,
+                                                           SourceAsset.asset_id.like("%:post:v1")).limit(1)):
+                raise HTTPException(409, "post-window data already recorded for this case")
+            seed = session.scalar(select(func.count(SourceAsset.id)).where(SourceAsset.case_id == case_id))
+            bundle = SyntheticBundle.model_validate(
+                generate_post_window(seed, datetime.fromisoformat(at), body.effective))
+            events, issues = normalize(bundle)
+            store_bundle(session, case_id, bundle, events, issues)
+            log(session, case_id, actor, "POST_WINDOW_DATA", f"action #{a.id} after {at} effective_fixture="
+                f"{body.effective} rows={len(events)} (SYNTHETIC)")
+        return {"event_count": len(events), "after": at, "generator_version": bundle.generator_version,
                 "issue_counts": Counter(i["code"] for i in issues)}
 
     @app.get("/cases/{case_id}/spc")

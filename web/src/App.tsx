@@ -438,9 +438,10 @@ function EightD({ ctx }: { ctx: Ctx }) {
   const [pc, setPc] = useState<J>(null)
   const [pd, setPd] = useState<J>(null)
   const [d4, setD4] = useState<J>(null)
+  const [d6, setD6] = useState<J>(null)
   const [f, setF] = useState<Record<string, string>>({ signal_kind: 'SPC_SIGNAL', observed_defect: 'SIGNAL_ONLY', route: 'FULL_8D', severity: 'MEDIUM', scope_lots: '', rationale: '', evidence_ids: '',
     responsibility: 'QUALITY', user_id: 'bob', action_type: 'HOLD', targets: '', description: '', note: '', evidence: '',
-    cause_type: 'OCCURRENCE', category: 'MACHINE', htext: '', hev: '' })
+    cause_type: 'OCCURRENCE', category: 'MACHINE', htext: '', hev: '', causes: '', feasibility: '', risk: '', side: '' })
   const set = (k: string) => (e: { target: { value: string } }) => setF(x => ({ ...x, [k]: e.target.value }))
   useEffect(() => {
     if (!cid) return
@@ -451,6 +452,7 @@ function EightD({ ctx }: { ctx: Ctx }) {
     api(`/cases/${cid}/process-context`).then(setPc).catch(() => setPc(null))
     api(`/cases/${cid}/problem-definition`).then(setPd).catch(() => setPd(null))
     api(`/cases/${cid}/hypotheses`).then(setD4).catch(() => setD4(null))
+    api(`/cases/${cid}/effectiveness`).then(setD6).catch(() => setD6(null))
   }, [cid, api, tick])
   const run = (p: Promise<unknown>) => p.then(refresh).catch(() => undefined)
   const t = tri[tri.length - 1]
@@ -524,6 +526,23 @@ function EightD({ ctx }: { ctx: Ctx }) {
         <input className="input" style={{ flex: 1, marginTop: 0 }} placeholder="근거 EV-... (쉼표)" value={f.hev} onChange={set('hev')}/>
         <button className="button secondary" onClick={() => run(api(`/cases/${cid}/hypotheses`, 'POST', { category: f.category, cause_type: f.cause_type, text: f.htext, evidence_ids: list(f.hev) }))}>가설 추가</button></div>
       <p className="muted wrap">확정 원인 {d4.confirmed.length}건 · 5-Why 연결 {d4.why_links.length}건 · 판정 메모는 위 "실행/확인 메모" 칸을 사용합니다.</p></Card>}
+    {d6 && <Card className="mb"><SectionTitle title="D5 조치 선정 · D6 효과 검증" sub={`D5 ${d6.D5 ?? '—'} · D6 ${d6.D6 ?? '—'} · 선정 ≠ 실행 ≠ 효과 · 효과는 사전 등록 기준으로 서버가 계산 (SYNTHETIC)`}/>
+      <div className="row-gap" style={{ flexWrap: 'wrap' }}><input className="input" style={{ flex: 1, marginTop: 0 }} placeholder="확정 원인 H# (쉼표, 숫자)" value={f.causes} onChange={set('causes')}/>
+        <input className="input" style={{ flex: 1, marginTop: 0 }} placeholder="실현 가능성" value={f.feasibility} onChange={set('feasibility')}/>
+        <input className="input" style={{ flex: 1, marginTop: 0 }} placeholder="위험 분석" value={f.risk} onChange={set('risk')}/>
+        <input className="input" style={{ flex: 1, marginTop: 0 }} placeholder="부작용" value={f.side} onChange={set('side')}/>
+        <button className="button secondary" disabled={!['AUTHOR', 'PROCESS_ENGINEER'].includes(role ?? '')} onClick={() => run(api(`/cases/${cid}/actions`, 'POST', { stage: 'D5', action_type: 'PROCESS_CHANGE', description: f.description,
+          cause_ids: list(f.causes).map(Number), details: { feasibility: f.feasibility, risk_analysis: f.risk, side_effects: f.side } }))}>D5 조치안 추가</button></div>
+      <p className="muted wrap">조치 설명은 위 "조치 설명" 칸을 사용합니다. 선정은 아래 조치 실행 기록에서 PLAN_APPROVED (공정 엔지니어, 원인 CONFIRMED 필요).</p>
+      <div className="table-wrap mt"><table><thead><tr><th>계획</th><th>조치</th><th>지표 · 기준</th><th>서버 계산</th><th>결과</th><th>판정</th></tr></thead><tbody>
+        {d6.plans.map((p: J) => { const pv = d6.preview[p.plan_id]; const res = d6.results.filter((r: J) => r.plan_id === p.plan_id)
+          return <tr key={p.plan_id}><td className="id">#{p.plan_id}</td><td>#{p.action_id}</td><td className="wrap">{p.metric} {p.acceptance.op} {p.acceptance.value} · 기준 LOT {p.baseline_lots.join(',')} · 최소 n {p.min_sample}</td>
+            <td className="wrap"><Badge tone={pv.computed === 'MEETS_CRITERIA' ? 'green' : pv.computed === 'FAILS_CRITERIA' ? 'red' : 'amber'}>{pv.computed}</Badge> {pv.observed.post ? `전 ${pv.observed.baseline.mean} (n=${pv.observed.baseline.n}) → 후 ${pv.observed.post.mean} (n=${pv.observed.post.n})` : ''} {pv.reasons.join(' · ')}</td>
+            <td>{res.map((r: J) => <Badge key={r.result_id} tone={r.decision === 'EFFECTIVE' ? 'green' : r.decision === 'NOT_EFFECTIVE' ? 'red' : 'amber'}>{r.decision} ({r.reviewer_id})</Badge>)}</td>
+            <td>{role === 'REVIEWER' && <div className="row-gap">{['EFFECTIVE', 'NOT_EFFECTIVE', 'INCONCLUSIVE'].map(d => <button key={d} className="button secondary" style={{ height: 26, padding: '0 6px' }}
+              onClick={() => run(api(`/cases/${cid}/effectiveness`, 'POST', { plan_id: p.plan_id, decision: d, note: f.note || 'reviewed the server comparison' }))}>{d}</button>)}</div>}</td></tr> })}
+        {!d6.plans.length && <tr><td colSpan={6}><Empty>효과 검증 계획이 없습니다. (API: POST /effectiveness-plans, 실행 전 등록)</Empty></td></tr>}
+      </tbody></table></div></Card>}
     <Card className="mb"><SectionTitle title="조치 실행 기록" sub="REQUESTED → (PLAN_APPROVED) → EXECUTED → INDEPENDENTLY_VERIFIED · 실행자와 확인자는 달라야 함"/>
       <div className="dual"><input className="input" placeholder="실행/확인 메모 (실행은 10자 이상)" value={f.note} onChange={set('note')}/><input className="input" placeholder="확인 근거 (쉼표 구분, EV-... 또는 REF:...)" value={f.evidence} onChange={set('evidence')}/></div>
       <div className="table-wrap mt"><table><thead><tr><th>#</th><th>단계</th><th>조치</th><th>대상</th><th>상태</th><th>이력</th><th>기록</th></tr></thead><tbody>

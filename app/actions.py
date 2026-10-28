@@ -58,11 +58,11 @@ def bind_targets(session: Session, case_id: str, stage: str, action_type: str, t
 
 
 def create(session: Session, case_id: str, stage: str, action_type: str, description: str, targets: list[str],
-           actor_id: str, policy_hash: str, cause_ids: list[str] | None = None,
-           document_version_id: int | None = None) -> Action:
+           actor_id: str, policy_hash: str, cause_ids: list[int] | None = None,
+           document_version_id: int | None = None, details: dict | None = None) -> Action:
     snap = bind_targets(session, case_id, stage, action_type, targets)
     a = Action(case_id=case_id, stage=stage, action_type=action_type, description=description, targets=targets,
-               target_snapshot=snap, cause_ids=cause_ids or [], document_version_id=document_version_id,
+               target_snapshot=snap, cause_ids=cause_ids or [], document_version_id=document_version_id, details=details,
                created_by=actor_id, created_at=now())
     session.add(a)
     session.flush()
@@ -112,7 +112,7 @@ def out(session: Session, a: Action) -> dict:
     evs = events(session, a.id)
     return {"action_id": a.id, "case_id": a.case_id, "stage": a.stage, "action_type": a.action_type,
             "description": a.description, "targets": a.targets, "target_snapshot": a.target_snapshot,
-            "cause_ids": a.cause_ids, "document_version_id": a.document_version_id, "created_by": a.created_by,
+            "cause_ids": a.cause_ids, "details": a.details, "document_version_id": a.document_version_id, "created_by": a.created_by,
             "created_at": a.created_at, "status": evs[-1].event_type if evs else "MISSING",
             "execution_mode": "SIMULATED",  # synthetic demo: nothing physical happened
             "events": [{"event_type": e.event_type, "actor_id": e.actor_id, "at": e.occurred_at,

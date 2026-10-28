@@ -146,7 +146,9 @@ LINE_VERSION = "line1.0"
 LINE_T0 = datetime(2026, 1, 5, 6, 0, tzinfo=UTC)
 
 
-def generate_line(seed: int = 7, lots: int = 3, panels_per_lot: int = 12, boards: int = 4, comps: int = 4) -> dict:
+def generate_line(seed: int = 7, lots: int = 3, panels_per_lot: int = 12, boards: int = 4, comps: int = 4,
+                  first_lot: int = 1, t0: datetime = LINE_T0, worn_lots: tuple[int, ...] = (2,),
+                  tag: str = "") -> dict:
     """Production-scale fictional SMT line: lots -> panels -> boards -> components -> pins, shipments.
 
     Lot L02 runs on a worn stencil: paste volume drifts down panel by panel, so true insufficient-solder
@@ -162,9 +164,9 @@ def generate_line(seed: int = 7, lots: int = 3, panels_per_lot: int = 12, boards
         return {"original_row_id": row_id, "data_origin": "SYNTHETIC", "event_time": at.isoformat(),
                 "source_updated_at": None, "ingested_at": (at + timedelta(hours=2)).isoformat(), **fields}
 
-    for li in range(1, lots + 1):
-        lot, worn = f"L{li:02d}", li == 2
-        start = LINE_T0 + timedelta(hours=8 * (li - 1))
+    for li in range(first_lot, first_lot + lots):
+        lot, worn = f"L{li:02d}", li in worn_lots
+        start = t0 + timedelta(hours=8 * (li - first_lot))
         t["lots"].append(row(f"LOT-{lot}", start, lot_id=lot, line_id="SMT-1", stencil_id=f"STN-{li}",
                              paste_lot=f"PST-{100 + li}"))
         if worn:
@@ -207,14 +209,25 @@ def generate_line(seed: int = 7, lots: int = 3, panels_per_lot: int = 12, boards
                                                         disposition="REPAIRED" if defect else "NO_REPAIR"))
 
     def asset(kind: str, records: list[dict]) -> dict:
-        return {"asset_id": f"synthetic:{kind}:v1", "source_system": f"SYNTHETIC_{kind.upper()}", "entity_type": kind,
-                "source_version": 1, "supersedes_asset_id": None, "license_id": "SELF_GENERATED",
+        return {"asset_id": f"synthetic:{kind}{tag}:v1", "source_system": f"SYNTHETIC_{kind.upper()}",
+                "entity_type": kind, "source_version": 1, "supersedes_asset_id": None, "license_id": "SELF_GENERATED",
                 "data_origin": "SYNTHETIC", "sensitivity": "APPROVED_FOR_EXTERNAL",
-                "captured_at": LINE_T0.isoformat(), "ingested_at": (LINE_T0 + timedelta(days=1)).isoformat(),
+                "captured_at": t0.isoformat(), "ingested_at": (t0 + timedelta(days=1)).isoformat(),
                 "content_sha256": sha256(records), "records": records}
 
     return {"generator_version": LINE_VERSION, "seed": seed, "data_origin": "SYNTHETIC",
             "assets": [asset(k, v) for k, v in t.items() if v]}
+
+
+POST_VERSION = "line1.0-post"
+
+
+def generate_post_window(seed: int, after: datetime, effective: bool = True) -> dict:
+    """D6 monitoring fixture: one further lot (L04) produced after a corrective action was executed, on a fresh
+    stencil (effective) or with the same paste-volume drift (not effective). Every value is generated."""
+    bundle = generate_line(seed, lots=1, first_lot=4, t0=after + timedelta(hours=1),
+                           worn_lots=() if effective else (4,), tag=":post")
+    return {**bundle, "generator_version": POST_VERSION}
 
 
 def spi_correction(seed: int = 7, row_id: str = "SPI-P02-B01-1", delta: float = -0.03, version: int = 3,

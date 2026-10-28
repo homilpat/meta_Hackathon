@@ -81,6 +81,9 @@ def confirm_blocks(session: Session, h: CauseHypothesis, basis: list[Experiment]
             blocks.append(f"experiment #{e.id} result is {e.result}, not SUPPORTS")
         if e.performed_by == actor.id:
             blocks.append(f"experiment #{e.id} was performed by {actor.id}; the decision needs an independent reviewer")
+    last = latest_decision(session, h.id)
+    if last is not None and last.decision == "REOPENED" and not any(e.created_at > last.created_at for e in basis):
+        blocks.append(f"H{h.id} was reopened ({last.rationale}); re-confirming needs an experiment run after that")
     against = [e.id for e in experiments(session, h.id) if e.result == "CONTRADICTS"]
     if against:
         blocks.append(f"experiments {against} contradict this hypothesis; record REJECTED or INCONCLUSIVE, or "

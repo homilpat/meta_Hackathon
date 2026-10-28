@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app import actions, causes, factcheck, ncr, policy, process, quality
+from app import actions, causes, effect, factcheck, ncr, policy, process, quality
 from app.db import (
     Action,
     AffectedObject,
@@ -90,6 +90,7 @@ def stage_state(session: Session, case_id: str, documents_only: bool = False) ->
         state["D3"] = "DONE" if done else "PLAN_APPROVED"
     if state["D4"] == "APPROVED" and not documents_only:  # an approved hypothesis document is not a known cause
         state["D4"] = "DONE" if causes.confirmed(session, case_id) else "NO_CONFIRMED_CAUSE"
+    state["D5"], state["D6"] = effect.stage_states(session, case_id)
     return state
 
 
@@ -168,9 +169,13 @@ class TeamIn(BaseModel):
 
 
 class ActionIn(BaseModel):
-    action_type: Literal["HOLD", "SORT", "STOP_SHIP", "QUARANTINE", "CUSTOMER_NOTIFY_REQUEST", "OTHER"]
+    action_type: Literal["HOLD", "SORT", "STOP_SHIP", "QUARANTINE", "CUSTOMER_NOTIFY_REQUEST", "OTHER",
+                         "PROCESS_CHANGE", "EQUIPMENT_CHANGE", "INSPECTION_CHANGE", "TRAINING"]
     description: str = Field(min_length=10, max_length=1000)
-    targets: list[str] = Field(min_length=1)
+    targets: list[str] = []  # D3/urgent: at least one affected object
+    stage: Literal["D3", "D5"] = "D3"
+    cause_ids: list[int] = []  # D5: cause hypotheses this corrective action addresses
+    details: dict[str, str] = {}  # D5: feasibility, risk_analysis, side_effects
 
 
 class ActionEventIn(BaseModel):
@@ -190,8 +195,9 @@ def _d3_plan_check(session: Session, a: Action, actor: Actor) -> None:
         raise HTTPException(403, f"D3 plan approval needs role {gate}")
 
 
-# Stage-specific checks before PLAN_APPROVED (D5 added in G6). stage -> fn(session, action, actor).
-PLAN_CHECKS: dict[str, Callable[[Session, Action, Actor], None]] = {"D3": _d3_plan_check}
+# Stage-specific checks before PLAN_APPROVED. stage -> fn(session, action, actor).
+PLAN_CHECKS: dict[str, Callable[[Session, Action, Actor], None]] = {"D3": _d3_plan_check,
+                                                                    "D5": effect.d5_select_check}
 
 
 def make_v5_router(sessions: sessionmaker, current_user: Callable[..., Actor]) -> APIRouter:
@@ -386,6 +392,8 @@ def make_v5_router(sessions: sessionmaker, current_user: Callable[..., Actor]) -
     def urgent_action(case_id: str, body: ActionIn, actor: Who) -> dict:
         """Emergency containment after D0, before D1/D2 are complete. Recorded as REQUESTED; execution and
         independent verification are separate events."""
+        if not body.targets:
+            raise HTTPException(422, "urgent containment needs at least one target")
         with sessions.begin() as session:
             require_case(session, case_id, actor)
             p = active_policy(session, case_id)
@@ -400,8 +408,13 @@ def make_v5_router(sessions: sessionmaker, current_user: Callable[..., Actor]) -
 
     @router.post("/cases/{case_id}/actions", status_code=201)
     def containment_action(case_id: str, body: ActionIn, actor: Who) -> dict:
-        """D3 containment action bound to the latest containment plan and to exact affected objects."""
+        """D3 containment action bound to the latest containment plan and to exact affected objects, or a D5
+        corrective-action option tied to cause hypotheses (selection is a separate PLAN_APPROVED event)."""
+        if body.stage == "D5":
+            return corrective_option(case_id, body, actor)
         require_role(actor, "AUTHOR")
+        if not body.targets:
+            raise HTTPException(422, "a D3 action needs at least one target")
         with sessions.begin() as session:
             require_case(session, case_id, actor)
             doc = session.scalar(select(DocumentVersion).where(
@@ -414,6 +427,24 @@ def make_v5_router(sessions: sessionmaker, current_user: Callable[..., Actor]) -
                                p.policy_hash, document_version_id=doc.id)
             log(session, case_id, actor, "D3_ACTION_PROPOSED",
                 f"#{a.id} {body.action_type} {','.join(body.targets)} from CONTAINMENT v{doc.version}")
+            return actions.out(session, a)
+
+    def corrective_option(case_id: str, body: ActionIn, actor: Actor) -> dict:
+        if actor.role not in ("AUTHOR", "PROCESS_ENGINEER"):
+            raise HTTPException(403, "AUTHOR or PROCESS_ENGINEER role required")
+        if not body.cause_ids:
+            raise HTTPException(422, "a D5 corrective action must name the cause hypotheses it addresses")
+        if missing := [k for k in effect.D5_DETAILS if len(body.details.get(k, "").strip()) < 5]:
+            raise HTTPException(422, f"a D5 option needs {missing} (alternatives are compared on them)")
+        with sessions.begin() as session:
+            require_case(session, case_id, actor)
+            for h in body.cause_ids:
+                causes.get_hypothesis(session, case_id, h)
+            p = active_policy(session, case_id)
+            a = actions.create(session, case_id, "D5", body.action_type, body.description, body.targets, actor.id,
+                               p.policy_hash, cause_ids=body.cause_ids, details=body.details)
+            log(session, case_id, actor, "D5_OPTION_PROPOSED",
+                f"#{a.id} {body.action_type} for H{','.join(map(str, body.cause_ids))}: {body.description[:120]}")
             return actions.out(session, a)
 
     @router.get("/cases/{case_id}/problem-definition")
@@ -439,6 +470,8 @@ def make_v5_router(sessions: sessionmaker, current_user: Callable[..., Actor]) -
                 if check is None:
                     raise HTTPException(422, f"{a.stage} actions have no plan approval step")
                 check(session, a, actor)
+            if body.event_type == "EXECUTED" and a.stage == "D5":
+                effect.d6_execute_check(session, a)
             actions.record(session, a, body.event_type, actor.id, actor.role, active_policy(session, case_id),
                            body.note, body.evidence)
             log(session, case_id, actor, f"ACTION_{body.event_type}",

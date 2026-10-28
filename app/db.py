@@ -637,12 +637,89 @@ class EffectivenessResult(Base):
     created_at: Mapped[str] = mapped_column(String(40))
 
 
+class ControlledDocument(Base):
+    """One row per state of a controlled-document revision (DRAFT -> RELEASED -> WITHDRAWN); latest row wins."""
+
+    __tablename__ = "controlled_documents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    doc_number: Mapped[str] = mapped_column(String(40), index=True)
+    kind: Mapped[str] = mapped_column(String(20))  # SOP FMEA CONTROL_PLAN TEMPLATE PRIOR_8D
+    revision: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(10))
+    title: Mapped[str] = mapped_column(String(200))
+    body: Mapped[str] = mapped_column(Text)
+    site: Mapped[str] = mapped_column(String(40))
+    process_type: Mapped[str] = mapped_column(String(40))
+    customer: Mapped[str] = mapped_column(String(60))
+    effective_from: Mapped[str] = mapped_column(String(40))
+    effective_to: Mapped[str | None] = mapped_column(String(40))
+    acl_roles: Mapped[list] = mapped_column(JSON)  # ["*"] or role names allowed to read it
+    content_sha256: Mapped[str] = mapped_column(String(64))
+    authored_by: Mapped[str] = mapped_column(String(40))
+    released_by: Mapped[str | None] = mapped_column(String(40))
+    case_id: Mapped[str | None] = mapped_column(ForeignKey("quality_cases.id"))  # case that raised the revision
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class PreventionDeployment(Base):
+    """D7: a released revision put in effect for this case, its rollout scope, training and sister lines."""
+
+    __tablename__ = "prevention_deployments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"), index=True)
+    doc_number: Mapped[str] = mapped_column(String(40))
+    kind: Mapped[str] = mapped_column(String(20))
+    old_revision: Mapped[int] = mapped_column(Integer)
+    new_revision: Mapped[int] = mapped_column(Integer)
+    scopes: Mapped[list] = mapped_column(JSON)  # lines the revision is rolled out to
+    operators_in_scope: Mapped[list] = mapped_column(JSON)
+    training: Mapped[list] = mapped_column(JSON)  # [{"operator_id", "evidence_ref"}]
+    sister_lines: Mapped[list] = mapped_column(JSON)  # [{"line", "applies", "reason"}]
+    exceptions: Mapped[str] = mapped_column(Text)
+    recorded_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class ClosureAck(Base):
+    """D8 team acknowledgement: each accepted D1 member signs off on the result and their contribution."""
+
+    __tablename__ = "closure_acks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    responsibility: Mapped[str] = mapped_column(String(20))
+    contribution: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class Closure(Base):
+    """D8 decision (CLOSED / REOPENED) with the archived snapshot it was taken on; latest row wins."""
+
+    __tablename__ = "closures"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"), index=True)
+    decision: Mapped[str] = mapped_column(String(10))
+    snapshot: Mapped[dict] = mapped_column(JSON)
+    snapshot_sha256: Mapped[str] = mapped_column(String(64))
+    residual_risks: Mapped[list] = mapped_column(JSON)
+    customer_notification_ref: Mapped[str | None] = mapped_column(String(120))
+    comment: Mapped[str] = mapped_column(Text)
+    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    policy_hash: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
 # Audit rows are append-only at the database level, not just by convention.
 APPEND_ONLY = ("approval_events", "workflow_events", "doc_comments", "audit_chain",
                "workflow_policies", "evidence_quality", "process_contexts", "affected_objects",
                "triage_assessments", "team_events", "actions", "action_events",
                "cause_hypotheses", "why_links", "experiments", "causal_decisions",
-               "effectiveness_plans", "effectiveness_results")
+               "effectiveness_plans", "effectiveness_results",
+               "controlled_documents", "prevention_deployments", "closure_acks", "closures")
 
 
 def append_only_ddl(table: str) -> list[str]:

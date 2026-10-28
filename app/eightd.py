@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app import actions, causes, effect, factcheck, ncr, policy, process, quality
+from app import actions, causes, closure, effect, factcheck, ncr, policy, process, quality
 from app.db import (
     Action,
     AffectedObject,
@@ -91,6 +91,9 @@ def stage_state(session: Session, case_id: str, documents_only: bool = False) ->
     if state["D4"] == "APPROVED" and not documents_only:  # an approved hypothesis document is not a known cause
         state["D4"] = "DONE" if causes.confirmed(session, case_id) else "NO_CONFIRMED_CAUSE"
     state["D5"], state["D6"] = effect.stage_states(session, case_id)
+    state["D7"], _ = closure.d7_state(session, case_id, active_policy(session, case_id).body)
+    last = closure.latest_closure(session, case_id)
+    state["D8"] = last.decision if last else None  # CLOSED / REOPENED
     return state
 
 

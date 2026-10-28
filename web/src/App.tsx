@@ -439,9 +439,11 @@ function EightD({ ctx }: { ctx: Ctx }) {
   const [pd, setPd] = useState<J>(null)
   const [d4, setD4] = useState<J>(null)
   const [d6, setD6] = useState<J>(null)
+  const [d7, setD7] = useState<J>(null)
+  const [d8, setD8] = useState<J>(null)
   const [f, setF] = useState<Record<string, string>>({ signal_kind: 'SPC_SIGNAL', observed_defect: 'SIGNAL_ONLY', route: 'FULL_8D', severity: 'MEDIUM', scope_lots: '', rationale: '', evidence_ids: '',
     responsibility: 'QUALITY', user_id: 'bob', action_type: 'HOLD', targets: '', description: '', note: '', evidence: '',
-    cause_type: 'OCCURRENCE', category: 'MACHINE', htext: '', hev: '', causes: '', feasibility: '', risk: '', side: '' })
+    cause_type: 'OCCURRENCE', category: 'MACHINE', htext: '', hev: '', causes: '', feasibility: '', risk: '', side: '', risk8: '', owner8: '', notify: '' })
   const set = (k: string) => (e: { target: { value: string } }) => setF(x => ({ ...x, [k]: e.target.value }))
   useEffect(() => {
     if (!cid) return
@@ -453,6 +455,8 @@ function EightD({ ctx }: { ctx: Ctx }) {
     api(`/cases/${cid}/problem-definition`).then(setPd).catch(() => setPd(null))
     api(`/cases/${cid}/hypotheses`).then(setD4).catch(() => setD4(null))
     api(`/cases/${cid}/effectiveness`).then(setD6).catch(() => setD6(null))
+    api(`/cases/${cid}/prevention`).then(setD7).catch(() => setD7(null))
+    api(`/cases/${cid}/closure`).then(setD8).catch(() => setD8(null))
   }, [cid, api, tick])
   const run = (p: Promise<unknown>) => p.then(refresh).catch(() => undefined)
   const t = tri[tri.length - 1]
@@ -543,6 +547,23 @@ function EightD({ ctx }: { ctx: Ctx }) {
               onClick={() => run(api(`/cases/${cid}/effectiveness`, 'POST', { plan_id: p.plan_id, decision: d, note: f.note || 'reviewed the server comparison' }))}>{d}</button>)}</div>}</td></tr> })}
         {!d6.plans.length && <tr><td colSpan={6}><Empty>효과 검증 계획이 없습니다. (API: POST /effectiveness-plans, 실행 전 등록)</Empty></td></tr>}
       </tbody></table></div></Card>}
+    <div className="dashboard-main">
+      {d7 && <Card><SectionTitle title="D7 재발 방지 (문서 개정·교육·수평 전개)" sub={`상태 ${d7.state ?? '—'} · 등록부의 발효된 개정본만 인정 · '개정했다'는 문장은 증거가 아님`}/>
+        <div className="table-wrap"><table><thead><tr><th>문서</th><th>개정</th><th>범위</th><th>교육</th><th>수평 전개</th></tr></thead><tbody>
+          {d7.deployments.map((x: J) => <tr key={x.id}><td>{x.doc_number} <span className="muted">{x.kind}</span></td><td>rev {x.old_revision} → {x.new_revision}</td><td>{x.scopes.join(', ')}</td>
+            <td>{x.training.length}/{x.operators_in_scope.length}</td><td className="wrap">{x.sister_lines.map((l: J) => `${l.line}:${l.applies ? '적용' : '제외'}`).join(' · ') || '-'}</td></tr>)}
+          {!d7.deployments.length && <tr><td colSpan={5}><Empty>D7 기록이 없습니다. (API: /controlled-documents/revisions → release → /prevention)</Empty></td></tr>}
+        </tbody></table></div>
+        {d7.reasons.length > 0 && <p className="muted wrap mt">미완료: {d7.reasons.join(' · ')}</p>}</Card>}
+      {d8 && <Card><SectionTitle title="D8 종결" sub={`정책 ${d8.policy.policy_id} v${d8.policy.version} · 고객 통보 필요 ${String(d8.needs_customer_notification)} · 서명 ${d8.acknowledged.join(', ') || '-'}`}/>
+        {d8.blocks.length ? <ul className="wrap muted" style={{ fontSize: 11 }}>{d8.blocks.map((b: string) => <li key={b}>{b}</li>)}</ul> : <Note>모든 종결 조건 충족 (합성 데이터 기준)</Note>}
+        {d8.team[me?.id ?? ''] && !d8.acknowledged.includes(me?.id) && <button className="button success" onClick={() => run(api(`/cases/${cid}/closure/acknowledgements`, 'POST', { contribution: f.note || 'reviewed the final result' }))}>결과 확인 서명</button>}
+        {role === 'REVIEWER' && <div className="mt"><div className="dual"><input className="input" placeholder="잔여 위험" value={f.risk8} onChange={set('risk8')}/><input className="input" placeholder="위험 담당" value={f.owner8} onChange={set('owner8')}/></div>
+          <input className="input" placeholder="고객 통보 참조번호 (출하·고객 영향 시 필수)" value={f.notify} onChange={set('notify')}/>
+          <div className="dual"><button className="button primary" onClick={() => run(api(`/cases/${cid}/closure`, 'POST', { residual_risks: [{ risk: f.risk8, mitigation: f.note || 'monitored', owner: f.owner8 }], customer_notification_ref: f.notify || null, comment: f.note || 'closure reviewed' }))}>D8 종결</button>
+            <button className="button secondary" disabled={d8.state.D8 !== 'CLOSED'} onClick={() => run(api(`/cases/${cid}/closure/reopen`, 'POST', { reason: f.note || 'reopened for re-investigation' }))}>재오픈</button></div></div>}
+        <p className="muted wrap mt">이력: {d8.history.map((h: J) => `${h.decision}(${h.actor_id}, ${h.snapshot_sha256.slice(0, 10)})`).join(' → ') || '-'}</p></Card>}
+    </div>
     <Card className="mb"><SectionTitle title="조치 실행 기록" sub="REQUESTED → (PLAN_APPROVED) → EXECUTED → INDEPENDENTLY_VERIFIED · 실행자와 확인자는 달라야 함"/>
       <div className="dual"><input className="input" placeholder="실행/확인 메모 (실행은 10자 이상)" value={f.note} onChange={set('note')}/><input className="input" placeholder="확인 근거 (쉼표 구분, EV-... 또는 REF:...)" value={f.evidence} onChange={set('evidence')}/></div>
       <div className="table-wrap mt"><table><thead><tr><th>#</th><th>단계</th><th>조치</th><th>대상</th><th>상태</th><th>이력</th><th>기록</th></tr></thead><tbody>

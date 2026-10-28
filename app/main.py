@@ -14,6 +14,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app import effect, ncr, spc
 from app.causes import make_d4_router
+from app.closure import make_d7_d8_router
 from app.db import (
     Action,
     Assignment,
@@ -122,6 +123,7 @@ def create_app(database_url: str = "sqlite:///qualityops.db",
     app.include_router(make_v5_router(sessions, current_user))
     app.include_router(make_d4_router(sessions, current_user))
     app.include_router(make_d6_router(sessions, current_user))
+    app.include_router(make_d7_d8_router(sessions, current_user))
 
     @app.get("/health", response_model=Health)
     def health() -> Health:

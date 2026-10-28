@@ -29,3 +29,23 @@ def line_client(tmp_path, case_id: str = "L", process: bool = True) -> TestClien
         assert r.status_code == 201, r.text
     c.app_ref = app
     return c
+
+
+def evidence(c: TestClient, case_id: str, kind: str, **match) -> list[str]:
+    """Evidence ids of current source rows of `kind` whose record fields equal `match` (prefix match on str with *)."""
+    from sqlalchemy.orm import Session
+
+    from app import ncr
+
+    def ok(rec: dict) -> bool:
+        for k, v in match.items():
+            r = rec.get(k)
+            if isinstance(v, str) and v.endswith("*"):
+                if not str(r).startswith(v[:-1]):
+                    return False
+            elif r != v:
+                return False
+        return True
+
+    with Session(c.app_ref.state.engine) as s:
+        return [i["ev"] for i in ncr.current(ncr._evidence(s, case_id)) if i["type"] == kind and ok(i["rec"])]

@@ -12,7 +12,7 @@ const KINDS = [['ncr', 'NCR', 'D2 부적합 보고서', 'bob'], ['containment', 
 const APPROVER_ROLE: Record<string, string> = { NCR: 'REVIEWER', CONTAINMENT: 'QA_PRODUCTION', RCA: 'PROCESS_ENGINEER' }
 
 const nav = [
-  ['dashboard', '개요', 'grid'], ['queue', '할 일', 'check'], ['spc', 'SPC 라인 모니터링', 'pulse'], ['data', '제조 데이터 · 증거', 'database'], ['prediction', '품질 예측 · XAI', 'chart'],
+  ['dashboard', '개요', 'grid'], ['queue', '할 일', 'check'], ['eightd', 'D0~D8 진행', 'nodes'], ['spc', 'SPC 라인 모니터링', 'pulse'], ['data', '제조 데이터 · 증거', 'database'], ['prediction', '품질 예측 · XAI', 'chart'],
   ['investigation', 'AI 품질 조사', 'spark'], ['history', '과거 품질 사례', 'history'], ['reports', '문서 · 결재', 'document'],
   ['impact', '변경 영향 분석', 'nodes'], ['audit', '감사 · 보안', 'shield'],
 ] as const
@@ -420,6 +420,93 @@ function Audit({ ctx }: { ctx: Ctx }) {
   </Page>
 }
 
+const STAGE_LABEL: Record<string, string> = { D0: '위험 평가', D1: '팀', D2: '문제 정의', D3: '임시 봉쇄', D4: '근본 원인', D5: '조치 선정', D6: '실행·효과', D7: '재발 방지', D8: '종결' }
+const GATE_TONE: Record<string, Tone> = { PASS: 'green', WARN: 'amber', UNKNOWN: 'slate', BLOCK: 'red' }
+const stageTone = (s: string | null): Tone => !s ? 'slate' : ['APPROVED', 'DONE', 'CLOSED'].includes(s) ? 'green' : ['REJECTED', 'REVALIDATION_REQUIRED', 'NOT_EFFECTIVE', 'REOPENED'].includes(s) ? 'red' : 'amber'
+const list = (s: string) => s.split(',').map(x => x.trim()).filter(Boolean)
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return <label className="muted" style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 8 }}>{label}{children}</label>
+}
+
+function EightD({ ctx }: { ctx: Ctx }) {
+  const { cid, api, tick, refresh, me } = ctx
+  const [g, setG] = useState<J>(null)
+  const [tri, setTri] = useState<J[]>([])
+  const [team, setTeam] = useState<J>(null)
+  const [acts, setActs] = useState<J[]>([])
+  const [pc, setPc] = useState<J>(null)
+  const [f, setF] = useState<Record<string, string>>({ signal_kind: 'SPC_SIGNAL', observed_defect: 'SIGNAL_ONLY', route: 'FULL_8D', severity: 'MEDIUM', scope_lots: '', rationale: '', evidence_ids: '',
+    responsibility: 'QUALITY', user_id: 'bob', action_type: 'HOLD', targets: '', description: '', note: '', evidence: '' })
+  const set = (k: string) => (e: { target: { value: string } }) => setF(x => ({ ...x, [k]: e.target.value }))
+  useEffect(() => {
+    if (!cid) return
+    api(`/cases/${cid}/gates`).then(setG).catch(() => setG(null))
+    api(`/cases/${cid}/triage`).then(setTri).catch(() => setTri([]))
+    api(`/cases/${cid}/team`).then(setTeam).catch(() => setTeam(null))
+    api(`/cases/${cid}/actions`).then(setActs).catch(() => setActs([]))
+    api(`/cases/${cid}/process-context`).then(setPc).catch(() => setPc(null))
+  }, [cid, api, tick])
+  const run = (p: Promise<unknown>) => p.then(refresh).catch(() => undefined)
+  const t = tri[tri.length - 1]
+  const role = me?.role
+  return <Page title="D0~D8 진행" desc="정책(WorkflowPolicy)이 각 단계의 작성·실행·승인·종결 가능 여부를 판단합니다. 모든 실행 기록은 SIMULATED(합성 데모)입니다.">
+    <Note>계획 ≠ 실행 ≠ 독립 확인. 이 화면의 조치 실행은 실제 재고·출하 상태를 바꾸지 않는 가상 기록입니다.</Note>
+    <Card className="mb"><SectionTitle title="단계 상태" sub={g ? `정책 ${g.policy.policy_id} v${g.policy.version} · 경로 ${g.route ?? '미정 (D0 필요)'}` : ''}/>
+      <div className="row-gap" style={{ flexWrap: 'wrap' }}>{g && Object.entries(g.state).map(([s, v]) => <span key={s} className="row-gap"><b className="muted">{s} {STAGE_LABEL[s]}</b><Badge tone={stageTone(v as string)}>{(v as string) ?? '—'}</Badge></span>)}</div>
+      {g && <p className="muted wrap mt">긴급 봉쇄 (내 역할 {role}): <Badge tone={GATE_TONE[g.urgent_containment.result]}>{g.urgent_containment.result}</Badge> {g.urgent_containment.reasons.join(' · ')}</p>}
+    </Card>
+    <div className="dashboard-main">
+      <Card><SectionTitle title="D0 위험 평가" sub="신호와 확정 불량은 별도 상태로 저장됩니다"/>
+        {t ? <div className="wrap" style={{ fontSize: 11 }}><Badge tone="blue">{t.signal_kind}</Badge> <Badge tone={t.observed_defect === 'DEFECT_CONFIRMED' ? 'red' : 'slate'}>{t.observed_defect}</Badge> <Badge tone="violet">{t.route}</Badge> <Badge>{t.severity}</Badge>
+          <p>{t.rationale}</p><p className="muted">범위 LOT {t.scope_lots.join(', ') || '-'} · 출하분 포함 {String(t.risk_flags.shipped_in_scope)} · 평가자 {t.assessor_id}</p><Cite ids={t.evidence_ids}/></div> : <Empty>아직 D0 평가가 없습니다.</Empty>}
+        {role === 'REVIEWER' && <div className="mt">
+          <div className="dual"><Field label="신호 종류"><select value={f.signal_kind} onChange={set('signal_kind')}>{['SPC_SIGNAL', 'AOI_FAIL', 'CUSTOMER_COMPLAINT', 'OTHER'].map(x => <option key={x}>{x}</option>)}</select></Field>
+            <Field label="불량 확인"><select value={f.observed_defect} onChange={set('observed_defect')}>{['SIGNAL_ONLY', 'DEFECT_CONFIRMED', 'UNKNOWN'].map(x => <option key={x}>{x}</option>)}</select></Field>
+            <Field label="경로"><select value={f.route} onChange={set('route')}>{['NCR_ONLY', 'FULL_8D', 'EMERGENCY_FULL_8D'].map(x => <option key={x}>{x}</option>)}</select></Field>
+            <Field label="심각도"><select value={f.severity} onChange={set('severity')}>{['LOW', 'MEDIUM', 'HIGH'].map(x => <option key={x}>{x}</option>)}</select></Field></div>
+          <input className="input" placeholder="범위 LOT (쉼표 구분, 예: L02)" value={f.scope_lots} onChange={set('scope_lots')}/>
+          <input className="input" placeholder="판단 근거 (10자 이상)" value={f.rationale} onChange={set('rationale')}/>
+          <input className="input" placeholder="증거 ID (쉼표 구분, EV-...)" value={f.evidence_ids} onChange={set('evidence_ids')}/>
+          <button className="button primary full" onClick={() => run(api(`/cases/${cid}/triage`, 'POST', { signal_kind: f.signal_kind, observed_defect: f.observed_defect, route: f.route, severity: f.severity,
+            scope_lots: list(f.scope_lots), rationale: f.rationale, evidence_ids: list(f.evidence_ids), risk_flags: {} }))}>D0 평가 기록</button></div>}
+      </Card>
+      <Card><SectionTitle title="공정 컨텍스트" sub="공정 중립 어댑터가 LOT·패널·출하 상태를 매핑"/>
+        {pc ? <div style={{ fontSize: 11 }}><Badge tone="teal">{pc.process_type}</Badge> <span className="muted">{pc.adapter_version} · {pc.site} · 설비 {pc.equipment.join(', ')}</span>
+          <p className="muted">대상 객체 {pc.objects.length}개 · 출하 {pc.objects.filter((o: J) => o.shipment_state === 'SHIPPED').length}개</p></div>
+          : <>{role === 'AUTHOR' ? <button className="button secondary" onClick={() => run(api(`/cases/${cid}/process-context`, 'POST', { site: 'SITE-A' }))}>공정 컨텍스트 기록 (PCB_SMT)</button> : <Empty>작성자가 공정 컨텍스트를 기록해야 합니다.</Empty>}</>}
+      </Card>
+    </div>
+    <div className="dashboard-main">
+      <Card><SectionTitle title="D1 팀" sub={team ? (team.complete ? '필수 역할 모두 수락' : `미완료: ${team.missing.join(', ')}`) : ''}/>
+        <div className="table-wrap"><table><thead><tr><th>책임</th><th>담당</th><th>상태</th><th>기한</th><th/></tr></thead><tbody>
+          {team && Object.entries(team.members).map(([r, m]: [string, J]) => <tr key={r}><td>{r}</td><td>{m.user_id ?? '-'}</td><td><Badge tone={m.status === 'ACCEPTED' ? 'green' : m.status === 'EXCEPTION' ? 'amber' : m.overdue ? 'red' : 'slate'}>{m.status}{m.overdue ? ' · 기한 초과' : ''}</Badge></td><td>{m.due_at ?? '-'}</td>
+            <td>{m.user_id === me?.id && m.status === 'ASSIGNED' && <button className="button success" onClick={() => run(api(`/cases/${cid}/team`, 'POST', { event: 'ACCEPT', responsibility: r }))}>수락</button>}</td></tr>)}
+        </tbody></table></div>
+        {role === 'AUTHOR' && <div className="row-gap mt"><select value={f.responsibility} onChange={set('responsibility')}>{['LEAD', 'QUALITY', 'PRODUCTION', 'PROCESS', 'SUPPLIER', 'CUSTOMER'].map(x => <option key={x}>{x}</option>)}</select>
+          <select value={f.user_id} onChange={set('user_id')}>{USERS.map(u => <option key={u[0]} value={u[0]}>{u[1]}</option>)}</select>
+          <button className="button secondary" onClick={() => run(api(`/cases/${cid}/team`, 'POST', { event: 'ASSIGN', responsibility: f.responsibility, user_id: f.user_id }))}>배정</button></div>}
+      </Card>
+      <Card><SectionTitle title="긴급 봉쇄 요청" sub="D0 이후 D1/D2 완료 전에도 가능 · QA/생산 권한"/>
+        <div className="dual"><Field label="조치"><select value={f.action_type} onChange={set('action_type')}>{['HOLD', 'SORT', 'STOP_SHIP', 'QUARANTINE', 'CUSTOMER_NOTIFY_REQUEST', 'OTHER'].map(x => <option key={x}>{x}</option>)}</select></Field>
+          <Field label="대상 (쉼표 구분)"><input className="input" style={{ marginTop: 0 }} placeholder="L02-P09" value={f.targets} onChange={set('targets')}/></Field></div>
+        <input className="input" placeholder="조치 설명 (10자 이상)" value={f.description} onChange={set('description')}/>
+        <button className="button primary full" disabled={role !== 'QA_PRODUCTION'} onClick={() => run(api(`/cases/${cid}/urgent-actions`, 'POST', { action_type: f.action_type, targets: list(f.targets), description: f.description }))}>긴급 봉쇄 요청</button>
+      </Card>
+    </div>
+    <Card className="mb"><SectionTitle title="조치 실행 기록" sub="REQUESTED → (PLAN_APPROVED) → EXECUTED → INDEPENDENTLY_VERIFIED · 실행자와 확인자는 달라야 함"/>
+      <div className="dual"><input className="input" placeholder="실행/확인 메모 (실행은 10자 이상)" value={f.note} onChange={set('note')}/><input className="input" placeholder="확인 근거 (쉼표 구분, EV-... 또는 REF:...)" value={f.evidence} onChange={set('evidence')}/></div>
+      <div className="table-wrap mt"><table><thead><tr><th>#</th><th>단계</th><th>조치</th><th>대상</th><th>상태</th><th>이력</th><th>기록</th></tr></thead><tbody>
+        {acts.map(a => <tr key={a.action_id}><td className="id">{a.action_id}</td><td>{a.stage}</td><td>{a.action_type}</td><td>{a.targets.join(', ')}</td><td><Badge tone={stageTone(a.status)}>{a.status}</Badge> <Badge tone="amber">{a.execution_mode}</Badge></td>
+          <td className="wrap">{a.events.map((e: J) => `${e.event_type}(${e.actor_id})`).join(' → ')}</td>
+          <td><div className="row-gap">{['PLAN_APPROVED', 'EXECUTED', 'INDEPENDENTLY_VERIFIED', 'RELEASED', 'NOT_EFFECTIVE'].map(ev => <button key={ev} className="button secondary" style={{ height: 26, padding: '0 6px' }}
+            onClick={() => run(api(`/cases/${cid}/actions/${a.action_id}/events`, 'POST', { event_type: ev, note: f.note, evidence: list(f.evidence) }))}>{ev}</button>)}</div></td></tr>)}
+        {!acts.length && <tr><td colSpan={7}><Empty>조치가 없습니다.</Empty></td></tr>}
+      </tbody></table></div>
+    </Card>
+  </Page>
+}
+
 export default function App() {
   const [active, setActive] = useState('dashboard')
   const [user, setUser] = useState('alice')
@@ -460,7 +547,7 @@ export default function App() {
   const open = useCallback((c: string, sel: string, screen = 'reports') => { setCid(c); setFocus(sel); setActive(screen); refresh() }, [refresh])
   const ctx: Ctx = { cid, me, api, refresh, tick, open, focus }
   const screens: Record<string, ReactNode> = {
-    dashboard: <Dashboard ctx={ctx} cases={cases} onNew={newCase}/>, queue: <Queue ctx={ctx}/>, spc: <Spc ctx={ctx}/>, data: <DataWorkspace ctx={ctx}/>, prediction: <Prediction ctx={ctx}/>,
+    dashboard: <Dashboard ctx={ctx} cases={cases} onNew={newCase}/>, queue: <Queue ctx={ctx}/>, eightd: <EightD ctx={ctx}/>, spc: <Spc ctx={ctx}/>, data: <DataWorkspace ctx={ctx}/>, prediction: <Prediction ctx={ctx}/>,
     investigation: <Investigation ctx={ctx} provider={provider}/>, history: <HistoryScreen ctx={ctx}/>, reports: <Reports ctx={ctx}/>, impact: <Impact ctx={ctx}/>, audit: <Audit ctx={ctx}/>,
   }
   return <div className="app">

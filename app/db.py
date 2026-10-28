@@ -457,9 +457,80 @@ class AffectedObject(Base):
     identity_source: Mapped[str] = mapped_column(String(30))  # evidence id the identity comes from
 
 
+class TriageAssessment(Base):
+    """D0: what was seen (signal kind) is stored apart from whether a defect is confirmed; latest row wins."""
+
+    __tablename__ = "triage_assessments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"), index=True)
+    signal_kind: Mapped[str] = mapped_column(String(30))  # SPC_SIGNAL AOI_FAIL CUSTOMER_COMPLAINT OTHER
+    observed_defect: Mapped[str] = mapped_column(String(20))  # SIGNAL_ONLY DEFECT_CONFIRMED UNKNOWN
+    risk_flags: Mapped[dict] = mapped_column(JSON)
+    scope_lots: Mapped[list] = mapped_column(JSON)
+    route: Mapped[str] = mapped_column(String(20))  # NCR_ONLY FULL_8D EMERGENCY_FULL_8D
+    severity: Mapped[str] = mapped_column(String(10))
+    rationale: Mapped[str] = mapped_column(Text)
+    evidence_ids: Mapped[list] = mapped_column(JSON)
+    assessor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    policy_hash: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class TeamEvent(Base):
+    """D1 membership as events (ASSIGNED / ACCEPTED / DECLINED / EXCEPTION); current team is derived."""
+
+    __tablename__ = "team_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"), index=True)
+    responsibility: Mapped[str] = mapped_column(String(20))
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
+    event: Mapped[str] = mapped_column(String(12))
+    due_at: Mapped[str | None] = mapped_column(String(40))
+    note: Mapped[str] = mapped_column(Text)
+    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class Action(Base):
+    """Urgent (pre-D1) and D3/D5/D6 actions. The record is the plan; what happened is in action_events."""
+
+    __tablename__ = "actions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"), index=True)
+    stage: Mapped[str] = mapped_column(String(10))  # URGENT D3 D5
+    action_type: Mapped[str] = mapped_column(String(30))
+    description: Mapped[str] = mapped_column(Text)
+    targets: Mapped[list] = mapped_column(JSON)  # affected object ids, bound at creation
+    target_snapshot: Mapped[list] = mapped_column(JSON)  # their shipment state + identity evidence at creation
+    cause_ids: Mapped[list] = mapped_column(JSON, default=list)  # D5: confirmed cause hypothesis ids
+    document_version_id: Mapped[int | None] = mapped_column(ForeignKey("document_versions.id"))
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class ActionEvent(Base):
+    """ActionExecution and friends. In this repository every EXECUTED event is SIMULATED (synthetic data)."""
+
+    __tablename__ = "action_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    action_id: Mapped[int] = mapped_column(ForeignKey("actions.id"), index=True)
+    event_type: Mapped[str] = mapped_column(String(24))
+    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    occurred_at: Mapped[str] = mapped_column(String(40))
+    evidence: Mapped[list] = mapped_column(JSON)
+    note: Mapped[str] = mapped_column(Text)
+    synthetic: Mapped[bool] = mapped_column(default=True)
+    policy_hash: Mapped[str] = mapped_column(String(64))
+
+
 # Audit rows are append-only at the database level, not just by convention.
 APPEND_ONLY = ("approval_events", "workflow_events", "doc_comments", "audit_chain",
-               "workflow_policies", "evidence_quality", "process_contexts", "affected_objects")
+               "workflow_policies", "evidence_quality", "process_contexts", "affected_objects",
+               "triage_assessments", "team_events", "actions", "action_events")
 
 
 def append_only_ddl(table: str) -> list[str]:

@@ -10,18 +10,72 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app import policy, process, quality
-from app.db import AffectedObject, DocumentVersion, ProcessContext, WorkflowPolicy
-from app.workflow import KINDS, STEP, Actor, log, require_case, require_role
+from app import actions, ncr, policy, process, quality
+from app.db import (
+    Action,
+    AffectedObject,
+    Assignment,
+    DocumentVersion,
+    Evidence,
+    ProcessContext,
+    TeamEvent,
+    TriageAssessment,
+    WorkflowPolicy,
+)
+from app.workflow import DEMO_USERS, KINDS, STEP, Actor, log, require_case, require_role
 
 
 def now() -> str:
     return datetime.now(UTC).isoformat()
 
 
+# --- derived case state ----------------------------------------------------------------------------------
+
+def latest_triage(session: Session, case_id: str) -> TriageAssessment | None:
+    return session.scalar(select(TriageAssessment).where(TriageAssessment.case_id == case_id)
+                          .order_by(TriageAssessment.id.desc()).limit(1))
+
+
+def case_ctx(session: Session, case_id: str) -> dict:
+    pc = session.scalar(select(ProcessContext).where(ProcessContext.case_id == case_id))
+    t = latest_triage(session, case_id)
+    ctx = {"site": pc.site, "customer": pc.customer, "process_type": pc.process_type} if pc else {}
+    return {**ctx, "severity": t.severity} if t else ctx
+
+
+def active_policy(session: Session, case_id: str) -> WorkflowPolicy:
+    return policy.active(session, case_ctx(session, case_id))
+
+
+def route(session: Session, case_id: str) -> str | None:
+    t = latest_triage(session, case_id)
+    return t.route if t else None
+
+
+def team(session: Session, case_id: str, body: dict) -> dict:
+    """Current D1 team per responsibility, derived from the event log, plus what is still missing."""
+    cur: dict[str, dict] = {}
+    for e in session.scalars(select(TeamEvent).where(TeamEvent.case_id == case_id).order_by(TeamEvent.id)):
+        if e.event == "ASSIGNED":
+            cur[e.responsibility] = {"user_id": e.user_id, "status": "ASSIGNED", "due_at": e.due_at, "note": e.note}
+        elif e.event in ("ACCEPTED", "DECLINED") and cur.get(e.responsibility, {}).get("user_id") == e.user_id:
+            cur[e.responsibility] = {**cur[e.responsibility], "status": e.event, "note": e.note}
+        elif e.event == "EXCEPTION":
+            cur[e.responsibility] = {"user_id": None, "status": "EXCEPTION", "due_at": None, "note": e.note}
+    at = now()
+    for m in cur.values():
+        m["overdue"] = m["status"] == "ASSIGNED" and bool(m["due_at"]) and m["due_at"] < at
+    missing = [r for r in body["required_roles"] if cur.get(r, {}).get("status") not in ("ACCEPTED", "EXCEPTION")]
+    return {"members": cur, "missing": missing, "complete": not missing}
+
+
 def stage_state(session: Session, case_id: str) -> dict[str, str | None]:
     """Status per 8D stage. D2-D4 come from the S6 documents; later gates add their own entities."""
     state: dict[str, str | None] = dict.fromkeys(policy.STAGES)
+    state["D0"] = "DONE" if latest_triage(session, case_id) else None
+    if session.scalar(select(TeamEvent.id).where(TeamEvent.case_id == case_id).limit(1)):
+        complete = team(session, case_id, active_policy(session, case_id).body)["complete"]
+        state["D1"] = "DONE" if complete else "IN_PROGRESS"
     for doc_type in KINDS.values():
         doc = session.scalar(select(DocumentVersion).where(
             DocumentVersion.case_id == case_id, DocumentVersion.doc_type == doc_type)
@@ -30,10 +84,29 @@ def stage_state(session: Session, case_id: str) -> dict[str, str | None]:
     return state
 
 
-def case_ctx(session: Session, case_id: str) -> dict:
-    pc = session.scalar(select(ProcessContext).where(ProcessContext.case_id == case_id))
-    return {"site": pc.site, "customer": pc.customer, "process_type": pc.process_type} if pc else {}
+def triage_out(t: TriageAssessment) -> dict:
+    return {"triage_id": t.id, "signal_kind": t.signal_kind, "observed_defect": t.observed_defect,
+            "risk_flags": t.risk_flags, "scope_lots": t.scope_lots, "route": t.route, "severity": t.severity,
+            "rationale": t.rationale, "evidence_ids": t.evidence_ids, "assessor_id": t.assessor_id,
+            "policy_hash": t.policy_hash, "created_at": t.created_at}
 
+
+def confirmed_defect_evidence(session: Session, case_id: str, ids: list[str]) -> list[str]:
+    """Cited human verifications that confirm a defect on a current source row. An SPC alarm never qualifies."""
+    states = quality.current(session, case_id, set(ids))
+    return [i["ev"] for i in ncr._evidence(session, case_id)
+            if i["ev"] in ids and i["type"] == "human_verifications" and i["rec"].get("result") == "DEFECT_CONFIRMED"
+            and states[i["ev"]]["quality_state"] != "SUPERSEDED"]
+
+
+def get_action(session: Session, case_id: str, action_id: int) -> Action:
+    a = session.get(Action, action_id)
+    if a is None or a.case_id != case_id:
+        raise HTTPException(404, "action not found")
+    return a
+
+
+# --- request bodies --------------------------------------------------------------------------------------
 
 class PolicyIn(BaseModel):
     policy_id: str = Field(min_length=2, max_length=60, pattern=r"^[A-Z0-9_\-]+$")
@@ -53,9 +126,47 @@ class ProcessIn(BaseModel):
     process_type: str = "PCB_SMT"
 
 
+class TriageIn(BaseModel):
+    signal_kind: Literal["SPC_SIGNAL", "AOI_FAIL", "CUSTOMER_COMPLAINT", "OTHER"]
+    observed_defect: Literal["SIGNAL_ONLY", "DEFECT_CONFIRMED", "UNKNOWN"]
+    risk_flags: dict[str, bool] = {}  # customer_impact, safety; shipped_in_scope is computed by the server
+    scope_lots: list[str] = []
+    route: Literal["NCR_ONLY", "FULL_8D", "EMERGENCY_FULL_8D"]
+    severity: Literal["LOW", "MEDIUM", "HIGH"]
+    rationale: str = Field(min_length=10, max_length=1000)
+    evidence_ids: list[str] = Field(min_length=1)
+
+
+class TeamIn(BaseModel):
+    event: Literal["ASSIGN", "ACCEPT", "DECLINE", "EXCEPTION"]
+    responsibility: Literal["LEAD", "QUALITY", "PRODUCTION", "PROCESS", "SUPPLIER", "CUSTOMER"]
+    user_id: str | None = None
+    due_at: str | None = None
+    note: str = Field(default="", max_length=500)
+
+
+class ActionIn(BaseModel):
+    action_type: Literal["HOLD", "SORT", "STOP_SHIP", "QUARANTINE", "CUSTOMER_NOTIFY_REQUEST", "OTHER"]
+    description: str = Field(min_length=10, max_length=1000)
+    targets: list[str] = Field(min_length=1)
+
+
+class ActionEventIn(BaseModel):
+    event_type: Literal["PLAN_APPROVED", "EXECUTED", "INDEPENDENTLY_VERIFIED", "RELEASED", "NOT_EFFECTIVE",
+                        "CANCELLED"]
+    note: str = Field(default="", max_length=1000)
+    evidence: list[str] = []
+
+
+# Stage-specific checks before PLAN_APPROVED (D3 in G4, D5 in G6). stage -> fn(session, action, actor).
+PLAN_CHECKS: dict[str, Callable[[Session, Action, Actor], None]] = {}
+
+
 def make_v5_router(sessions: sessionmaker, current_user: Callable[..., Actor]) -> APIRouter:
     router = APIRouter()
     Who = Annotated[Actor, Depends(current_user)]
+
+    # --- policy, evidence quality, process context (G2) ------------------------------------------------
 
     @router.get("/policies")
     def list_policies(actor: Who) -> list[dict]:
@@ -83,14 +194,14 @@ def make_v5_router(sessions: sessionmaker, current_user: Callable[..., Actor]) -
         """Every policy decision for this case, explained, for the calling user. Read-only."""
         with sessions.begin() as session:
             require_case(session, case_id, actor)
-            p = policy.active(session, case_ctx(session, case_id))
-            state = stage_state(session, case_id)
+            p = active_policy(session, case_id)
+            state, r = stage_state(session, case_id), route(session, case_id)
             body = p.body
-            return {"policy": policy.ref(p), "state": state,
+            return {"policy": policy.ref(p), "state": state, "route": r,
                     "draft": {s: policy.can_draft(body, s, state).out() for s in body["draft_requirements"]},
                     "approve": {s: policy.can_approve(body, s, actor.role, actor.id, None, state).out()
                                 for s in body["approval_gates"]},
-                    "urgent_containment": policy.can_execute_urgent(body, actor.role, state, None).out()}
+                    "urgent_containment": policy.can_execute_urgent(body, actor.role, state, r).out()}
 
     @router.get("/cases/{case_id}/evidence-quality")
     def evidence_quality(case_id: str, actor: Who, state: str | None = None) -> dict:
@@ -151,5 +262,130 @@ def make_v5_router(sessions: sessionmaker, current_user: Callable[..., Actor]) -
                     "objects": [{"object_type": o.object_type, "object_id": o.object_id, "parent_id": o.parent_id,
                                  "location": o.location, "shipment_state": o.shipment_state,
                                  "identity_source": o.identity_source} for o in objs]}
+
+    # --- D0 triage (G3) --------------------------------------------------------------------------------
+
+    @router.post("/cases/{case_id}/triage", status_code=201)
+    def triage(case_id: str, body: TriageIn, actor: Who) -> dict:
+        with sessions.begin() as session:
+            require_case(session, case_id, actor)
+            p = active_policy(session, case_id)
+            v = policy.can_approve(p.body, "D0", actor.role, actor.id, None, {})
+            if v.result == "BLOCK":
+                raise HTTPException(403, "; ".join(v.reasons))
+            known = set(session.scalars(select(Evidence.evidence_id).where(Evidence.case_id == case_id)))
+            if bad := sorted(set(body.evidence_ids) - known):
+                raise HTTPException(422, f"unknown evidence {bad}")
+            if body.observed_defect == "DEFECT_CONFIRMED" and not confirmed_defect_evidence(
+                    session, case_id, body.evidence_ids):
+                raise HTTPException(422, "DEFECT_CONFIRMED needs a cited human verification that confirms a defect; "
+                                         "a statistical signal is not a confirmed defect")
+            objs = session.scalars(select(AffectedObject).where(AffectedObject.case_id == case_id)).all()
+            if body.scope_lots and not objs:
+                raise HTTPException(409, "record the process context first; scope binds to its lots")
+            if bad := sorted(set(body.scope_lots) - {o.object_id for o in objs if o.object_type == "LOT"}):
+                raise HTTPException(422, f"unknown lots {bad}")
+            shipped = any(o.parent_id in body.scope_lots and o.shipment_state == "SHIPPED" for o in objs)
+            flags = {**body.risk_flags, "shipped_in_scope": shipped}
+            if body.route == "NCR_ONLY" and body.observed_defect != "SIGNAL_ONLY" and (
+                    shipped or flags.get("safety") or flags.get("customer_impact")):
+                raise HTTPException(422, "NCR_ONLY is not allowed for a possible defect with shipped, customer or "
+                                         "safety exposure; choose FULL_8D or EMERGENCY_FULL_8D")
+            t = TriageAssessment(case_id=case_id, signal_kind=body.signal_kind, observed_defect=body.observed_defect,
+                                 risk_flags=flags, scope_lots=body.scope_lots, route=body.route,
+                                 severity=body.severity, rationale=body.rationale, evidence_ids=body.evidence_ids,
+                                 assessor_id=actor.id, policy_hash=p.policy_hash, created_at=now())
+            session.add(t)
+            session.flush()
+            log(session, case_id, actor, "TRIAGED", f"{body.signal_kind} observed={body.observed_defect} "
+                f"route={body.route} severity={body.severity} shipped_in_scope={shipped}")
+            return triage_out(t)
+
+    @router.get("/cases/{case_id}/triage")
+    def get_triage(case_id: str, actor: Who) -> list[dict]:
+        with sessions() as session:
+            require_case(session, case_id, actor)
+            return [triage_out(t) for t in session.scalars(select(TriageAssessment).where(
+                TriageAssessment.case_id == case_id).order_by(TriageAssessment.id))]
+
+    # --- D1 team (G3) ----------------------------------------------------------------------------------
+
+    @router.post("/cases/{case_id}/team", status_code=201)
+    def team_event(case_id: str, body: TeamIn, actor: Who) -> dict:
+        with sessions.begin() as session:
+            require_case(session, case_id, actor)
+            p = active_policy(session, case_id)
+            lead_role = p.body["required_roles"]["LEAD"]
+            cur = team(session, case_id, p.body)["members"].get(body.responsibility)
+            user = body.user_id
+            if body.event in ("ASSIGN", "EXCEPTION") and actor.role != lead_role:
+                raise HTTPException(403, f"only the {lead_role} (D1 lead role) assigns the team")
+            if body.event == "EXCEPTION" and len(body.note) < 10:
+                raise HTTPException(422, "an exception needs a reason (missing skill, alternate plan)")
+            if body.event == "ASSIGN":
+                if user not in DEMO_USERS or not session.scalar(select(Assignment.id).where(
+                        Assignment.case_id == case_id, Assignment.user_id == user)):
+                    raise HTTPException(422, "assignee must be a user assigned to this case")
+                need = p.body["required_roles"].get(body.responsibility)
+                if need and DEMO_USERS[user][1] != need:
+                    raise HTTPException(422, f"{body.responsibility} needs role {need}")
+            elif body.event in ("ACCEPT", "DECLINE"):
+                if cur is None or cur["user_id"] != actor.id or cur["status"] != "ASSIGNED":
+                    raise HTTPException(409, "no open assignment of this responsibility to you")
+                user = actor.id
+            event = {"ASSIGN": "ASSIGNED", "ACCEPT": "ACCEPTED", "DECLINE": "DECLINED", "EXCEPTION": "EXCEPTION"}
+            session.add(TeamEvent(case_id=case_id, responsibility=body.responsibility,
+                                  user_id=None if body.event == "EXCEPTION" else user, event=event[body.event],
+                                  due_at=body.due_at, note=body.note, actor_id=actor.id, created_at=now()))
+            session.flush()
+            log(session, case_id, actor, f"TEAM_{body.event}", f"{body.responsibility} {user or '-'} {body.note}")
+            return team(session, case_id, p.body)
+
+    @router.get("/cases/{case_id}/team")
+    def get_team(case_id: str, actor: Who) -> dict:
+        with sessions.begin() as session:
+            require_case(session, case_id, actor)
+            return team(session, case_id, active_policy(session, case_id).body)
+
+    # --- urgent containment and the shared action lifecycle (G3) ---------------------------------------
+
+    @router.post("/cases/{case_id}/urgent-actions", status_code=201)
+    def urgent_action(case_id: str, body: ActionIn, actor: Who) -> dict:
+        """Emergency containment after D0, before D1/D2 are complete. Recorded as REQUESTED; execution and
+        independent verification are separate events."""
+        with sessions.begin() as session:
+            require_case(session, case_id, actor)
+            p = active_policy(session, case_id)
+            v = policy.can_execute_urgent(p.body, actor.role, stage_state(session, case_id), route(session, case_id))
+            if v.result == "BLOCK":
+                raise HTTPException(403, "; ".join(v.reasons))
+            a = actions.create(session, case_id, "URGENT", body.action_type, body.description, body.targets,
+                               actor.id, p.policy_hash)
+            log(session, case_id, actor, "URGENT_ACTION_REQUESTED",
+                f"#{a.id} {body.action_type} {','.join(body.targets)} gate={v.result} {'; '.join(v.reasons)}")
+            return {**actions.out(session, a), "gate": v.out()}
+
+    @router.get("/cases/{case_id}/actions")
+    def list_actions(case_id: str, actor: Who) -> list[dict]:
+        with sessions() as session:
+            require_case(session, case_id, actor)
+            return [actions.out(session, a) for a in session.scalars(
+                select(Action).where(Action.case_id == case_id).order_by(Action.id))]
+
+    @router.post("/cases/{case_id}/actions/{action_id}/events", status_code=201)
+    def action_event(case_id: str, action_id: int, body: ActionEventIn, actor: Who) -> dict:
+        with sessions.begin() as session:
+            require_case(session, case_id, actor)
+            a = get_action(session, case_id, action_id)
+            if body.event_type == "PLAN_APPROVED":
+                check = PLAN_CHECKS.get(a.stage)
+                if check is None:
+                    raise HTTPException(422, f"{a.stage} actions have no plan approval step")
+                check(session, a, actor)
+            actions.record(session, a, body.event_type, actor.id, actor.role, active_policy(session, case_id),
+                           body.note, body.evidence)
+            log(session, case_id, actor, f"ACTION_{body.event_type}",
+                f"#{a.id} {a.stage} {a.action_type} (SIMULATED) {body.note[:120]}")
+            return actions.out(session, a)
 
     return router

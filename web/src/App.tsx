@@ -251,7 +251,7 @@ function Investigation({ ctx, provider }: { ctx: Ctx; provider: J }) {
   const run = async () => { await ctx.api(`/cases/${ctx.cid}/investigations`, 'POST', { use_history: history }, true); ctx.refresh() }
   const draft = async (k: string) => { await ctx.api(`/cases/${ctx.cid}/${k}`, 'POST', { investigation_run_id: r.run_id }, true); ctx.refresh() }
   return <Page title="AI 품질 조사" desc="Meta 모델이 읽기 전용 도구로 근거를 조회하고, 서버가 보고서를 검증합니다.">
-    <div className="hero-banner"><div className="hero-icon"><Icon name="spark" size={22}/></div><div><b>{provider?.configured ? `LIVE · ${provider.model}` : `${provider?.model ?? 'Meta'} · 키 미설정`}</b>
+    <div className="hero-banner"><div className="hero-icon"><Icon name="spark" size={22}/></div><div><b>{provider?.live_status === 'VERIFIED' ? `LIVE 검증됨 · ${provider.model}` : provider?.configured ? `${provider.model} · 키 설정됨 (LIVE 미검증)` : `${provider?.model ?? 'Meta'} · 키 미설정`}</b>
       <span>{provider?.configured ? 'SYNTHETIC·외부 승인 데이터만 전송됩니다. 결론 승인과 원인 확정은 사람이 합니다.' : 'MODEL_API_KEY가 없어 조사를 실행할 수 없습니다. 대체(목) 응답은 없습니다.'}</span></div>
       <label className="muted"><input type="checkbox" checked={history} onChange={e => setHistory(e.target.checked)}/> 과거 사례 사용 (History ON)</label>
       <button className="button primary" disabled={!author || !provider?.configured} onClick={run}>조사 실행</button></div>
@@ -468,7 +468,7 @@ export default function App() {
       <div className="brand"><div className="brand-mark"><span/><span/><span/></div><div><b>QualityOps</b><small>AI</small></div></div>
       <label className="site-select"><span><small>현재 사건</small><select value={cid} onChange={e => setCid(e.target.value)}>{cases.map(c => <option key={c.case_id}>{c.case_id}</option>)}{!cases.length && <option value="">배정된 사건 없음</option>}</select></span></label>
       <nav>{nav.map(n => <button key={n[0]} className={active === n[0] ? 'active' : ''} onClick={() => { setFocus(''); setActive(n[0]) }}><Icon name={n[2]}/><span>{n[1]}</span>{n[0] === 'investigation' && <i>AI</i>}</button>)}</nav>
-      <div className="sidebar-bottom"><div className="status-live"><i className={provider?.configured ? '' : 'off'}/><span><b>Meta · {provider?.model ?? '-'}</b><small>{provider?.configured ? 'LIVE 키 설정됨' : '키 없음 · 호출 불가'}</small></span></div></div>
+      <div className="sidebar-bottom"><div className="status-live"><i className={provider?.configured ? '' : 'off'}/><span><b>Meta · {provider?.model ?? '-'}</b><small>{provider?.live_status === 'VERIFIED' ? 'LIVE 호출 검증됨' : provider?.configured ? '키 설정됨 · LIVE 미검증' : '키 없음 · 호출 불가'}</small></span></div></div>
     </aside>
     <div className="shell">
       <header><div className="breadcrumb"><span>QualityOps AI</span><Icon name="chevron" size={13}/><b>{nav.find(x => x[0] === active)?.[1]}</b></div>

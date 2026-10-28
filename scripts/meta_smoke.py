@@ -2,6 +2,7 @@
 
 import json
 import sys
+import time
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -45,16 +46,22 @@ def main() -> int:
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
         method="POST",
     )
+    started = time.perf_counter()
     try:
         with urlopen(request, timeout=20) as response:
             result = json.load(response)
         if result.get("model") != MODEL:
             raise ValueError("Unexpected model ID")
         parse_answer(result["choices"][0]["message"]["content"])
-    except (HTTPError, URLError, KeyError, IndexError, TypeError, ValueError) as exc:
+    except HTTPError as exc:
+        print(f"LIVE FAILED: HTTPError {exc.code}")  # status only; the body may echo request details
+        return 1
+    except (URLError, KeyError, IndexError, TypeError, ValueError) as exc:
         print(f"LIVE FAILED: {type(exc).__name__}")
         return 1
-    print(f"LIVE SUCCESS: model={MODEL}, structured_status=ok")
+    usage = result.get("usage") or {}
+    print(f"LIVE SUCCESS: model={MODEL}, structured_status=ok, latency_ms={(time.perf_counter() - started) * 1000:.0f}, "
+          f"prompt_tokens={usage.get('prompt_tokens')}, completion_tokens={usage.get('completion_tokens')}")
     return 0
 
 

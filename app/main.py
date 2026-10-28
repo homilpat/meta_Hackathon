@@ -16,6 +16,7 @@ from app.db import (
     Assignment,
     DataQualityIssue,
     Evidence,
+    ModelRun,
     QualityCase,
     SourceAsset,
     SourceEvent,
@@ -270,7 +271,18 @@ def create_app(database_url: str = "sqlite:///qualityops.db",
     def provider_status() -> dict:
         """What an investigation would call. No key or secret is ever returned."""
         p = app.state.provider
-        return {"model": p.model if p else MODEL, "mode": p.mode if p else None, "configured": p is not None}
+        # A key alone proves nothing: VERIFIED only after a LIVE run actually passed validation here.
+        if p is None:
+            status = "NOT_CONFIGURED"
+        elif p.mode != "LIVE":
+            status = "TEST_DOUBLE"
+        else:
+            with sessions() as session:
+                ok = session.scalar(select(ModelRun.id).where(
+                    ModelRun.mode == "LIVE", ModelRun.status == "VALIDATED").limit(1))
+            status = "VERIFIED" if ok else "CONFIGURED_NOT_VERIFIED"
+        return {"model": p.model if p else MODEL, "mode": p.mode if p else None, "configured": p is not None,
+                "live_status": status}
 
     @app.get("/reference-models/steel")
     def steel_reference() -> dict:

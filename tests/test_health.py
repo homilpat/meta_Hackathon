@@ -14,7 +14,8 @@ def test_provider_status_never_exposes_a_key(tmp_path):
     from tests.test_s3_investigation import Scripted
 
     configured = TestClient(create_app(f"sqlite:///{tmp_path / 'p.db'}", Scripted())).get("/provider").json()
-    assert configured == {"model": "scripted-test-double", "mode": "TEST_DOUBLE", "configured": True}
+    assert configured == {"model": "scripted-test-double", "mode": "TEST_DOUBLE", "configured": True,
+                          "live_status": "TEST_DOUBLE"}
 
 
 def test_built_web_ui_is_served_when_present():

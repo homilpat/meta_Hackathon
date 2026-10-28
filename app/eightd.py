@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app import actions, ncr, policy, process, quality
+from app import actions, factcheck, ncr, policy, process, quality
 from app.db import (
     Action,
     AffectedObject,
@@ -81,6 +81,12 @@ def stage_state(session: Session, case_id: str) -> dict[str, str | None]:
             DocumentVersion.case_id == case_id, DocumentVersion.doc_type == doc_type)
             .order_by(DocumentVersion.version.desc()).limit(1))
         state[STEP[doc_type]] = doc.status if doc else None
+    if state["D3"] == "APPROVED":  # an approved plan is not containment done: every D3 action must be verified
+        st = [actions.status(session, a.id) for a in session.scalars(
+            select(Action).where(Action.case_id == case_id, Action.stage == "D3"))]
+        live = [x for x in st if x != "CANCELLED"]
+        done = live and all(x in ("INDEPENDENTLY_VERIFIED", "RELEASED") for x in live)
+        state["D3"] = "DONE" if done else "PLAN_APPROVED"
     return state
 
 
@@ -158,8 +164,18 @@ class ActionEventIn(BaseModel):
     evidence: list[str] = []
 
 
-# Stage-specific checks before PLAN_APPROVED (D3 in G4, D5 in G6). stage -> fn(session, action, actor).
-PLAN_CHECKS: dict[str, Callable[[Session, Action, Actor], None]] = {}
+def _d3_plan_check(session: Session, a: Action, actor: Actor) -> None:
+    """D3 plan approval: QA/Production, and the containment document the action came from is still APPROVED."""
+    doc = session.get(DocumentVersion, a.document_version_id) if a.document_version_id else None
+    if doc is None or doc.status != "APPROVED":
+        raise HTTPException(409, f"containment plan must be APPROVED (is {doc.status if doc else 'missing'})")
+    gate = active_policy(session, a.case_id).body["approval_gates"]["D3"]["approver"]
+    if actor.role != gate:
+        raise HTTPException(403, f"D3 plan approval needs role {gate}")
+
+
+# Stage-specific checks before PLAN_APPROVED (D5 added in G6). stage -> fn(session, action, actor).
+PLAN_CHECKS: dict[str, Callable[[Session, Action, Actor], None]] = {"D3": _d3_plan_check}
 
 
 def make_v5_router(sessions: sessionmaker, current_user: Callable[..., Actor]) -> APIRouter:
@@ -364,6 +380,30 @@ def make_v5_router(sessions: sessionmaker, current_user: Callable[..., Actor]) -
             log(session, case_id, actor, "URGENT_ACTION_REQUESTED",
                 f"#{a.id} {body.action_type} {','.join(body.targets)} gate={v.result} {'; '.join(v.reasons)}")
             return {**actions.out(session, a), "gate": v.out()}
+
+    @router.post("/cases/{case_id}/actions", status_code=201)
+    def containment_action(case_id: str, body: ActionIn, actor: Who) -> dict:
+        """D3 containment action bound to the latest containment plan and to exact affected objects."""
+        require_role(actor, "AUTHOR")
+        with sessions.begin() as session:
+            require_case(session, case_id, actor)
+            doc = session.scalar(select(DocumentVersion).where(
+                DocumentVersion.case_id == case_id, DocumentVersion.doc_type == "CONTAINMENT")
+                .order_by(DocumentVersion.version.desc()).limit(1))
+            if doc is None or doc.status in ("REJECTED", "SUPERSEDED"):
+                raise HTTPException(409, "D3 actions need a live containment plan document")
+            p = active_policy(session, case_id)
+            a = actions.create(session, case_id, "D3", body.action_type, body.description, body.targets, actor.id,
+                               p.policy_hash, document_version_id=doc.id)
+            log(session, case_id, actor, "D3_ACTION_PROPOSED",
+                f"#{a.id} {body.action_type} {','.join(body.targets)} from CONTAINMENT v{doc.version}")
+            return actions.out(session, a)
+
+    @router.get("/cases/{case_id}/problem-definition")
+    def problem_definition(case_id: str, actor: Who) -> dict:
+        with sessions.begin() as session:
+            require_case(session, case_id, actor)
+            return factcheck.problem_definition(session, case_id)
 
     @router.get("/cases/{case_id}/actions")
     def list_actions(case_id: str, actor: Who) -> list[dict]:

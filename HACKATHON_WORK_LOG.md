@@ -199,3 +199,13 @@
 - Found while checking: the local `qualityops.db` is a pre-S0 file (old `title`/`board_no` columns) stamped at the latest migration, so it 500s. A fresh `alembic upgrade head` matches every model column (checked). The local file was not touched; the demo ran on a fresh DB.
 - Not built: a real CFX/MQTT feed, limits recalculation workflow, and alarms on data other than SPI.
 - Checks: pytest 122 passed (2 new: WE rule unit cases; replay → case, 403/409, timeline, NCR claim value = alarm X̄, 404 on non-lot case); ruff exit 0; `npm run build` exit 0.
+
+## 2026-10-28 KST — v5 requirements, gates G0–G4 (user-requested; stopped after G4 on request)
+
+- **G0** audit: `docs/V5_GAP_MATRIX.md` (FR-01..29 mapped to code/tests), `docs/V5_IMPLEMENTATION_PLAN.md`. Baseline on HEAD `aafbba3`: pytest 122 passed, ruff 0, alembic head 0009. System Python 3.10 is below `requires-python`; checks run in a local 3.12 `.venv`.
+- **G1** Meta LIVE: **BLOCKED_NO_CREDENTIALS** (no `MODEL_API_KEY`; both smoke scripts exit 2 with no network call). `/provider` adds `live_status` (`VERIFIED` only after a validated LIVE run in the DB); UI shows "LIVE 미검증". `docs/META_LIVE_LOG.md`.
+- **G2** `app/policy.py` (versioned WorkflowPolicy, pure PASS/WARN/UNKNOWN/BLOCK gates), `app/quality.py` (EvidenceQualityAssessment from existing flags; unclear → UNVERIFIED; only VALID may prove cause/effect), `app/process.py` (PCB adapter over existing rows + fictional machining contract fixture). Migration 0010.
+- **G3** D0 triage (SPC signal cannot be recorded as a confirmed defect without a cited human verification), urgent containment after D0 before D1/D2, D1 team events, shared action lifecycle with independent verification. Every execution is SIMULATED. Migration 0011. React `/app` screen "D0~D8 진행".
+- **G4** `app/factcheck.py`: all document claims (template, author, model) are checked for lot named vs lot of cited rows, unit vs cited measurement, superseded source rows → 422. `GET /cases/{id}/problem-definition` (5W2H, IS/IS NOT, denominator, unknown scope, source versions). D3 actions (`POST /cases/{id}/actions`) bound to the containment plan and exact objects; D3 stage reads `PLAN_APPROVED` until every D3 action is independently verified.
+- Checks (G4 commit): pytest 167 passed; ruff exit 0; fresh `alembic upgrade head` exit 0; migrated schema == models (autogenerate diff empty); `npm run build` exit 0 (G1, G3).
+- Not built: G5–G10 (D4 experiments/decisions, D5/D6, D7/D8, full claim predicates/RAG/TemplateContract, Docs editing/signature binding, DOCX/PDF). No UI yet for D3 action creation or problem definition (API only). Numeric recompute of author claims is G8 work. Nothing pushed.

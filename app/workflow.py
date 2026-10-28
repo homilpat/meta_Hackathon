@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 from starlette.convertors import StringConvertor, register_url_convertor
 
-from app import audit, history, impact, investigator, ncr
+from app import audit, factcheck, history, impact, investigator, ncr
 from app.db import (
     ApprovalEvent,
     Assignment,
@@ -304,6 +304,8 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
                 ncr.validate_claims(claims, known)
             except ValueError as exc:
                 raise HTTPException(422, str(exc)) from exc
+            if errors := factcheck.check_claims(session, case_id, claims):
+                raise HTTPException(422, "; ".join(errors))
             prev = _latest(session, case_id, doc_type)
             version = prev.version + 1 if prev else 1
             if prev and prev.status in ("DRAFT", "IN_REVIEW", "INFO_REQUESTED"):

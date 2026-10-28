@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 from starlette.convertors import StringConvertor, register_url_convertor
 
-from app import audit, factcheck, history, impact, investigator, ncr
+from app import audit, factcheck, history, impact, investigator, ncr, policy
 from app.db import (
     ApprovalEvent,
     Assignment,
@@ -40,9 +40,9 @@ DEMO_USERS = {
     "bob": ("Bob (reviewer)", "REVIEWER"), "carol": ("Carol (reviewer)", "REVIEWER"),
     "erin": ("Erin (QA/Production)", "QA_PRODUCTION"), "frank": ("Frank (process engineer)", "PROCESS_ENGINEER"),
 }
-# URL kind -> document type; who may approve it; which approved document it must build on.
+# URL kind -> document type; which approved document it must build on. Who may approve comes from the active
+# WorkflowPolicy (eightd.approval_gate); DEFAULT gives NCR=REVIEWER, CONTAINMENT=QA_PRODUCTION, RCA=PROCESS_ENGINEER.
 KINDS = {"ncr": "NCR", "containment": "CONTAINMENT", "rca": "RCA"}
-APPROVER = {"NCR": "REVIEWER", "CONTAINMENT": "QA_PRODUCTION", "RCA": "PROCESS_ENGINEER"}
 PREREQ = {"CONTAINMENT": "NCR", "RCA": "CONTAINMENT"}
 STEP = {"NCR": "D2", "CONTAINMENT": "D3", "RCA": "D4"}  # 8D: problem description, containment, root cause
 
@@ -220,6 +220,25 @@ def _require_basis(session: Session, doc: DocumentVersion) -> None:
                                  f"approved basis is now {', '.join(chain)}. Create a new draft.")
 
 
+def _gate(session: Session, case_id: str, doc_type: str, actor: Actor, author_id: str | None, full: bool):
+    """403 if the policy does not let this actor decide; with full, 409 if a prerequisite stage is incomplete."""
+    from app import eightd  # eightd imports this module
+
+    v, p = eightd.approval_gate(session, case_id, doc_type, actor, author_id)
+    who = policy.may_decide(p.body, STEP[doc_type], actor.role, actor.id, author_id)
+    if who.result == "BLOCK":
+        raise HTTPException(403, "; ".join(who.reasons))
+    if full and v.result == "BLOCK":
+        raise HTTPException(409, "; ".join(v.reasons))
+    return p
+
+
+def _approver(session: Session, case_id: str, doc_type: str) -> str:
+    from app import eightd
+
+    return eightd.approver_role(session, case_id, doc_type)
+
+
 def _impact_out(r: ChangeImpact) -> dict:
     return {"impact_id": r.id, "asset_id": r.asset_id, "supersedes_asset_id": r.supersedes_asset_id,
             "reason": r.reason, "actor_id": r.actor_id, "created_at": r.created_at,
@@ -351,7 +370,7 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
                         items.append({"case_id": c, "kind": k, "doc_type": d.doc_type, "version": d.version,
                                       "status": d.status, "task": task, "owner": owner, "detail": detail})
 
-                    if actor.role == APPROVER[doc_type]:
+                    if actor.role == _approver(session, case_id, doc_type):
                         if doc.status == "IN_REVIEW":
                             add("REVIEW", session.scalar(select(Review.reviewer_id).where(
                                 Review.document_version_id == doc.id, Review.state == "PENDING")))
@@ -425,7 +444,7 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
                 except HTTPException as exc:
                     blocked = exc.detail
                 out.append({"kind": kind, "doc_type": doc_type, "step": STEP[doc_type],
-                            "approver_role": APPROVER[doc_type], "version": doc.version if doc else None,
+                            "approver_role": _approver(session, case_id, doc_type), "version": doc.version if doc else None,
                             "status": doc.status if doc else None, "approval_open": blocked is None,
                             "blocked_by": blocked})
             return out
@@ -463,17 +482,26 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
                 raise HTTPException(403, "Only the author can request review")
             if doc.version != _latest(session, case_id, doc_type).version or doc.status != "DRAFT":
                 raise HTTPException(409, "Only the latest DRAFT version can be sent for review")
-            reviewer = DEMO_USERS.get(body.reviewer_id)
-            if reviewer is None or reviewer[1] != APPROVER[doc_type] or body.reviewer_id == actor.id:
-                raise HTTPException(422, f"{doc_type} reviewer must be a {APPROVER[doc_type]} other than the author")
+            from app import eightd
+
+            p, reviewer = eightd.active_policy(session, case_id), DEMO_USERS.get(body.reviewer_id)
+            who = policy.may_decide(p.body, STEP[doc_type], reviewer[1] if reviewer else "", body.reviewer_id,
+                                    doc.author_id)
+            if reviewer is None or who.result == "BLOCK":
+                raise HTTPException(422, f"{doc_type} reviewer is not allowed by the policy: "
+                                         f"{'; '.join(who.reasons) or 'unknown user'}")
             if not session.scalar(select(Assignment.id).where(
                     Assignment.case_id == case_id, Assignment.user_id == body.reviewer_id)):
                 raise HTTPException(422, "Reviewer is not assigned to this case")
             _require_basis(session, doc)
+            if body.reviewer_id == doc.author_id:  # only reachable through a policy self-approval exception
+                log(session, case_id, actor, "SELF_APPROVAL_EXCEPTION", f"{doc_type} v{version} {p.policy_hash}",
+                    doc.id)
             doc.status = "IN_REVIEW"
-            session.add(Review(document_version_id=doc.id, requested_by=actor.id,
-                               reviewer_id=body.reviewer_id, state="PENDING", created_at=now()))
-            log(session, case_id, actor, "REVIEW_REQUESTED", f"{doc_type} v{version} -> {body.reviewer_id}", doc.id)
+            session.add(Review(document_version_id=doc.id, requested_by=actor.id, reviewer_id=body.reviewer_id,
+                               state="PENDING", created_at=now(), policy_hash=p.policy_hash))
+            log(session, case_id, actor, "REVIEW_REQUESTED", f"{doc_type} v{version} -> {body.reviewer_id} "
+                f"policy={p.policy_id} v{p.version} {p.policy_hash}", doc.id)
             session.flush()
             return 200, _doc_out(session, doc)
 
@@ -482,13 +510,11 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
     @router.post("/cases/{case_id}/{kind:doc}/{version}/decision")
     def decide(case_id: str, kind: str, version: int, body: Decision, key: IdemKey, actor: Who):
         doc_type = KINDS[kind]
-        require_role(actor, APPROVER[doc_type])
 
         def run(session: Session) -> tuple[int, dict]:
             require_case(session, case_id, actor)
             doc = _get_doc(session, case_id, version, doc_type)
-            if doc.author_id == actor.id:
-                raise HTTPException(403, "Authors cannot decide their own document")
+            _gate(session, case_id, doc_type, actor, doc.author_id, full=False)
             review = session.scalar(select(Review).where(
                 Review.document_version_id == doc.id, Review.reviewer_id == actor.id,
                 Review.state == "PENDING"))
@@ -498,15 +524,20 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
                 raise HTTPException(409, "A newer version exists; this one is stale")
             if doc.status != "IN_REVIEW" or body.content_sha256 != doc.content_sha256:
                 raise HTTPException(409, "Version is not in review or content changed since you read it")
-            if body.decision == "APPROVE":
+            note = ""
+            if body.decision == "APPROVE":  # re-evaluated under the policy in force now, not the one at request
+                p = _gate(session, case_id, doc_type, actor, doc.author_id, full=True)
                 _require_basis(session, doc)
+                note = f" policy={p.policy_id} v{p.version} {p.policy_hash}"
+                if review.policy_hash and review.policy_hash != p.policy_hash:
+                    note += f" (review was requested under {review.policy_hash}; re-evaluated)"
             review.state = "DONE"
             doc.status = {"APPROVE": "APPROVED", "REJECT": "REJECTED", "REQUEST_INFO": "INFO_REQUESTED"}[
                 body.decision]
             session.add(ApprovalEvent(document_version_id=doc.id, actor_id=actor.id, action=body.decision,
                                       content_sha256=doc.content_sha256, comment=body.comment,
                                       created_at=now()))
-            log(session, case_id, actor, body.decision, f"{doc_type} v{version}: {body.comment}", doc.id)
+            log(session, case_id, actor, body.decision, f"{doc_type} v{version}: {body.comment}{note}", doc.id)
             session.flush()
             return 200, _doc_out(session, doc)
 
@@ -516,11 +547,11 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
     def basis_check(case_id: str, kind: str, version: int, body: BasisCheck, key: IdemKey, actor: Who):
         """The approver of a BASIS_CHANGED document records whether its scope still holds on the new basis."""
         doc_type = KINDS[kind]
-        require_role(actor, APPROVER[doc_type])
 
         def run(session: Session) -> tuple[int, dict]:
             require_case(session, case_id, actor)
             doc = _get_doc(session, case_id, version, doc_type)
+            _gate(session, case_id, doc_type, actor, doc.author_id, full=False)
             if doc.status != "BASIS_CHANGED" or body.content_sha256 != doc.content_sha256:
                 raise HTTPException(409, "Version is not BASIS_CHANGED or content changed since you read it")
             if body.decision == "NO_SCOPE_IMPACT":
@@ -561,7 +592,7 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
                         f"{','.join(d['claims'])} cite corrected source rows", d["document_version_id"])
             for d in found["basis_changed"]:
                 log(session, case_id, actor, "BASIS_CHANGED", f"{d['doc_type']} v{d['version']} cites no corrected "
-                    f"row but builds on a reopened document; {APPROVER[d['doc_type']]} must confirm its scope",
+                    f"row but builds on a reopened document; {_approver(session, case_id, d['doc_type'])} must confirm its scope",
                     d["document_version_id"])
             session.flush()
             return 201, _impact_out(row)

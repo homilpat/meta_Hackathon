@@ -1,6 +1,8 @@
 # v5 implementation status
 
-Stopped after G4 at the user's request (2026-10-28). Nothing is pushed.
+G0–G4 were pushed to `origin/main` at `4dbb03d` (2026-10-28; the earlier "Nothing is pushed" note predates that push).
+v5.5 FINAL (`QualityOps_AI_FINAL_REQUIREMENTS_v5_5_FINAL.md`) supersedes the v5 spec files for status and order:
+PREFLIGHT → G5 → G6 → G7 → G8 → G9 → post-G9 audit → G10 → Meta LIVE → stabilisation.
 
 | Gate | Status | What exists (code / route / test) |
 |---|---|---|
@@ -9,6 +11,7 @@ Stopped after G4 at the user's request (2026-10-28). Nothing is pushed.
 | G2 policy / evidence quality / adapters | BUILT | `app/policy.py`, `app/quality.py`, `app/process.py`; `/policies`, `/cases/{id}/gates`, `/evidence-quality`, `/process-context`; `tests/test_v5_g2_foundation.py` |
 | G3 D0 / urgent / D1 | BUILT | `app/eightd.py`, `app/actions.py`; `/triage`, `/urgent-actions`, `/team`, `/actions/{id}/events`; `tests/test_v5_g3_d0_d1.py`; UI "D0~D8 진행" |
 | G4 D2 / D3 | BUILT | `app/factcheck.py`, `ncr._five_w2h` (5W2H / IS-IS NOT inside the NCR, under the approval hash); `/problem-definition`, `POST /actions` (LOT/panel/board/shipment-row targets); UI: 5W2H card + D3 action button; `tests/test_v5_g4_d2_d3.py`; HTTP check on a live server |
+| PREFLIGHT approval-gate unification | BUILT | `eightd.approval_gate` is the one D2–D4 approval decision; `workflow.py` request-review / decision / basis-check / queue / stages consume it (`policy.may_decide` + `can_approve`); `reviews.policy_hash` (migration `0012_preflight_review_policy`); `tests/test_v5_5_preflight.py` |
 | G5–G10 | NOT STARTED | — |
 
 ## Spec §9 acceptance tests now
@@ -25,7 +28,9 @@ Stopped after G4 at the user's request (2026-10-28). Nothing is pushed.
 
 - All data and every action execution are SYNTHETIC / SIMULATED. Source-DB match is not physical ground truth.
 - Evidence quality rules cannot see calibration or time sync (not in the sources): recorded as `NOT_IN_SOURCE`.
-- The S6 document routes still use their fixed chain; the policy is consulted at the new v5 entry points only.
+- The S6 document routes take their approver role, self-approval rule and prerequisites from the active policy
+  (PREFLIGHT). Document approvals read upstream *document* states; containment execution completeness (D3 actions
+  independently verified) is a stage/closure condition, not a condition for approving the RCA document.
 - Author claim numbers are not recomputed yet (only lot/unit/superseded checks): claims carry a value but not how
   it was computed, so the server cannot redo it. Structured calculation predicates are G8; editing a draft is G9.
 - NCR template is now `v5.g4` (adds 5W2H / IS-IS NOT claims); stored versions show the template they were built with.

@@ -141,6 +141,7 @@ class Review(Base):
     reviewer_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     state: Mapped[str] = mapped_column(String(10))  # PENDING | DONE | HELD (source corrected)
     created_at: Mapped[str] = mapped_column(String(40))
+    policy_hash: Mapped[str | None] = mapped_column(String(64))  # WorkflowPolicy in force at request (v5.5)
 
 
 class ApprovalEvent(Base):

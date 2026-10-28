@@ -19,7 +19,8 @@ Result = Literal["PASS", "WARN", "UNKNOWN", "BLOCK"]
 STAGES = ("D0", "D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8")
 DONE = ("APPROVED", "DONE")  # a stage counts as complete in either state
 
-# Equivalent to the S6 chain for D2-D4 (APPROVER/PREREQ in workflow.py), extended to D0-D8. Urgent
+# Equivalent to the S6 chain for D2-D4 (PREREQ in workflow.py), extended to D0-D8. eightd.approval_gate is the
+# single approval decision for the D2-D4 documents. Urgent
 # containment only needs a D0 risk assessment: safety is never held up by document order.
 DEFAULT_BODY = {
     "required_roles": {"LEAD": "AUTHOR", "QUALITY": "REVIEWER", "PRODUCTION": "QA_PRODUCTION",
@@ -95,8 +96,8 @@ def can_execute(body: dict, permission: str, role: str) -> Verdict:
     return _verdict([] if role in allowed else [f"{role} may not {permission}"])
 
 
-def can_approve(body: dict, stage: str, role: str, actor_id: str, author_id: str | None,
-                state: dict[str, str | None]) -> Verdict:
+def may_decide(body: dict, stage: str, role: str, actor_id: str, author_id: str | None) -> Verdict:
+    """Who may decide (approve, reject, ask for info) at a stage: the policy's approver role, not the author."""
     gate = body["approval_gates"].get(stage)
     if gate is None:
         return Verdict("BLOCK", [f"policy has no approval gate for {stage}"])
@@ -105,8 +106,16 @@ def can_approve(body: dict, stage: str, role: str, actor_id: str, author_id: str
         blocks.append(f"{stage} approval needs role {gate['approver']}")
     if author_id == actor_id and stage not in body["self_approval_exceptions"]:
         blocks.append("self-approval is not allowed by this policy")
-    blocks += [f"{stage} approval needs {s} complete (is {state.get(s) or 'missing'})" for s in gate["requires"]
-               if state.get(s) not in DONE]
+    return _verdict(blocks)
+
+
+def can_approve(body: dict, stage: str, role: str, actor_id: str, author_id: str | None,
+                state: dict[str, str | None]) -> Verdict:
+    who = may_decide(body, stage, role, actor_id, author_id)
+    if stage not in body["approval_gates"]:
+        return who
+    blocks = who.reasons + [f"{stage} approval needs {s} complete (is {state.get(s) or 'missing'})"
+                            for s in body["approval_gates"][stage]["requires"] if state.get(s) not in DONE]
     return _verdict(blocks)
 
 

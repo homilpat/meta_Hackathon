@@ -69,8 +69,9 @@ def team(session: Session, case_id: str, body: dict) -> dict:
     return {"members": cur, "missing": missing, "complete": not missing}
 
 
-def stage_state(session: Session, case_id: str) -> dict[str, str | None]:
-    """Status per 8D stage. D2-D4 come from the S6 documents; later gates add their own entities."""
+def stage_state(session: Session, case_id: str, documents_only: bool = False) -> dict[str, str | None]:
+    """Status per 8D stage. D2-D4 come from the S6 documents; later gates add their own entities.
+    documents_only: D3 reads its document status (what a document approval builds on), not action completion."""
     state: dict[str, str | None] = dict.fromkeys(policy.STAGES)
     state["D0"] = "DONE" if latest_triage(session, case_id) else None
     if session.scalar(select(TeamEvent.id).where(TeamEvent.case_id == case_id).limit(1)):
@@ -81,13 +82,26 @@ def stage_state(session: Session, case_id: str) -> dict[str, str | None]:
             DocumentVersion.case_id == case_id, DocumentVersion.doc_type == doc_type)
             .order_by(DocumentVersion.version.desc()).limit(1))
         state[STEP[doc_type]] = doc.status if doc else None
-    if state["D3"] == "APPROVED":  # an approved plan is not containment done: every D3 action must be verified
+    if state["D3"] == "APPROVED" and not documents_only:  # an approved plan is not containment done: every D3 action must be verified
         st = [actions.status(session, a.id) for a in session.scalars(
             select(Action).where(Action.case_id == case_id, Action.stage == "D3"))]
         live = [x for x in st if x != "CANCELLED"]
         done = live and all(x in ("INDEPENDENTLY_VERIFIED", "RELEASED") for x in live)
         state["D3"] = "DONE" if done else "PLAN_APPROVED"
     return state
+
+
+def approval_gate(session: Session, case_id: str, doc_type: str, actor: Actor,
+                  author_id: str | None) -> tuple[policy.Verdict, WorkflowPolicy]:
+    """The one approval decision for the D2-D4 documents, used by the S6 document routes and /gates alike.
+    Under DEFAULT it equals the S6 chain (role per stage, upstream document APPROVED, no self-approval)."""
+    p = active_policy(session, case_id)
+    state = stage_state(session, case_id, documents_only=True)
+    return policy.can_approve(p.body, STEP[doc_type], actor.role, actor.id, author_id, state), p
+
+
+def approver_role(session: Session, case_id: str, doc_type: str) -> str:
+    return active_policy(session, case_id).body["approval_gates"][STEP[doc_type]]["approver"]
 
 
 def triage_out(t: TriageAssessment) -> dict:
@@ -212,10 +226,11 @@ def make_v5_router(sessions: sessionmaker, current_user: Callable[..., Actor]) -
             require_case(session, case_id, actor)
             p = active_policy(session, case_id)
             state, r = stage_state(session, case_id), route(session, case_id)
-            body = p.body
+            body, docs = p.body, {STEP[t]: t for t in KINDS.values()}
             return {"policy": policy.ref(p), "state": state, "route": r,
                     "draft": {s: policy.can_draft(body, s, state).out() for s in body["draft_requirements"]},
-                    "approve": {s: policy.can_approve(body, s, actor.role, actor.id, None, state).out()
+                    "approve": {s: (approval_gate(session, case_id, docs[s], actor, None)[0] if s in docs else
+                                    policy.can_approve(body, s, actor.role, actor.id, None, state)).out()
                                 for s in body["approval_gates"]},
                     "urgent_containment": policy.can_execute_urgent(body, actor.role, state, r).out()}
 

@@ -55,12 +55,19 @@ def _parse_report(content: str) -> InvestigationReport:
     return InvestigationReport.model_validate(json.loads(text))
 
 
+HYBRID_PROMPT = """
+Hybrid mode: the server owns the workflow. You may call get_evidence_gaps, search_experience and
+search_documents (read-only) and propose next_evidence_requests that close a gap or tell a prior case's
+conditions apart from this one. A prior response, even KNOWN, is a candidate for human review, not a cause
+and not an action; never propose a NEGATIVE_PRECEDENT action as a fix. You cannot approve, execute or edit."""
+
+
 def investigate(session: Session, case_id: str, user_id: str, provider: ModelProvider,
-                use_history: bool = False) -> ModelRun:
+                use_history: bool = False, hybrid: bool = False, role: str = "AUTHOR") -> ModelRun:
     """Run the loop and persist the run. Never raises for model/provider problems."""
     started = _now()
-    tools = EvidenceTools(session, case_id, use_history)
-    messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT},
+    tools = EvidenceTools(session, case_id, use_history, hybrid, role)
+    messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT + (HYBRID_PROMPT if hybrid else "")},
                             {"role": "user", "content": f"Investigate case {case_id}. Use the tools, then report."}]
     calls: list[dict] = []
     status, error, report, rounds, ptok, ctok = "FAILED", None, None, 0, 0, 0

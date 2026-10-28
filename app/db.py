@@ -713,13 +713,125 @@ class Closure(Base):
     created_at: Mapped[str] = mapped_column(String(40))
 
 
+class TemplateContract(Base):
+    """Customer/site/process report-format contract with deterministic rules; new behaviour = new version row."""
+
+    __tablename__ = "template_contracts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    contract_id: Mapped[str] = mapped_column(String(40))
+    version: Mapped[int] = mapped_column(Integer)
+    customer: Mapped[str] = mapped_column(String(60))
+    site: Mapped[str] = mapped_column(String(40))
+    process_type: Mapped[str] = mapped_column(String(40))
+    doc_types: Mapped[list] = mapped_column(JSON)
+    effective_from: Mapped[str] = mapped_column(String(40))
+    effective_to: Mapped[str | None] = mapped_column(String(40))
+    template_doc: Mapped[str] = mapped_column(String(60))  # registry "number:revision"
+    rules: Mapped[dict] = mapped_column(JSON)
+    contract_hash: Mapped[str] = mapped_column(String(64))
+    authorized_by: Mapped[str] = mapped_column(String(40))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class ValidationRun(Base):
+    """What one validation checked (all hashes) and found; stale when any hash differs now."""
+
+    __tablename__ = "validation_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"), index=True)
+    document_version_id: Mapped[int] = mapped_column(ForeignKey("document_versions.id"), index=True)
+    document_sha256: Mapped[str] = mapped_column(String(64))
+    evidence_sha256: Mapped[str] = mapped_column(String(64))
+    policy_hash: Mapped[str] = mapped_column(String(64))
+    template_hash: Mapped[str | None] = mapped_column(String(64))
+    contract_ref: Mapped[str | None] = mapped_column(String(60))
+    rules_version: Mapped[str] = mapped_column(String(30))
+    result: Mapped[str] = mapped_column(String(8))  # PASS WARN BLOCK
+    issues: Mapped[list] = mapped_column(JSON)
+    predicates: Mapped[dict] = mapped_column(JSON)
+    validated_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    validated_at: Mapped[str] = mapped_column(String(40))
+
+
+class ExperienceEntry(Base):
+    """Experience Memory: one versioned, searchable projection of a prior case's cause, action and verified outcome."""
+
+    __tablename__ = "experience_entries"
+    __table_args__ = (UniqueConstraint("entry_key", "version"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    entry_key: Mapped[str] = mapped_column(String(80), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(10))  # ACTIVE REVOKED
+    source_kind: Mapped[str] = mapped_column(String(20))  # HISTORICAL_BANK EXPERIENCE_FIXTURE CLOSED_CASE
+    source_ref: Mapped[str] = mapped_column(String(80))
+    site: Mapped[str] = mapped_column(String(40))
+    process_type: Mapped[str] = mapped_column(String(40))
+    acl_roles: Mapped[list] = mapped_column(JSON)
+    symptom_text: Mapped[str] = mapped_column(Text)
+    features: Mapped[dict] = mapped_column(JSON)
+    cause_text: Mapped[str] = mapped_column(Text)
+    cause_status: Mapped[str] = mapped_column(String(10))  # VERIFIED PROPOSED UNKNOWN
+    action_code: Mapped[str] = mapped_column(String(40))
+    action_text: Mapped[str] = mapped_column(Text)
+    outcome: Mapped[str] = mapped_column(String(20))  # VERIFIED_EFFECTIVE FAILED INSUFFICIENT INCONCLUSIVE UNKNOWN
+    outcome_evidence: Mapped[dict] = mapped_column(JSON)
+    recurrence: Mapped[str] = mapped_column(String(20))  # NONE RECURRED NOT_YET_OBSERVED UNKNOWN
+    recurrence_note: Mapped[str] = mapped_column(Text)
+    applicability: Mapped[list] = mapped_column(JSON)
+    field_checks: Mapped[list] = mapped_column(JSON)
+    available_at: Mapped[str] = mapped_column(String(40))
+    bank_eligibility: Mapped[str] = mapped_column(String(40))
+    reason: Mapped[str] = mapped_column(Text)
+    source_sha256: Mapped[str] = mapped_column(String(64))
+    indexed_at: Mapped[str] = mapped_column(String(40))
+
+
+class ExperienceRetrieval(Base):
+    """One retrieval for a case: the case snapshot it ran on, the mode and everything it returned."""
+
+    __tablename__ = "experience_retrievals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"), index=True)
+    query_text: Mapped[str] = mapped_column(Text)
+    query_sha256: Mapped[str] = mapped_column(String(64))
+    mode: Mapped[str] = mapped_column(String(24))
+    results: Mapped[dict] = mapped_column(JSON)
+    method_version: Mapped[str] = mapped_column(String(120))
+    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class RecommendationDecision(Base):
+    """A person's choice on a retrieved prior case: REVIEW_PRIOR_RESPONSE / INVESTIGATE_MORE / CONSIDER_ALTERNATIVE."""
+
+    __tablename__ = "recommendation_decisions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"), index=True)
+    retrieval_id: Mapped[int] = mapped_column(ForeignKey("experience_retrievals.id"))
+    entry_key: Mapped[str] = mapped_column(String(80))
+    entry_version: Mapped[int] = mapped_column(Integer)
+    entry_sha256: Mapped[str] = mapped_column(String(64))
+    case_snapshot_sha256: Mapped[str] = mapped_column(String(64))
+    decision: Mapped[str] = mapped_column(String(24))
+    reason: Mapped[str] = mapped_column(Text)
+    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
 # Audit rows are append-only at the database level, not just by convention.
 APPEND_ONLY = ("approval_events", "workflow_events", "doc_comments", "audit_chain",
                "workflow_policies", "evidence_quality", "process_contexts", "affected_objects",
                "triage_assessments", "team_events", "actions", "action_events",
                "cause_hypotheses", "why_links", "experiments", "causal_decisions",
                "effectiveness_plans", "effectiveness_results",
-               "controlled_documents", "prevention_deployments", "closure_acks", "closures")
+               "controlled_documents", "prevention_deployments", "closure_acks", "closures",
+               "template_contracts", "validation_runs",
+               "experience_entries", "experience_retrievals", "recommendation_decisions")
 
 
 def append_only_ddl(table: str) -> list[str]:

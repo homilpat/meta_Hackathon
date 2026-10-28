@@ -105,6 +105,7 @@ class Assign(BaseModel):
 
 class InvestigateIn(BaseModel):
     use_history: bool = True
+    hybrid: bool = False  # adds read-only evidence-gap, experience and document tools (v5.5 G8)
 
 
 class LinkIn(BaseModel):
@@ -320,11 +321,7 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
                 builder = f"MODEL_{mrun.mode}:{mrun.model}:run{mrun.id}"
             claims += [{"value": None, "unit": None, "evidence_ids": [], **c,
                         "claim_id": f"C{len(claims) + i + 1}"} for i, c in enumerate(body.extra_claims)]
-            try:
-                ncr.validate_claims(claims, known)
-            except ValueError as exc:
-                raise HTTPException(422, str(exc)) from exc
-            if errors := factcheck.check_claims(session, case_id, claims):
+            if errors := factcheck.check_claims(session, case_id, claims, actor.role):  # the one claim validator
                 raise HTTPException(422, "; ".join(errors))
             prev = _latest(session, case_id, doc_type)
             version = prev.version + 1 if prev else 1
@@ -609,10 +606,12 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
 
     @router.post("/cases/{case_id}/investigations")
     def start_investigation(case_id: str, key: IdemKey, actor: Who, body: InvestigateIn | None = None):
-        use_history = (body or InvestigateIn()).use_history
+        use_history, hybrid = (body or InvestigateIn()).use_history, (body or InvestigateIn()).hybrid
         require_role(actor, "AUTHOR")
         if provider is None:
-            raise HTTPException(503, "LIVE model provider not configured (MODEL_API_KEY unset); no mock fallback")
+            raise HTTPException(503, "LIVE model provider not configured (MODEL_API_KEY unset); no mock fallback. "
+                                     "Server tasks stay available: GET /cases/{id}/evidence-gaps, "
+                                     "POST /cases/{id}/experience/retrievals")
 
         def run(session: Session) -> tuple[int, dict]:
             case = require_case(session, case_id, actor)
@@ -625,9 +624,10 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
                 raise HTTPException(429, f"Investigation quota reached ({used} runs in the last hour)")
             if not session.scalar(select(Evidence.id).where(Evidence.case_id == case_id).limit(1)):
                 raise HTTPException(422, "Case has no evidence; upload sources first")
-            mrun = investigator.investigate(session, case_id, actor.id, provider, use_history)
+            mrun = investigator.investigate(session, case_id, actor.id, provider, use_history, hybrid, actor.role)
             log(session, case_id, actor, "INVESTIGATION_RUN",
                 f"run{mrun.id} mode={mrun.mode} model={mrun.model} history={'ON' if use_history else 'OFF'} "
+                f"hybrid={'ON' if hybrid else 'OFF'} "
                 f"status={mrun.status}")
             session.flush()
             return 201, investigator.run_out(session, mrun)

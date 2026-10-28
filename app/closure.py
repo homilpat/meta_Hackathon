@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app import actions, causes, effect, policy, quality, registry
+from app import actions, causes, effect, experience, policy, quality, registry
 from app.db import (
     Action,
     Closure,
@@ -375,6 +375,8 @@ def make_d7_d8_router(sessions: sessionmaker, current_user: Callable[..., Actor]
             session.flush()
             log(session, case_id, actor, "D8_CLOSED", f"snapshot {c.snapshot_sha256} policy {p.policy_hash} "
                 f"residual risks={len(body.residual_risks)}")
+            keys = experience.index_case(session, case_id, c.id)  # verified outcome becomes searchable experience
+            log(session, case_id, actor, "EXPERIENCE_INDEXED", f"{keys} (recurrence NOT_YET_OBSERVED)")
             return closure_out(c)
 
     @router.post("/cases/{case_id}/closure/reopen", status_code=201)
@@ -394,8 +396,9 @@ def make_d7_d8_router(sessions: sessionmaker, current_user: Callable[..., Actor]
                         policy_hash=p.policy_hash, created_at=now())
             session.add(c)
             session.flush()
+            revoked = experience.revoke_case(session, case_id, f"case reopened: {body.reason[:200]}")
             log(session, case_id, actor, "D8_REOPENED", f"{body.reason[:200]} (closed snapshot "
-                f"{last.snapshot_sha256} kept)")
+                f"{last.snapshot_sha256} kept); experience revoked {revoked}")
             return closure_out(c)
 
     return router

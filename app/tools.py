@@ -58,18 +58,32 @@ HISTORY_SPECS = [
     _fn("get_historical_case_outcome", "Checks, actions and verified outcome statuses for one eligible precedent.",
         {"historical_case_id": {"type": "string"}}, ["historical_case_id"]),
 ]
-ARGS = {s["function"]["name"]: set(s["function"]["parameters"]["properties"]) for s in SPECS + HISTORY_SPECS}
+HYBRID_SPECS = [
+    _fn("get_evidence_gaps", "Server-computed gaps per open cause hypothesis (missing experiments, counter evidence, "
+        "unsuitable evidence) and case-level unknowns with suggested read-only checks.", {}),
+    _fn("search_experience", "Experience Memory: prior cases filtered by site/process/access first, with mode "
+        "KNOWN/ANALOGICAL/NO_RELEVANT_HISTORY, verified outcomes, recurrence, failed precedents and differing "
+        "conditions. A prior response is not causal proof for this case.",
+        {"q": {"type": "string", "maxLength": 300}}),
+    _fn("search_documents", "Released, in-effect controlled documents (SOP/FMEA/control plan/templates) for this "
+        "case's site and process that the caller may read, ranked by text match.",
+        {"q": {"type": "string", "maxLength": 300}, "kind": {"type": "string"}}, ["q"]),
+]
+ARGS = {s["function"]["name"]: set(s["function"]["parameters"]["properties"])
+        for s in SPECS + HISTORY_SPECS + HYBRID_SPECS}
 
 
 class EvidenceTools:
-    def __init__(self, session: Session, case_id: str, use_history: bool = False):
+    def __init__(self, session: Session, case_id: str, use_history: bool = False, hybrid: bool = False,
+                 role: str = "AUTHOR"):
         self.session, self.case_id, self.use_history = session, case_id, use_history
+        self.hybrid, self.role = hybrid, role  # the requesting user's role scopes every retrieval (ACL before egress)
 
     def specs(self) -> list[dict]:
-        return SPECS + HISTORY_SPECS if self.use_history else SPECS
+        return SPECS + (HISTORY_SPECS if self.use_history else []) + (HYBRID_SPECS if self.hybrid else [])
 
     def call(self, name: str, args: dict) -> dict:
-        if name not in ARGS or (not self.use_history and name in {s["function"]["name"] for s in HISTORY_SPECS}):
+        if name not in ARGS or name not in {s["function"]["name"] for s in self.specs()}:
             raise ToolError(f"unknown tool {name!r}")
         if not isinstance(args, dict) or set(args) - ARGS[name]:
             raise ToolError(f"invalid arguments for {name}")
@@ -193,3 +207,25 @@ class EvidenceTools:
         return {"issue_counts": dict(Counter(i.code for i in issues)),
                 "issues": [{"code": i.code, "severity": i.severity, "detail": i.detail,
                             "evidence_id": f"EV-{i.event_id}"} for i in issues[:50]]}
+
+    def get_evidence_gaps(self) -> dict:
+        from app import causes
+        self._rows()
+        return causes.evidence_gaps(self.session, self.case_id)
+
+    def search_experience(self, q: str = "") -> dict:
+        from fastapi import HTTPException
+
+        from app import experience
+        self._rows()
+        try:
+            out = experience.retrieve(self.session, self.case_id, self.role, q)
+        except HTTPException as exc:
+            raise ToolError(str(exc.detail)) from None
+        return {k: out[k] for k in ("mode", "recommendations", "negative_precedents", "unknown_effect", "rejected",
+                                    "prompt", "note")}
+
+    def search_documents(self, q: str, kind: str | None = None) -> dict:
+        from app import validation
+        self._rows()
+        return validation.search_documents(self.session, self.case_id, self.role, q, kind)

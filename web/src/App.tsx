@@ -440,6 +440,7 @@ function EightD({ ctx }: { ctx: Ctx }) {
   const [d4, setD4] = useState<J>(null)
   const [d6, setD6] = useState<J>(null)
   const [d7, setD7] = useState<J>(null)
+  const [xp, setXp] = useState<J>(null)
   const [d8, setD8] = useState<J>(null)
   const [f, setF] = useState<Record<string, string>>({ signal_kind: 'SPC_SIGNAL', observed_defect: 'SIGNAL_ONLY', route: 'FULL_8D', severity: 'MEDIUM', scope_lots: '', rationale: '', evidence_ids: '',
     responsibility: 'QUALITY', user_id: 'bob', action_type: 'HOLD', targets: '', description: '', note: '', evidence: '',
@@ -456,6 +457,7 @@ function EightD({ ctx }: { ctx: Ctx }) {
     api(`/cases/${cid}/hypotheses`).then(setD4).catch(() => setD4(null))
     api(`/cases/${cid}/effectiveness`).then(setD6).catch(() => setD6(null))
     api(`/cases/${cid}/prevention`).then(setD7).catch(() => setD7(null))
+    api(`/cases/${cid}/experience`).then(setXp).catch(() => setXp(null))
     api(`/cases/${cid}/closure`).then(setD8).catch(() => setD8(null))
   }, [cid, api, tick])
   const run = (p: Promise<unknown>) => p.then(refresh).catch(() => undefined)
@@ -513,6 +515,19 @@ function EightD({ ctx }: { ctx: Ctx }) {
           <td><Badge tone={pd[k].status === 'KNOWN' ? 'green' : 'slate'}>{pd[k].status}</Badge></td><td>{pd[k].evidence_ids.length}건</td></tr>)}
       </tbody></table></div>
       <p className="muted wrap mt">범위 미상 {pd.unknown_scope.length}건 · 원본 버전 {Object.entries(pd.effective_source_versions).map(([k, v]) => `${k} v${v}`).join(', ')} · {pd.note}</p></Card>}
+    {xp && <Card className="mb"><SectionTitle title="과거 동일·유사 사건 (Experience Memory)" sub={xp.latest ? `모드 ${xp.latest.mode} · 검색 #${xp.latest.retrieval_id} · 유사도 ≠ 원인 확정 · 선택 ≠ D5 승인` : '아직 검색하지 않았습니다'}/>
+      <button className="button secondary" onClick={() => run(api(`/cases/${cid}/experience/retrievals`, 'POST', { q: f.htext }))}>과거 사례 검색 (서버 결정론)</button>
+      {xp.latest?.prompt && <Note>{xp.latest.prompt}</Note>}
+      {xp.latest?.mode === 'NO_RELEVANT_HISTORY' && <Note>{xp.latest.note}</Note>}
+      {xp.latest && <div className="table-wrap mt"><table><thead><tr><th>사례</th><th>모드·역할</th><th>조치</th><th>결과·재발</th><th>일치</th><th>차이</th><th>선택</th></tr></thead><tbody>
+        {xp.latest.matches.map((m: J) => <tr key={m.entry_key}><td className="id">{m.entry_key}</td>
+          <td><Badge tone={m.mode === 'KNOWN' ? 'green' : 'amber'}>{m.mode}</Badge> <Badge tone={m.role === 'PRIOR_RESPONSE' ? 'blue' : 'red'}>{m.role}</Badge></td>
+          <td className="wrap">{m.action}</td><td>{m.outcome} · {m.recurrence}</td><td className="wrap">{m.matched_factors.join(', ')}</td>
+          <td className="wrap">{[...m.differing_factors, ...m.warnings].join(' · ') || '-'}</td>
+          <td><div className="row-gap">{xp.latest.choices.filter((ch: string) => ch !== 'REVIEW_PRIOR_RESPONSE' || m.role === 'PRIOR_RESPONSE').map((ch: string) => <button key={ch} className="button secondary" style={{ height: 26, padding: '0 6px' }}
+            disabled={!['AUTHOR', 'PROCESS_ENGINEER'].includes(role ?? '')} onClick={() => run(api(`/cases/${cid}/experience/decisions`, 'POST', { retrieval_id: xp.latest.retrieval_id, entry_key: m.entry_key, decision: ch, reason: f.note || 'reviewed against current line conditions' }))}>{ch}</button>)}</div></td></tr>)}
+      </tbody></table></div>}
+      {xp.decisions.length > 0 && <p className="muted wrap mt">선택 기록: {xp.decisions.map((d: J) => `${d.decision} ${d.entry_key} (${d.actor_id})${d.stale ? ' · STALE' : ''}`).join(' · ')}</p>}</Card>}
     {d4 && <Card className="mb"><SectionTitle title="D4 원인 가설 → 실험 → 판정" sub="원인 확정은 독립된 공정 엔지니어가 지지 실험(VALID 증거)으로만 기록 · SHAP·선례·AI 제안만으로는 확정 불가"/>
       <div className="table-wrap"><table><thead><tr><th>#</th><th>6M</th><th>유형</th><th>가설</th><th>출처</th><th>실험</th><th>상태</th><th>판정</th></tr></thead><tbody>
         {d4.hypotheses.map((h: J) => { const sup = h.experiments.filter((e: J) => e.result === 'SUPPORTS').map((e: J) => e.experiment_id)

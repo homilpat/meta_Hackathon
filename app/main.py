@@ -28,6 +28,7 @@ from app.db import (
 )
 from app.effect import make_d6_router
 from app.eightd import make_v5_router
+from app.experience import make_experience_router
 from app.ingestion import SyntheticBundle, normalize
 from app.ml_api import make_ml_router
 from app.model_provider import MODEL, MetaProvider, ModelProvider
@@ -39,6 +40,7 @@ from app.synthetic import (
     generate_post_window,
     spi_correction,
 )
+from app.validation import make_validation_router
 from app.workflow import DEMO_USERS, Actor, log, make_auth, make_router, require_case, require_role
 
 
@@ -124,6 +126,14 @@ def create_app(database_url: str = "sqlite:///qualityops.db",
     app.include_router(make_d4_router(sessions, current_user))
     app.include_router(make_d6_router(sessions, current_user))
     app.include_router(make_d7_d8_router(sessions, current_user))
+    app.include_router(make_validation_router(sessions, current_user))
+    app.include_router(make_experience_router(sessions, current_user))
+
+    @app.get("/task-router")
+    def task_router(actor: Who) -> list[dict]:
+        from app import taskrouter
+
+        return taskrouter.table(app.state.provider.mode if app.state.provider else None)
 
     @app.get("/health", response_model=Health)
     def health() -> Health:

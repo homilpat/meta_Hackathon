@@ -95,6 +95,32 @@ def confirm_blocks(session: Session, h: CauseHypothesis, basis: list[Experiment]
     return blocks + unfit
 
 
+def evidence_gaps(session: Session, case_id: str) -> dict:
+    """What is still missing before any open hypothesis could be decided, plus case-level unknowns. Server-only."""
+    from app import history
+
+    out = []
+    for h in session.scalars(select(CauseHypothesis).where(CauseHypothesis.case_id == case_id)
+                             .order_by(CauseHypothesis.id)):
+        st = status(session, h.id)
+        if st in ("CONFIRMED", "REJECTED"):
+            continue
+        exps, gaps = experiments(session, h.id), []
+        if not any(e.result == "SUPPORTS" for e in exps):
+            gaps.append("no supporting documented experiment" + (
+                f" (origin {h.origin} is an association, not a test)" if h.origin != "HUMAN" else ""))
+        if against := [e.id for e in exps if e.result == "CONTRADICTS"]:
+            gaps.append(f"contradicting experiments {against}")
+        if h.counter_evidence_ids:
+            gaps.append(f"counter evidence {h.counter_evidence_ids} to be answered")
+        unfit, _ = quality.check_use(session, case_id, h.evidence_ids, "ROOT_CAUSE")
+        gaps += unfit
+        out.append({"hypothesis_id": h.id, "status": st, "category": h.category, "text": h.text, "gaps": gaps})
+    plan = history.plan_next_evidence(history.case_profile(session, case_id), None)
+    return {"hypotheses": out, "case_unknowns": plan["unknown"], "next_checks": plan["next_checks"],
+            "note": "Computed by the server; a model may propose which read-only check to run next, not decide."}
+
+
 def hypothesis_out(session: Session, h: CauseHypothesis) -> dict:
     d = latest_decision(session, h.id)
     return {"hypothesis_id": h.id, "cause_type": h.cause_type, "category": h.category, "text": h.text,
@@ -193,6 +219,12 @@ def make_d4_router(sessions: sessionmaker, current_user: Callable[..., Actor]) -
                     for w in session.scalars(select(WhyLink).where(WhyLink.case_id == case_id).order_by(WhyLink.id))]
             return {"hypotheses": hs, "fishbone": fishbone, "why_links": whys,
                     "confirmed": [h["hypothesis_id"] for h in hs if h["status"] == "CONFIRMED"]}
+
+    @router.get("/cases/{case_id}/evidence-gaps")
+    def gaps(case_id: str, actor: Who) -> dict:
+        with sessions.begin() as session:
+            require_case(session, case_id, actor)
+            return evidence_gaps(session, case_id)
 
     @router.post("/cases/{case_id}/why-links", status_code=201)
     def add_why(case_id: str, body: WhyIn, actor: Who) -> dict:

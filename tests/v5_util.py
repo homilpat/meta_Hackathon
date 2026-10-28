@@ -15,8 +15,8 @@ def H(user: str) -> dict:
     return {"X-User": user, "Idempotency-Key": uuid.uuid4().hex}
 
 
-def line_client(tmp_path, case_id: str = "L", process: bool = True) -> TestClient:
-    app = create_app(f"sqlite:///{tmp_path / 'v5.db'}")
+def line_client(tmp_path, case_id: str = "L", process: bool = True, provider=None) -> TestClient:
+    app = create_app(f"sqlite:///{tmp_path / 'v5.db'}", provider)
     Base.metadata.create_all(app.state.engine)
     c = TestClient(app)
     c.post("/cases", json={"case_id": case_id}, headers=H("alice"))

@@ -15,7 +15,8 @@ PREFLIGHT → G5 → G6 → G7 → G8 → G9 → post-G9 audit → G10 → Meta 
 | G5 D4 hypothesis → experiment → decision | BUILT | `app/causes.py` (`CauseHypothesis`, `WhyLink`, `Experiment`, `CausalDecision`, append-only, migration `0013_v5_d4`); `POST/GET /cases/{id}/hypotheses` (6M Fishbone + 5-Why in the GET), `/why-links`, `/experiments`, `/causal-decisions`; D4 stage = `DONE` only with an approved RCA **and** ≥1 CONFIRMED cause (`NO_CONFIRMED_CAUSE` otherwise); UI D4 card; `tests/test_v5_5_g5_d4.py` |
 | G6 D5 selection / D6 effectiveness | BUILT | `app/effect.py`; D5 options are `actions(stage='D5')` with `cause_ids` + `details` (feasibility, risk, side effects); selection = `PLAN_APPROVED` (D5 approver, every cause CONFIRMED); `POST /effectiveness-plans` only while selected and not executed; D5 `EXECUTED` needs a plan; `POST /effectiveness` (D6 approver) computes baseline vs post from VALID source rows (mean, n, ~95% interval, inspection-condition check) and allows EFFECTIVE only on `MEETS_CRITERIA`; NOT_EFFECTIVE reopens the causes (`REOPENED` decision, history kept); `POST /cases/{id}/synthetic/post-window` generates the SYNTHETIC post-execution lot L04; migration `0014_v5_d5_d6`; UI D5/D6 card; `tests/test_v5_5_g6_d5_d6.py` |
 | G7 D7 prevention / D8 closure | BUILT | `app/registry.py` (append-only `controlled_documents`: DRAFT → RELEASED by someone else; SYNTHETIC fixtures SOP/FMEA/CP/templates incl. a SITE-B SOP, a restricted FMEA, an expired CUST-X template); `app/closure.py`: `/controlled-documents`, `/controlled-documents/revisions`, `.../release`, `/cases/{id}/prevention`, `/closure`, `/closure/acknowledgements`, `/closure/reopen`; D7 DONE only for released, in-effect revisions raised by this case, still current, operators trained, for every policy-required kind (default FMEA + SOP); D8 re-evaluates route stages, open actions, effectiveness on current data, cause evidence quality, D7, customer notification, residual risk, team acknowledgements; snapshot archived with sha256; migration `0015_v5_d7_d8`; UI D7/D8 cards; `tests/test_v5_5_g7_d7_d8.py` |
-| G8–G10 | NOT STARTED | — |
+| G8 validation / RAG / Experience Memory / hybrid Meta | BUILT (offline; LIVE not verified) | `factcheck.validate` is the one claim validator (document creation, `/validate`, model drafts) with codes (LOT/UNIT/VALUE/TEXT_VALUE mismatch, SUPERSEDED_SOURCE, EXECUTION/CAUSE_UNSUPPORTED, DOCUMENT_NOT_CITABLE, INSTRUCTION_IN_TEXT, TEXT_RULE...) and server recomputation (SPI mean, AOI FAIL %, "x of y" counts); `app/validation.py`: `TemplateContract` (deterministic selection + rules), `ValidationRun` (document/evidence/policy/template/rules hashes, stale detection), `/documents/search` (pre-filter ACL/site/process/customer/effective, then BM25); `app/experience.py`: Experience Memory over the S5 bank + SYNTHETIC fixtures + closed cases, KNOWN / ANALOGICAL / NO_RELEVANT_HISTORY, negative precedents, human decisions (append-only, audited, not approval), revoke → stale, D8 close indexes / reopen revokes; `app/taskrouter.py` + `/task-router`; `/evidence-gaps`; hybrid read-only Meta tools (`get_evidence_gaps`, `search_experience`, `search_documents`, role-scoped); migration `0016_v5_g8`; UI Experience card; `tests/test_v5_5_g8.py` |
+| G9–G10 | NOT STARTED (stopped after G8 at the user's request, 2026-10-29) | — |
 
 ## Spec §9 acceptance tests now
 
@@ -27,7 +28,8 @@ PREFLIGHT → G5 → G6 → G7 → G8 → G9 → post-G9 audit → G10 → Meta 
 | 8 multiple causes | ALLOWED (`test_inconclusive_without_experiment_and_multiple_causes`) | 19 stale policy | RE-EVALUATED (`test_stale_policy_version_is_reevaluated_at_decision`) |
 | 9 unconfirmed cause → D5 | BLOCKED (`test_unconfirmed_cause_cannot_be_selected`) | 10 D6 not executed / small n / changed inspection / late criteria | BLOCKED (`test_selected_is_not_implemented...`, `test_sample_insufficiency...`, `test_changed_inspection_rule...`, `test_criteria_cannot_be_registered...`) |
 | 11 D6 failure → D4/D5 reopen | REOPENED, log kept (`test_negative_outcome_reopens_d4_and_keeps_history`) | 12 FMEA claimed, no revision | BLOCKED (`test_fmea_claim_without_a_real_revision_is_not_d7`) |
-| 13 D8 open action / no approval / evidence changed | BLOCKED (`test_open_d6_failure_blocks_closure`, `test_changed_evidence_blocks_closure`, `test_signers_and_notification`) | 14 | NOT YET (G8) |
+| 13 D8 open action / no approval / evidence changed | BLOCKED (`test_open_d6_failure_blocks_closure`, `test_changed_evidence_blocks_closure`, `test_signers_and_notification`) | 14 old template / other-site SOP / no access | BLOCKED (`test_document_citations_need_released_in_effect_site_and_access`, `test_template_contract_selection_and_rules`) |
+| 5 3.2% → 2.1% | BLOCKED at document creation (`test_wrong_percentage_text_or_value_is_blocked...`); Docs editing itself is G9 | 15, 16 | as before; Docs editing is G9 |
 | 17 no key → manual | PASSES (503, template path) | 18 regression | PASSES (all 122 original tests still pass) |
 | 20 second process | PARTIAL (adapter + policy selection; documents/approvals not exercised) | 15, 16 | as before (decision 409; AI cannot write documents) |
 
@@ -38,8 +40,12 @@ PREFLIGHT → G5 → G6 → G7 → G8 → G9 → post-G9 audit → G10 → Meta 
 - The S6 document routes take their approver role, self-approval rule and prerequisites from the active policy
   (PREFLIGHT). Document approvals read upstream *document* states; containment execution completeness (D3 actions
   independently verified) is a stage/closure condition, not a condition for approving the RCA document.
-- Author claim numbers are not recomputed yet (only lot/unit/superseded checks): claims carry a value but not how
-  it was computed, so the server cannot redo it. Structured calculation predicates are G8; editing a draft is G9.
+- Claim numbers are recomputed only for shapes the server can derive from the cited rows (mean SPI volume, AOI
+  FAIL %, "x of y AOI inspections", confirmed-defect counts); other values (Cpk, model scores) are reported as
+  `NOT_RECOMPUTED`. Regex text rules catch surface patterns only; not every false sentence is caught.
+- Experience Memory: no recurrence data in the S5 bank, so bank precedents are never KNOWN; closed cases are
+  `NOT_YET_OBSERVED` (no follow-up window). Term map in `app/retrieval.py` is hand-written; no embeddings.
+- Meta LIVE: still BLOCKED_NO_CREDENTIALS. The hybrid tools are exercised with the TEST_DOUBLE only.
 - NCR template is now `v5.g4` (adds 5W2H / IS-IS NOT claims); stored versions show the template they were built with.
 - Affected objects are a snapshot taken when the process context is recorded; contexts recorded before this
   change have LOT/PANEL objects only.

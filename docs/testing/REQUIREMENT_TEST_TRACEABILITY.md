@@ -1,7 +1,6 @@
 # Requirement ↔ test traceability
 
-Spec: `QualityOps_AI_FINAL_REQUIREMENTS_v5_5_MONOREPO_FINAL.md` (§9 acceptance cases, §19 R0) and
-`prompts/QualityOps_AI_CODEX_MASTER_R0_G10_FINAL.md` §10. Commands run from `backend/` (Python) or `frontend/` (npm).
+Spec: `QualityOps_AI_FINAL_REQUIREMENTS_v5_5_MONOREPO_FINAL.md` (§9 acceptance cases, §19 R0, §22 Agent-First). Commands run from `backend/` (Python) or `frontend/` (npm).
 Status is what was actually executed; `NOT_RUN` / `NOT_IMPLEMENTED` are never counted as passing.
 
 ## MASTER §10 cases

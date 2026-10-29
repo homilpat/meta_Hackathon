@@ -1,5 +1,6 @@
 import os
 from logging.config import fileConfig
+from pathlib import Path
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
@@ -7,7 +8,10 @@ from sqlalchemy import engine_from_config, pool
 from app.db import Base
 
 config = context.config
-if os.environ.get("DATABASE_URL"):
+# DATABASE_URL replaces only the alembic.ini default; a URL set by the caller (tests: set_main_option) wins.
+_url = config.get_main_option("sqlalchemy.url") or ""
+_default = Path(config.config_file_name or "alembic.ini").resolve().parent / "qualityops.db"
+if os.environ.get("DATABASE_URL") and _url.startswith("sqlite:///") and Path(_url[10:]).resolve() == _default:
     config.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
 if config.config_file_name:
     fileConfig(config.config_file_name)

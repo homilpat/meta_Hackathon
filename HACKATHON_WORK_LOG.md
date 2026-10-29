@@ -265,3 +265,15 @@
 - Checks: pytest 226 passed (20 new in `tests/test_v5_5_g8.py`; `test_s6_followups::test_authorization_regression_on_every_case_route` caught the new search route answering 422 before 403 — fixed in the route, test unchanged); ruff exit 0; fresh `alembic upgrade head` + autogenerate diff EMPTY; `npm run build` (tsc + vite) exit 0; HTTP check against uvicorn on a fresh scratch DB 41/41 (first run 2 FAILs from the check script's own expectations — FMEA rev 6 legitimately ranked first; `/app` is a 307 redirect — corrected in the script).
 - Meta LIVE: BLOCKED_NO_CREDENTIALS (no `MODEL_API_KEY`); hybrid tool calling verified with the TEST_DOUBLE only.
 - Stopped after G8 at the user's request; G9, post-G9 audit, G10, Meta LIVE and stabilisation not started.
+
+## 2026-10-29 KST — R0: monorepo (backend/ + frontend/), frontend modules and tests, 3-area CI
+
+- Spec: `QualityOps_AI_FINAL_REQUIREMENTS_v5_5_MONOREPO_FINAL.md` (root) and `prompts/QualityOps_AI_CODEX_MASTER_R0_G10_FINAL.md`; older v5.5 FINAL spec/prompts moved to `docs/archive/`. Entries above this one use the old paths (`app/`, `tests/`, `web/`, `docs/X.md`).
+- R0-A `334cf8d`: baseline at `58d316a` — pytest 226 passed, ruff 0, scratch Alembic head + check clean, Vite build identical to the committed bundle, OpenAPI 89 operations. Mapping and contracts in `docs/architecture/REFACTOR_AUDIT.md`.
+- R0-B `365e91c`: `app/ tests/ scripts/ migrations/ pyproject.toml alembic.ini` → `backend/` (src layout, package `app` unchanged). Paths no longer depend on the working directory (`app.database_url()`, alembic `%(here)s` + `DATABASE_URL`, `.env` CWD then repo root, scripts write `docs/evaluations/`). Docs regrouped into `docs/{architecture,implementation,evaluations,archive}`.
+- R0-C `0fd4927`: `web/` → `frontend/`; `App.tsx` cut verbatim into `features/*`, `components/`, `api/client.ts`, `hooks/`, `types/`; vitest + Testing Library with 9 tests.
+- R0-D `f714321` + `ac5cd20`: `ci.yml` → reusable `backend-ci.yml` / `frontend-ci.yml`, then `integration-ci.yml` (needs both); `backend/scripts/integration_smoke.py` (real uvicorn on a migrated scratch DB, 19 checks); README/SECURITY/status paths. `f714321` was pushed with a ruff error (unused variable) — CI #34 failed in `backend` and skipped `integration`; fixed in `ac5cd20`.
+- R0-E checks at `ac5cd20`: pytest 226 passed (from `backend/`, 277 s); ruff 0; integration smoke 19/19; vitest 9 passed; tsc 0; vite build 0; browser check of `/app` on uvicorn; old root `qualityops.db` unchanged (hash prefix `e39fac5e96ad602b`).
+- Environment: `%TEMP%\pytest-of-user` belongs to another local account, so local pytest runs pass `--basetemp`; `gh` is not installed, CI status was read on the GitHub Actions page.
+- Meta LIVE: BLOCKED_NO_CREDENTIALS (empty `MODEL_API_KEY`).
+- CI #35 (`ac5cd20`) found an R0-B regression: with `DATABASE_URL` set (CI job env), `migrations/env.py` overrode the URL that two migration tests set explicitly. Fixed so `DATABASE_URL` only replaces the `alembic.ini` default; re-verified with `DATABASE_URL` set locally.

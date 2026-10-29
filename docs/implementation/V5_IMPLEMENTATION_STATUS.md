@@ -1,11 +1,12 @@
 # v5 implementation status
 
 G0–G4 were pushed to `origin/main` at `4dbb03d` (2026-10-28; the earlier "Nothing is pushed" note predates that push).
-v5.5 FINAL (`QualityOps_AI_FINAL_REQUIREMENTS_v5_5_FINAL.md`) supersedes the v5 spec files for status and order:
+v5.5 MONOREPO FINAL (root spec; older v5.5 FINAL now in `docs/archive/`) supersedes the v5 spec files for status and order:
 PREFLIGHT → G5 → G6 → G7 → G8 → G9 → post-G9 audit → G10 → Meta LIVE → stabilisation.
 
 | Gate | Status | What exists (code / route / test) |
 |---|---|---|
+| R0 monorepo | see `docs/architecture/REFACTOR_AUDIT.md` | `backend/{src/app,tests,scripts,migrations}`, `frontend/{src,tests}`, 3-area CI; paths in this table are the post-R0 paths |
 | G0 audit | BUILT | `docs/implementation/V5_GAP_MATRIX.md`, `docs/implementation/V5_IMPLEMENTATION_PLAN.md` |
 | G1 Meta LIVE | **BLOCKED_NO_CREDENTIALS** | `docs/evaluations/META_LIVE_LOG.md`; `/provider` `live_status`; `backend/tests/test_meta_smoke.py` |
 | G2 policy / evidence quality / adapters | BUILT | `backend/src/app/policy.py`, `backend/src/app/quality.py`, `backend/src/app/process.py`; `/policies`, `/cases/{id}/gates`, `/evidence-quality`, `/process-context`; `backend/tests/test_v5_g2_foundation.py` |

@@ -396,6 +396,8 @@ DOC_NOTE = {"CONTAINMENT": "Plan draft. Execution status: NOT_EXECUTED.",
 def generator_note(builder: str) -> str:
     if builder == BUILDER:
         return "no AI model used"
+    if builder.startswith("HUMAN_EDIT:"):
+        return f"edited by a person from {builder.split(':', 1)[1]}; re-validated by the server ClaimValidator"
     return "model output, accepted only after server-side ClaimValidator"
 
 

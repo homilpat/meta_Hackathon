@@ -525,6 +525,10 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
             if body.decision == "APPROVE":  # re-evaluated under the policy in force now, not the one at request
                 p = _gate(session, case_id, doc_type, actor, doc.author_id, full=True)
                 _require_basis(session, doc)
+                if doc.builder.startswith("HUMAN_EDIT:"):  # G9: approve only a current, non-BLOCK validation
+                    from app import docedit
+
+                    docedit.require_fresh_validation(session, doc)
                 note = f" policy={p.policy_id} v{p.version} {p.policy_hash}"
                 if review.policy_hash and review.policy_hash != p.policy_hash:
                     note += f" (review was requested under {review.policy_hash}; re-evaluated)"

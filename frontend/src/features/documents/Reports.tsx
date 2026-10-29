@@ -3,6 +3,7 @@ import { APPROVER_ROLE, CLASS_TONE, KINDS, STATUS_TONE } from '../../constants'
 import { Stages } from '../../components/Stages'
 import { Badge, Card, Cite, Empty, Icon, Note, Page, SectionTitle } from '../../components/ui'
 import { useLoad } from '../../hooks/useLoad'
+import { DocEditor } from './DocEditor'
 import type { Ctx, J } from '../../types'
 
 export function Reports({ ctx }: { ctx: Ctx }) {
@@ -56,6 +57,7 @@ export function Reports({ ctx }: { ctx: Ctx }) {
             <button className="button danger" onClick={() => act('decision', { decision: 'REJECT', comment, content_sha256: d.content_sha256 })}>반려</button></div>
           <button className="button secondary full" onClick={() => act('decision', { decision: 'REQUEST_INFO', comment, content_sha256: d.content_sha256 })}>추가 정보 요청</button></>}
       </Card>
+      <DocEditor ctx={ctx} d={d} latest={latestOf(d)} onSaved={v => setSelKey(`${d.kind}:${v}`)}/>
       <Card><SectionTitle title="검토 코멘트" sub="주장 단위 · 감사 기록에 남음" action={<Badge tone={d.comments.some((x: J) => x.open) ? 'violet' : 'slate'}>열림 {d.comments.filter((x: J) => x.open).length}</Badge>}/>
         {d.comments.filter((x: J) => !x.reply_to).map((x: J) => <div key={x.comment_id} className="comment">
           <div className="detail-row"><span>{x.claim_id ?? '문서 전체'} · {x.actor_id} · {x.created_at.slice(11, 19)}</span><Badge tone={x.open ? 'violet' : 'green'}>{x.open ? '열림' : '해결'}</Badge></div>

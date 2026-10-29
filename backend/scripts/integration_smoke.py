@@ -117,6 +117,31 @@ def main() -> int:
                          body={"decision": "APPROVE", "comment": "checked against rows", "content_sha256": sha})
         check("reviewer approves", status in (200, 201), str(status))
 
+        # G9: edit the approved NCR -> new version, re-validated; the approved v1 stays as it was
+        c1 = doc["claims"][0]
+        status, e = call(base, f"/cases/{cid}/ncr/1/edits", body={
+            "expected_sha256": sha, "reason": "smoke: wording", "changes": [
+                {"claim_id": c1["claim_id"], "text": c1["text"] + " (reviewed)"}]})
+        check("G9 edit -> v2 + validation", status == 201 and e["version"] == 2
+              and e["validation"]["result"] in ("PASS", "WARN") and len(e["diff"]) == 1, str(e)[:160])
+        pct = next(c for c in doc["claims"] if c["unit"] == "count" and c["value"])  # "x of y", recomputed
+        status, _ = call(base, f"/cases/{cid}/ncr/2/edits", body={
+            "expected_sha256": e.get("content_sha256"), "reason": "smoke: wrong number",
+            "changes": [{"claim_id": pct["claim_id"], "value": pct["value"] + 1}]})
+        check("G9 wrong number blocked", status == 422, str(status))
+        status, _ = call(base, f"/cases/{cid}/ncr/1/edits", body={
+            "expected_sha256": sha, "reason": "smoke: stale base", "changes": [
+                {"claim_id": c1["claim_id"], "text": c1["text"] + " (again)"}]})
+        check("G9 stale base refused", status == 409, str(status))
+        check("G9 AI proposal offline", call(base, f"/cases/{cid}/ncr/2/edit-proposals",
+                                             body={"instruction": "shorter"})[0] == 503)
+        call(base, f"/cases/{cid}/ncr/2/request-review", body={"reviewer_id": "bob"})
+        status, _ = call(base, f"/cases/{cid}/ncr/2/decision", user="bob", body={
+            "decision": "APPROVE", "comment": "edit checked", "content_sha256": e.get("content_sha256")})
+        _, v1 = call(base, f"/cases/{cid}/ncr/1", user="bob")
+        check("G9 v2 approved, v1 unchanged", status == 200 and v1["status"] == "APPROVED"
+              and v1["content_sha256"] == sha, str(status))
+
         status, chain = call(base, "/audit/verify")
         check("audit chain", status == 200 and chain["ok"] and chain["links"] > 0, f"links={chain.get('links')}")
     finally:

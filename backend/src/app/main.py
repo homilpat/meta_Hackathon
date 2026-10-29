@@ -27,6 +27,7 @@ from app.db import (
     SourceEvent,
     User,
 )
+from app.docedit import make_docs_router
 from app.effect import make_d6_router
 from app.eightd import make_v5_router
 from app.experience import make_experience_router
@@ -130,6 +131,7 @@ def create_app(database_url: str | None = None,
     app.include_router(make_d7_d8_router(sessions, current_user))
     app.include_router(make_validation_router(sessions, current_user))
     app.include_router(make_experience_router(sessions, current_user))
+    app.include_router(make_docs_router(sessions, current_user, app.state.provider))
 
     @app.get("/task-router")
     def task_router(actor: Who) -> list[dict]:

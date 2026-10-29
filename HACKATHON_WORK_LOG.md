@@ -282,4 +282,11 @@
 ## Phase A — G8 focused audit (2026-10-29)
 
 - Counterexamples first (`test_g8a_validator.py` 8, `test_g8a_experience.py` 3). Reproduced: a right value plus a wrong percentage in one sentence passed silently; closed cases with unobserved recurrence were not marked as reference cases; manual revoke did not record who revoked. Fixed minimally (see `docs/implementation/G8_FOCUSED_AUDIT.md`). Not reproduced (already refused): mixed lots, wrong unit, unexecuted execution, unconfirmed cause, superseded sources, pre-filtering before search.
+- CI #37 (`8577680`) succeeded → A PASS.
+
+## Phase B — G9 Human Docs (2026-10-29)
+
+- `docedit.py`: edit = new DocumentVersion against an expected hash (409 otherwise), same claim validator, auto ValidationRun, `DRAFT_EDITED` log with reason; diff endpoint; AI edit proposals returned as a diff and never applied (503 AI OFFLINE without a key). Approving a HUMAN_EDIT version requires its latest validation to be current and not BLOCK. No migration.
+- UI: Human Docs card on the documents screen (claim editor, reason, validation badge + issues, diff, AI proposal accept). Browser-checked on uvicorn: edit saved as v2 with diff and validation; AI OFFLINE message.
+- Local: pytest 242 passed, ruff 0, alembic upgrade + check clean, integration smoke 24/24, vitest 11, tsc 0, vite build 0.
 

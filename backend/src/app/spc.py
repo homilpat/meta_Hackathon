@@ -28,22 +28,45 @@ def we_rules(z: list[float], i: int) -> list[str]:
     return hit
 
 
-def monitor(spi: list[tuple[dict, str | None]], panel_lot: dict[str, str]) -> dict | None:
-    """spi: (SPI record, evidence id or None) pairs. Subgroups are boards in event-time order."""
+def subgroups(spi: list[tuple[dict, str | None]]) -> list[dict]:
+    """Boards as X-bar/R subgroups (n pins each) in event-time order; spi: (SPI record, evidence id or None)."""
     groups: dict[tuple, dict] = {}
     for rec, ev in spi:
         g = groups.setdefault((rec["panel_id"], rec["board_id"]), {"t": rec["event_time"], "v": [], "ev": []})
         g["v"].append(rec["volume_mm3"])
         if ev:
             g["ev"].append(ev)
-    pts = [{"panel": p, "board": b, "lot": panel_lot.get(p), "t": g["t"], "n": len(g["v"]),
-            "xbar": round(mean(g["v"]), 5), "r": round(max(g["v"]) - min(g["v"]), 5), "v": g["v"], "ev": g["ev"]}
-           for (p, b), g in sorted(groups.items(), key=lambda kv: (kv[1]["t"], kv[0]))]
+    return [{"panel": p, "board": b, "t": g["t"], "n": len(g["v"]), "xbar": round(mean(g["v"]), 5),
+             "r": round(max(g["v"]) - min(g["v"]), 5), "v": g["v"], "ev": g["ev"]}
+            for (p, b), g in sorted(groups.items(), key=lambda kv: (kv[1]["t"], kv[0]))]
+
+
+def phase1(ref: list[dict]) -> tuple[float, float]:
+    """Centre line and mean range from reference subgroups."""
+    return mean(p["xbar"] for p in ref), mean(p["r"] for p in ref)
+
+
+def limits(ref: list[dict]) -> dict:
+    """X-bar and R chart limits from reference subgroups, as stated in documents (5 decimals)."""
+    cl, rbar = phase1(ref)
+    return {"cl": round(cl, 5), "ucl": round(cl + A2 * rbar, 5), "lcl": round(cl - A2 * rbar, 5),
+            "rbar": round(rbar, 5), "r_ucl": round(D4 * rbar, 5), "r_lcl": round(D3 * rbar, 5)}
+
+
+def cpk(sub: list[dict]) -> float:
+    """Cpk of the subgroups' individual volumes against the spec, sigma within from the mean range."""
+    mu, sw = mean(x for p in sub for x in p["v"]), mean(p["r"] for p in sub) / D2
+    return round(min(USL - mu, mu - LSL) / (3 * sw), 3)
+
+
+def monitor(spi: list[tuple[dict, str | None]], panel_lot: dict[str, str]) -> dict | None:
+    """spi: (SPI record, evidence id or None) pairs. Subgroups are boards in event-time order."""
+    pts = [{**p, "lot": panel_lot.get(p["panel"])} for p in subgroups(spi)]
     if not pts:
         return None
     ref_lot = pts[0]["lot"]
     ref = [p for p in pts if p["lot"] == ref_lot]
-    cl, rbar = mean(p["xbar"] for p in ref), mean(p["r"] for p in ref)
+    cl, rbar = phase1(ref)
     s = A2 * rbar / 3  # sigma of X-bar
     z = [(p["xbar"] - cl) / s for p in pts]
     for i, p in enumerate(pts):
@@ -54,15 +77,14 @@ def monitor(spi: list[tuple[dict, str | None]], panel_lot: dict[str, str]) -> di
         lots.setdefault(p["lot"], {"pts": []})["pts"].append(p)
     out = {}
     for lot, v in lots.items():
-        mu, sw = mean(x for p in v["pts"] for x in p["v"]), mean(p["r"] for p in v["pts"]) / D2
         alarms = [p for p in v["pts"] if p["rules"] and p["phase"] == "II"]
-        out[lot] = {"boards": len(v["pts"]), "mean": round(mu, 5), "cpk": round(min(USL - mu, mu - LSL) / (3 * sw), 3),
+        out[lot] = {"boards": len(v["pts"]), "mean": round(mean(x for p in v["pts"] for x in p["v"]), 5),
+                    "cpk": cpk(v["pts"]),
                     "alarms": len(alarms), "first_alarm": _point(alarms[0]) if alarms else None,
                     "ev": [e for p in v["pts"] for e in p["ev"]]}
     first = next((p for p in pts if p["rules"] and p["phase"] == "II"), None)
     return {"reference_lot": ref_lot, "n": pts[0]["n"], "spec": [LSL, USL], "rules": RULES,
-            "limits": {"cl": round(cl, 5), "ucl": round(cl + A2 * rbar, 5), "lcl": round(cl - A2 * rbar, 5),
-                       "rbar": round(rbar, 5), "r_ucl": round(D4 * rbar, 5), "r_lcl": round(D3 * rbar, 5)},
+            "limits": limits(ref),
             "reference_ev": [e for p in ref for e in p["ev"]], "lots": out,
             "first_alarm": _point(first) if first else None, "points": [_point(p) for p in pts]}
 

@@ -40,10 +40,10 @@ SUBMISSION_READY: NO for a LIVE-Meta claim (E blocked); YES for the offline demo
 
 Final local run: pytest 247 passed, ruff 0, Alembic fresh DB upgrade + `alembic check` (no new operations) +
 repeat upgrade, vitest 13, tsc 0, vite build 0, integration smoke 24/24, HTTP E2E 2/2 run twice on fresh DBs
-(same snapshot `19517fb45ba0de1b`, same 1,770 / 1,681 checked fields), browser download and restart check
+(same snapshot `19517fb45ba0de1b`, same 1,770 / 1,681 checked fields; after template v5.g5 the snapshot is `9c378117190f7608`), browser download and restart check
 (`docs/implementation/G10_EXPORT.md`). Old root `qualityops.db` unchanged (`e39fac5e96ad602b`).
 
-Residual risks: P2 items in `docs/implementation/POST_G9_REFACTOR_PLAN.md` (template C5 WARN, reason minimums differ;
+Residual risks: P2 items in `docs/implementation/POST_G9_REFACTOR_PLAN.md` (reason minimums differ;
 non-English search covers only glossary wording); Hangul statements are not part of the PDF read-back check; the DOCX was not
 opened in Word desktop (python-docx and Chrome PDF only); no measured ROI or plant results are claimed.
 
@@ -70,11 +70,11 @@ opened in Word desktop (python-docx and Chrome PDF only); no measured ROI or pla
   (PREFLIGHT). Document approvals read upstream *document* states; containment execution completeness (D3 actions
   independently verified) is a stage/closure condition, not a condition for approving the RCA document.
 - Claim numbers are recomputed only for shapes the server can derive from the cited rows (mean SPI volume, AOI
-  FAIL %, "x of y AOI inspections", confirmed-defect counts); other values (Cpk, model scores) are reported as
-  `NOT_RECOMPUTED`. Regex text rules catch surface patterns only; not every false sentence is caught.
+  FAIL %, "x of y AOI inspections", confirmed-defect counts, SPC centre line / LCL / UCL and Cpk since rules
+  `v5.5-g8.3`); other values (model scores) are reported as `NOT_RECOMPUTED`. Regex text rules catch surface patterns only; not every false sentence is caught.
 - Experience Memory: no recurrence data in the S5 bank, so bank precedents are never KNOWN; closed cases are
   `NOT_YET_OBSERVED` (no follow-up window). Search glossary `backend/src/app/glossary.py` (ko/ja/zh/en wording → canonical term) is hand-written; no embeddings.
 - Meta LIVE: still BLOCKED_NO_CREDENTIALS. The hybrid tools are exercised with the TEST_DOUBLE only.
-- NCR template is now `v5.g4` (adds 5W2H / IS-IS NOT claims); stored versions show the template they were built with.
+- NCR template is now `v5.g5` (one statistic per SPC claim; `v5.g4` added 5W2H / IS-IS NOT claims); stored versions show the template they were built with.
 - Affected objects are a snapshot taken when the process context is recorded; contexts recorded before this
   change have LOT/PANEL objects only.

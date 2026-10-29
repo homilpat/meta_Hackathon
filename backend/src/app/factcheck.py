@@ -22,10 +22,10 @@ from statistics import mean
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import ncr, quality, registry
+from app import ncr, quality, registry, spc
 from app.db import Action, CauseHypothesis, EffectivenessResult, Evidence, ProcessContext
 
-RULES_VERSION = "v5.5-g8.2"
+RULES_VERSION = "v5.5-g8.3"  # g8.3: SPC centre line / LCL / UCL and Cpk recomputed
 LOT = re.compile(r"\bL\d{2}\b")
 MEASUREMENT_UNITS = {"mm3", "um3", "µm3", "mm", "um", "µm"}
 UNIT_OF = {"spi_measurements": "mm3"}
@@ -35,6 +35,7 @@ EXECUTED_WORDS = re.compile(r"(?i)\b(executed|held|quarantined|contained|complet
 CAUSE_WORDS = re.compile(r"(?i)\b(root cause|confirmed cause|caused by)\b")
 INJECTION = re.compile(r"(?i)ignore (all|any|previous|the) (rules|instructions)|approve_document|system prompt")
 OF_AOI = re.compile(r"(\d+)(?: confirmed)? of (\d+) AOI inspections")
+SPC_LIMIT = re.compile(r"\b(centre line|LCL|UCL)\b")
 DONE_ACTION = ("EXECUTED", "INDEPENDENTLY_VERIFIED", "RELEASED")
 
 
@@ -53,7 +54,19 @@ def recompute(claim: dict, rows: list[dict]) -> tuple[dict | None, float | None]
     """(predicate, expected value) from the cited rows, or (None, None) when the shape is not recomputable."""
     unit, text = claim.get("unit"), claim.get("text", "")
     types = {r["type"] for r in rows}
-    if unit == "mm3" and rows and types == {"spi_measurements"}:
+    if rows and types == {"spi_measurements"} and unit in ("mm3", "Cpk"):
+        # SPC statistics use the monitor's own formulas over the cited rows, grouped into board subgroups
+        sub = spc.subgroups([(r["rec"], None) for r in rows])
+        named = set(SPC_LIMIT.findall(text))
+        if unit == "Cpk":
+            return ({"op": "cpk", "entity": "spi_measurements", "subgroups": len(sub),
+                     "spec": [spc.LSL, spc.USL]}, spc.cpk(sub))
+        if len(named) > 1:
+            return None, None  # one claim, one statistic
+        if named:
+            key = {"centre line": "cl", "LCL": "lcl", "UCL": "ucl"}[named.pop()]
+            return ({"op": "spc_limit", "limit": key, "entity": "spi_measurements", "subgroups": len(sub)},
+                    spc.limits(sub)[key])
         return ({"op": "mean", "entity": "spi_measurements", "field": "volume_mm3", "n": len(rows)},
                 mean(r["rec"]["volume_mm3"] for r in rows))
     aoi = [r for r in rows if r["type"] == "aoi_inspections"]
@@ -166,8 +179,8 @@ def validate(session: Session, case_id: str, claims: list[dict], role: str | Non
         value = c.get("value")
         if value is not None:
             # The value must appear in the text. Other numbers written with the claim's unit are not recomputed:
-            # lists sharing one unit ("centre 0.12046, LCL .., UCL 0.12906 mm3") are legitimate, but so is a wrong
-            # "2.1%" next to the right value looks the same to a regex, so they are flagged for review (G8-A).
+            # a person's list of values in one unit may be legitimate, but a wrong "2.1%" next to the right value
+            # looks the same to a regex, so they are flagged for review (G8-A). Templates state one value per claim.
             anywhere = [float(n) for n in re.findall(r"(?<![\w.])\d+(?:\.\d+)?(?![\w.]\d)", text)]
             said = text_numbers(text, c.get("unit"))
             wrong = [n for n in said if abs(n - value) >= 1e-9]

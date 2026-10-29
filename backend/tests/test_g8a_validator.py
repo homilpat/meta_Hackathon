@@ -24,7 +24,7 @@ def blocked(r, says):
 
 
 def test_extra_percentage_next_to_the_correct_one_is_detected(c):
-    # Not refused at storage (template sentences legitimately carry CL/UCL/LCL in one claim), but the validation
+    # Not refused at storage (a person may list several values of one unit in a sentence), but the validation
     # run flags the number the server did not recompute, so the reviewer sees it before approval.
     rate = true_rate(c)
     r = ncr(c, rate_claim(c, rate, text=f"AOI FAIL share in lot L02 is {rate}%, and 2.1% after rework."))
@@ -35,7 +35,7 @@ def test_extra_percentage_next_to_the_correct_one_is_detected(c):
 
 
 def test_correct_value_written_bare_does_not_hide_a_wrong_percentage(c):
-    # Same surface shape as the template's "centre 0.12046, LCL .., UCL 0.12906 mm3", so flagged rather than refused.
+    # Same surface shape as a legitimate list of values in one unit, so flagged rather than refused.
     rate = true_rate(c)
     assert ncr(c, rate_claim(c, rate, text=f"AOI FAIL share in lot L02 (server value {rate}) is 2.1%.")).status_code \
         == 201

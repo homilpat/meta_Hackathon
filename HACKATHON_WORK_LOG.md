@@ -321,3 +321,9 @@
 
 - P2 #3 fixed: `backend/src/app/glossary.py` maps Korean / Japanese / Chinese / English wording of each concept to the canonical term the records use; `retrieval.tokens` cuts non-ASCII words into glossary words longest-first (particles, compound words, scripts without spaces) and keeps unknown words as written. Ranking `bm25-k1.5-b0.75-glossary2`. `tests/test_glossary.py`: the same query in 4 languages returns the same top past cases and controlled documents.
 - Local: pytest 254 passed, ruff 0, integration smoke 24/24, HTTP E2E 2/2 (snapshot unchanged `19517fb45ba0de1b`).
+
+## Post-F — SPC statistics verified at the root (2026-10-30)
+
+- Root cause of the template WARN (P2 #2): the NCR template put centre line, LCL and UCL in one claim (one stored value), and the validator had no SPC formula, so LCL/UCL and the three Cpk claims were published without server recomputation (Cpk silently `NOT_RECOMPUTED`).
+- Fix: `spc.subgroups / limits / cpk` are the single implementation used by the monitor and by `factcheck.recompute` (new predicates `spc_limit`, `cpk`; rules `v5.5-g8.3`); template `v5.g5` states one statistic per claim. Recurrence guard: `tests/test_template_contract.py` (every number in every server template recomputed, no BLOCK/extra-value issue; wrong LCL or Cpk refused 422).
+- Local: pytest 258 passed, ruff 0, integration smoke 24/24, HTTP E2E 2/2 (snapshot now `9c378117190f7608` because the template changed).

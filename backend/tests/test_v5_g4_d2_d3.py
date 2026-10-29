@@ -145,7 +145,7 @@ def test_ncr_states_5w2h_and_is_is_not_inside_the_approved_document(c):
     assert how["value"] == p["how_many"]["value"]["denominator_aoi_inspections"]  # same computation
     assert "IS: confirmed defects are in lot L02." in texts
     assert "IS NOT: no human-confirmed defect recorded in lot L01, L03." in texts
-    assert doc["template_version"] == "v5.g4"
+    assert doc["template_version"] == "v5.g5"
     approve(c, "ncr", "bob")  # the problem statement is under the approval hash
     got = c.get("/cases/L/ncr/1", headers=H("bob")).json()
     assert got["status"] == "APPROVED" and got["decisions"][0]["content_sha256"] == doc["content_sha256"]

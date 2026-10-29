@@ -17,7 +17,7 @@ from app import spc
 from app.db import Evidence, ModelVersion, Prediction, SourceAsset, SourceEvent, XaiArtifact
 
 BUILDER = "DETERMINISTIC_TEMPLATE_NO_AI"
-TEMPLATE_VERSION = "v5.g4"  # NCR gained 5W2H / IS-IS NOT claims; s6.1 before
+TEMPLATE_VERSION = "v5.g5"  # one statistic per SPC claim; v5.g4 added 5W2H / IS-IS NOT; s6.1 before
 CLASSES = ("OBSERVED", "CALCULATED", "HYPOTHESIS", "UNKNOWN", "PROPOSAL")
 # A draft may propose; it may not report an action as done or a cause as established.
 DONE_CLAIM = re.compile(r"(?i)\b(?:been|was|were|is|are)\s+(?:executed|implemented|contained|quarantined|resolved|fixed)\b"
@@ -142,7 +142,9 @@ def template_version(builder: str, claims: list) -> str | None:
     """Template a stored version was built with (from its own content, so older approvals keep their label)."""
     if builder != BUILDER:
         return None  # built from a model run, not the template
-    return TEMPLATE_VERSION if any(c.text.startswith("5W2H ") for c in claims) else "s6.1"
+    if not any(c.text.startswith("5W2H ") for c in claims):
+        return "s6.1"
+    return "v5.g4" if any("LCL" in c.text and "UCL" in c.text for c in claims) else TEMPLATE_VERSION
 
 
 def lot_index(items: list[dict]) -> dict[str, str | None]:
@@ -234,9 +236,9 @@ def build_claims(session: Session, case_id: str) -> list[dict]:
                 float(len(v["fails"])), "count")
     if m := spc.from_items(items):
         lim = m["limits"]
-        add("CALCULATED", f"SPC X-bar chart of SPI volume per board (n={m['n']} pins), limits from reference lot "
-            f"{m['reference_lot']}: centre {lim['cl']}, LCL {lim['lcl']}, UCL {lim['ucl']} mm3.",
-            m["reference_ev"], lim["cl"], "mm3")
+        for key, name in (("cl", "centre line"), ("lcl", "LCL"), ("ucl", "UCL")):  # one statistic per claim
+            add("CALCULATED", f"SPC X-bar chart of SPI volume per board (n={m['n']} pins), {name} from reference "
+                f"lot {m['reference_lot']}: {lim[key]} mm3.", m["reference_ev"], lim[key], "mm3")
         for lot, v in sorted(m["lots"].items()):
             if a := v["first_alarm"]:
                 add("CALCULATED", f"Lot {lot}: {v['alarms']} of {v['boards']} boards signal on Western Electric/R "

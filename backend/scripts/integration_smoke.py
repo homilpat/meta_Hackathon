@@ -101,7 +101,7 @@ def main() -> int:
         check("experience memory", status in (200, 201)
               and xp["mode"] in ("KNOWN", "ANALOGICAL", "NO_RELEVANT_HISTORY"), str(xp.get("mode")))
 
-        status, inv = call(base, f"/cases/{cid}/investigations", body={"use_history": True})
+        status, _ = call(base, f"/cases/{cid}/investigations", body={"use_history": True})
         check("investigation without key is 503 (no mock)", status == 503, str(status))
 
         sha = doc["content_sha256"]

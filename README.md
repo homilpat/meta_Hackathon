@@ -24,7 +24,6 @@ as executed or a cause as confirmed. SHAP explains model scores, not physical ca
 | `backend/` | FastAPI app (`src/app`), Python tests (`tests`), scripts (`scripts`), Alembic (`migrations`), `pyproject.toml`, `alembic.ini` |
 | `frontend/` | React + Vite UI (`src/features`, `src/components`, `src/api`, …) and its tests (`tests`) |
 | `docs/` | `architecture/` (decisions, data, [refactor audit](docs/architecture/REFACTOR_AUDIT.md)), `implementation/` ([status](docs/implementation/V5_IMPLEMENTATION_STATUS.md)), `evaluations/` (measured results), `archive/` (superseded specs) |
-| `prompts/` | Execution prompt; the requirements spec is `QualityOps_AI_FINAL_REQUIREMENTS_v5_5_MONOREPO_FINAL.md` at the root |
 
 ## Run locally
 

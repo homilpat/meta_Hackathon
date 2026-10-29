@@ -6,6 +6,8 @@ Each row is a command actually run on this machine. No secret is ever recorded.
 |---|---|---|---|---|
 | 2026-10-28 | `python -m scripts.meta_smoke` | muse-spark-1.3 | **BLOCKED_NO_CREDENTIALS** — exit 2, `LIVE NOT TESTED: MODEL_API_KEY is unset`, no network call | n/a |
 | 2026-10-28 | `python -m scripts.meta_investigate_smoke` | muse-spark-1.3 | **BLOCKED_NO_CREDENTIALS** — exit 2, no network call | n/a |
+| 2026-10-29 | `python -m scripts.meta_smoke` (phase E, after G10) | muse-spark-1.3 | **BLOCKED_NO_CREDENTIALS** — exit 2, `MODEL_API_KEY` empty in `.env` and environment, no network call | n/a |
+| 2026-10-29 | `python -m scripts.meta_investigate_smoke` (phase E) | muse-spark-1.3 | **BLOCKED_NO_CREDENTIALS** — exit 2, no network call | n/a |
 
 Status: LIVE Meta has **never** succeeded in this repository. All model-path tests use a provider with
 `mode = "TEST_DOUBLE"`, and runs from it are stored with `mode = TEST_DOUBLE`.

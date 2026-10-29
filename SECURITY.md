@@ -27,6 +27,7 @@ test that proves it) and what an enterprise deployment would still need. Nothing
 | Concurrency | Every SQLite transaction takes the write lock at BEGIN, so checks and writes are atomic | `backend/scripts/concurrency_sim.py` (found 3 races, now 0), `test_concurrent_decisions_on_one_review_accept_exactly_one` |
 | Append-only audit | DB triggers block UPDATE/DELETE on approvals, workflow events, comments and the chain | `test_audit_tables_are_append_only` |
 | Tamper evidence | Each audit row is hash-chained in its own transaction; `GET /audit/verify` reports MODIFIED / DELETED / UNCHAINED rows and broken links, also when triggers were dropped | `test_hash_chain_detects_edits_that_bypass_the_triggers`, migration backfill test |
+| Export integrity (G10) | DOCX/PDF only for an APPROVED version bound to its content hash (not replaced, not BLOCK) or a CLOSED snapshot with re-checked document hashes and an intact audit chain; the file is read back and every required snapshot field must be in it; each export is logged with the file SHA-256 | `backend/tests/test_g10_export.py` |
 | Cost/abuse cap | 10 investigations per user per hour (429) | `test_investigation_quota_per_user` |
 | Key handling | Key only in git-ignored `.env`; secret scan before commits | work log |
 

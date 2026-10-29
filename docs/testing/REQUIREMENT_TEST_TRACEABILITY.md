@@ -21,9 +21,10 @@ Status is what was actually executed; `NOT_RUN` / `NOT_IMPLEMENTED` are never co
 | TC-B-04 | no-key AI proposal + manual edit | `test_g9_docs::test_ai_proposal_is_not_applied…` (OFFLINE 503, manual PASS, TEST_DOUBLE proposal not applied); browser: "AI OFFLINE" shown | PASS (local + CI #38, B) |
 | TC-C-01 | success D0→D8 + history choice + Docs edit/re-validation | `test_c_e2e::test_success_d0_to_d8_with_history_and_document_edit`; `scripts/e2e_http.py` (real uvicorn) | PASS (local + CI #39) |
 | TC-C-02 | D6 failure / early closure | `test_c_e2e::test_failed_effectiveness_blocks_closure_and_reenters_d4`; `scripts/e2e_http.py` | PASS (local + CI #39) |
-| TC-D-01 | approved snapshot → DOCX/PDF, files opened, same LOT/values/versions/approvers | `test_g10_export::test_closed_case_report_and_approved_document_match_the_snapshot`; `scripts/e2e_http.py` (downloads + opens 4 files) | PASS (local, D) |
-| TC-D-02 | unapproved/stale/replaced document as final output | `test_g10_export::test_unapproved_stale_or_replaced_documents_are_not_exported`, `::test_file_missing_a_snapshot_field_is_not_returned` | PASS (local, D) |
-| TC-E-01 … TC-F-01 | LIVE, final demo | — | NOT_STARTED |
+| TC-D-01 | approved snapshot → DOCX/PDF, files opened, same LOT/values/versions/approvers | `test_g10_export::test_closed_case_report_and_approved_document_match_the_snapshot`; `scripts/e2e_http.py` (downloads + opens 4 files) | PASS (local + CI #40) |
+| TC-D-02 | unapproved/stale/replaced document as final output | `test_g10_export::test_unapproved_stale_or_replaced_documents_are_not_exported`, `::test_file_missing_a_snapshot_field_is_not_returned` | PASS (local + CI #40) |
+| TC-E-01 | Meta LIVE real tool call | `scripts/meta_smoke.py`, `scripts/meta_investigate_smoke.py` | BLOCKED_NO_CREDENTIALS (exit 2, no call) |
+| TC-F-01 | fresh-DB final demo twice | `python -m scripts.e2e_http` ×2 on new scratch DBs | PASS (local: same snapshot `19517fb45ba0de1b`, 2/2 each) |
 
 ## Frontend tests (`frontend/tests`, vitest)
 

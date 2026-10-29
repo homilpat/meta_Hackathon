@@ -306,3 +306,13 @@
 - UI: `ExportButtons` on approved documents and on the D8 card. Browser-checked on uvicorn (scratch DB): report PDF download, NCR v1 refused "replaced by approved v2", NCR v2 DOCX download; exports still work after a server restart. The report PDF opened in Chrome's viewer (84 pages). Word desktop automation stops at a hidden dialog on this PC, so the DOCX was checked with python-docx only.
 - `scripts/e2e_http.py` now downloads and opens the 4 files after the success scenario; README has the reproduction command.
 - Local: pytest 247 passed, ruff 0, integration smoke 24/24, HTTP E2E 2/2 (snapshot `19517fb45ba0de1b`, same as phase C), vitest 13, tsc 0, vite build 0. Old root `qualityops.db` unchanged.
+
+## Phase E — Meta LIVE (2026-10-29)
+
+- `MODEL_API_KEY` is empty in `.env` and the environment. `meta_smoke` and `meta_investigate_smoke` exit 2 with no network call → **BLOCKED_NO_CREDENTIALS** (`docs/evaluations/META_LIVE_LOG.md`). No LIVE claim anywhere.
+
+## Phase F — stabilisation (2026-10-29)
+
+- Fresh Alembic DB: upgrade head, `alembic check` (no new operations), repeat upgrade, all OK. TC-F-01: `scripts.e2e_http` twice on fresh DBs, 2/2 each, same snapshot `19517fb45ba0de1b`.
+- SECURITY.md: export integrity control. Final status block in `docs/implementation/V5_IMPLEMENTATION_STATUS.md`.
+- CI #40 (`b81edd7`) succeeded (backend, frontend, integration incl. HTTP E2E with DOCX/PDF downloads) → D PASS.

@@ -20,21 +20,46 @@ PREFLIGHT → G5 → G6 → G7 → G8 → G9 → post-G9 audit → G10 → Meta 
 | A — G8 focused audit | PASS (CI #37 `8577680`) | `docs/implementation/G8_FOCUSED_AUDIT.md`: `TEXT_EXTRA_VALUE` WARN (`factcheck` v5.5-g8.2), Experience `evidence_level` + closed-case reference warning, revoke records the actor, BM25 limits; `backend/tests/test_g8a_validator.py`, `test_g8a_experience.py` |
 | G9 Human Docs | PASS (CI #38 `e312c8b`) | `docs/implementation/G9_HUMAN_DOCS.md`: `/edits` (new version, expected hash, same validator, auto validation), `/diff`, `/edit-proposals` (OFFLINE without key, never applied), HUMAN_EDIT approval needs a fresh non-BLOCK validation; `DocEditor.tsx`; `backend/tests/test_g9_docs.py` |
 | C — post-G9 audit | PASS (CI #39 `3a4b684`) | `docs/implementation/POST_G9_REFACTOR_PLAN.md`: E2E success/failure in-process and over real HTTP (`scripts/e2e_http.py`, in integration CI); P1 fixed: re-approved upstream document flags downstream approvals BASIS_CHANGED (`impact.flag_downstream`); P0 0, P2 listed |
-| G10 | PASS pending CI (local) | `docs/implementation/G10_EXPORT.md`: `export.py` approved-document and closed-case DOCX/PDF, server read-back check of every snapshot field, 409 for drafts/stale/replaced/not closed, `EXPORTED` audit event; UI download buttons; real-HTTP E2E downloads and opens the files |
+| E — Meta LIVE | **BLOCKED_NO_CREDENTIALS** | 2026-10-29: `meta_smoke` / `meta_investigate_smoke` exit 2, no network call (`docs/evaluations/META_LIVE_LOG.md`) |
+| G10 | PASS (CI #40 `b81edd7`) | `docs/implementation/G10_EXPORT.md`: `export.py` approved-document and closed-case DOCX/PDF, server read-back check of every snapshot field, 409 for drafts/stale/replaced/not closed, `EXPORTED` audit event; UI download buttons; real-HTTP E2E downloads and opens the files |
+
+## Final status (phase F, 2026-10-29)
+
+```text
+BACKEND_WORKFLOW: PASS
+G8_RELIABILITY: PASS
+G9_DOCS: PASS
+POST_G9_INTEGRATION: PASS
+G10_EXPORT_DEMO: PASS
+META_LIVE: BLOCKED_NO_CREDENTIALS (no MODEL_API_KEY; every model path verified only with the TEST_DOUBLE)
+SECURITY_LIMITS: demo X-User identities (no authentication), synthetic data only, single-process SQLite,
+                 no real deployment, audit chain not externally anchored
+DEMO_READY: YES - offline deterministic demo (python -m scripts.e2e_http, or /app on uvicorn); not a LIVE Meta demo
+SUBMISSION_READY: NO for a LIVE-Meta claim (E blocked); YES for the offline demo. Submission itself NOT performed.
+```
+
+Final local run: pytest 247 passed, ruff 0, Alembic fresh DB upgrade + `alembic check` (no new operations) +
+repeat upgrade, vitest 13, tsc 0, vite build 0, integration smoke 24/24, HTTP E2E 2/2 run twice on fresh DBs
+(same snapshot `19517fb45ba0de1b`, same 1,770 / 1,681 checked fields), browser download and restart check
+(`docs/implementation/G10_EXPORT.md`). Old root `qualityops.db` unchanged (`e39fac5e96ad602b`).
+
+Residual risks: P2 items in `docs/implementation/POST_G9_REFACTOR_PLAN.md` (template C5 WARN, Korean query terms
+ignored by BM25, reason minimums differ); Hangul statements are not part of the PDF read-back check; the DOCX was not
+opened in Word desktop (python-docx and Chrome PDF only); no measured ROI or plant results are claimed.
 
 ## Spec §9 acceptance tests now
 
 | # | Status | # | Status |
 |---|---|---|---|
 | 1 signal → defect | BLOCKED (`test_spc_signal_alone_cannot_be_triaged_as_confirmed_defect`) | 4 LOT A ev / LOT B text | BLOCKED (`test_valid_evidence_id_but_wrong_lot_in_text_is_blocked`) |
-| 2 urgent before D1 | ALLOWED (`test_emergency_hold_allowed_after_d0_before_team_and_documents`) | 5 3.2 → 2.1 | NOT YET (G8/G9) |
+| 2 urgent before D1 | ALLOWED (`test_emergency_hold_allowed_after_d0_before_team_and_documents`) | 5 3.2 → 2.1 | BLOCKED (see row below) |
 | 3 plan → executed | BLOCKED (`test_plan_without_execution_is_not_containment_done`) | 6 SUSPECT evidence → cause | BLOCKED (`test_suspect_evidence_cannot_prove_a_cause`) | 7 SHAP/AI/precedent → cause | BLOCKED (`test_ai_shap_or_precedent_alone_cannot_confirm`) |
 | 8 multiple causes | ALLOWED (`test_inconclusive_without_experiment_and_multiple_causes`) | 19 stale policy | RE-EVALUATED (`test_stale_policy_version_is_reevaluated_at_decision`) |
 | 9 unconfirmed cause → D5 | BLOCKED (`test_unconfirmed_cause_cannot_be_selected`) | 10 D6 not executed / small n / changed inspection / late criteria | BLOCKED (`test_selected_is_not_implemented...`, `test_sample_insufficiency...`, `test_changed_inspection_rule...`, `test_criteria_cannot_be_registered...`) |
 | 11 D6 failure → D4/D5 reopen | REOPENED, log kept (`test_negative_outcome_reopens_d4_and_keeps_history`) | 12 FMEA claimed, no revision | BLOCKED (`test_fmea_claim_without_a_real_revision_is_not_d7`) |
 | 13 D8 open action / no approval / evidence changed | BLOCKED (`test_open_d6_failure_blocks_closure`, `test_changed_evidence_blocks_closure`, `test_signers_and_notification`) | 14 old template / other-site SOP / no access | BLOCKED (`test_document_citations_need_released_in_effect_site_and_access`, `test_template_contract_selection_and_rules`) |
-| 5 3.2% → 2.1% | BLOCKED at document creation (`test_wrong_percentage_text_or_value_is_blocked...`); Docs editing itself is G9 | 15, 16 | as before; Docs editing is G9 |
-| 17 no key → manual | PASSES (503, template path) | 18 regression | PASSES (all 122 original tests still pass) |
+| 5 3.2% → 2.1% | BLOCKED at document creation (`test_wrong_percentage_text_or_value_is_blocked...`) and in a Docs edit (`test_g9_docs::test_wrong_number_other_lot_and_false_execution_or_cause_are_blocked`) | 15, 16 | as before; G9 edits use the same validator |
+| 17 no key → manual | PASSES (503, template path) | 18 regression | PASSES (full suite: 247 passed after G10) |
 | 20 second process | PARTIAL (adapter + policy selection; documents/approvals not exercised) | 15, 16 | as before (decision 409; AI cannot write documents) |
 
 ## Known limits

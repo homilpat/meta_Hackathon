@@ -408,7 +408,7 @@ D4는 Fishbone 그림 자체가 아니라 정규화된 `CauseHypothesis`, `WhyLi
 
 ### 19.1 디렉터리 구조 — 요구사항의 일부
 
-**저장소 루트는 `frontend/`, `backend/`, `docs/`, `prompts/`를 분리**하고, 소스와 테스트는 각 애플리케이션 하위에 둔다. 요구사항과 공통 운영 문서는 루트에 둔다. 아래는 목표 구조이며 빈 폴더를 채우기 위한 형식적 파일 생성은 불필요하다.
+**저장소 루트는 `frontend/`, `backend/`, `docs/`를 분리**하고, 소스와 테스트는 각 애플리케이션 하위에 둔다. 요구사항과 공통 운영 문서는 루트에 둔다. 아래는 목표 구조이며 빈 폴더를 채우기 위한 형식적 파일 생성은 불필요하다.
 
 ```text
 meta_Hackathon/
@@ -449,8 +449,6 @@ meta_Hackathon/
 │   ├── testing/                   # 테스트 계약·추적표·실행 증거
 │   ├── implementation/            # 구현 상태, 변경·통합 결과
 │   └── evaluations/               # 실제 관측 평가 결과
-├── prompts/
-│   └── QualityOps_AI_CODEX_MASTER_R0_G10_FINAL.md
 ├── QualityOps_AI_FINAL_REQUIREMENTS_v5_5_MONOREPO_FINAL.md
 ├── README.md
 ├── SECURITY.md
@@ -477,7 +475,7 @@ meta_Hackathon/
 | React/Vite | `frontend/src`, 프록시 경로, 빌드 산출물, `GET /app` 및 기존 `/ui` fallback 유지 |
 | 환경변수·보안 | `.env`, 키, DB, 다운로드 원본 데이터, 토큰이 커밋·로그에 포함되지 않음 |
 | 스크립트 | `backend/scripts`의 `python -m scripts...` 및 평가 스크립트가 새 실행 위치에서 정상 동작 |
-| docs | 루트 최신 명세서·`prompts/` 및 `docs/`의 상대 링크 모두 유효; 과거 문서는 참고용으로 구분 |
+| docs | 루트 최신 명세서 및 `docs/`의 상대 링크 모두 유효; 과거 문서는 참고용으로 구분 |
 | 배포 | 프론트 변경 및 Backend 배포 간 번들 경로 차이로 `/app` 404가 발생하지 않음 |
 
 ### 19.3 모듈화 원칙 — 경로만 옮기는 것으로 끝내지 않기
@@ -556,7 +554,7 @@ E Meta LIVE: 자격 증명 독립 분기, 실행 시 LIVE 결과와 스모크·�
 
 ## 21. 요구사항 추적성, 파일 경로 기준 및 인수 형식
 
-- **Source of Truth:** 이 명세서(무엇을 만들지) > `prompts/QualityOps_AI_CODEX_MASTER_R0_G10_FINAL.md`(어떻게 실행할지) > `docs/implementation/V5_IMPLEMENTATION_STATUS.md`(실제 관측 상태) > 작업 로그(시간별 기록). 정책과 구현이 다른 경우 명세서를 조용히 고치지 말고 차이를 기록/승인받아야 한다.
+- **Source of Truth:** 이 명세서(기능·검증의 기준) > `docs/implementation/V5_IMPLEMENTATION_STATUS.md`(실제 관측 상태) > 작업 로그(시간별 기록). 정책과 구현이 다른 경우 명세서를 조용히 고치지 말고 차이를 기록/승인받아야 한다.
 - **진행 보고:** 각 R0/A/B/C/D/E/F 구간별 `예상 선행조건 → 수행 내용 → exit criteria 증거(실행 커맨드·결과) → 미통과 항목/원인 → PASS/PARTIAL/BLOCKED → SHA/푸시 여부 → 다음 unlock 가능한 구간` 표기.
 - **경로 이전:** 이전 `app/`, `web/`, `tests/`, `scripts/`, `migrations/` 문서 경로는 옛 구조다. **실행 명령과 새 문서에는 반드시 실제 파일의 새 경로**를 사용한다. 검증용 이력 문서의 과거 경로·결과를 삭제하지 않는다.
 - **미구현 테스트:** 실제로 존재하지 않는 Frontend 테스트·Meta LIVE·실환경 데이터/ROI 실험은 `NOT_RUN` 또는 `NOT_IMPLEMENTED`로 구분하고 성공이라고 기록하지 않는다.
@@ -617,7 +615,7 @@ E Meta LIVE: 자격 증명 독립 분기, 실행 시 LIVE 결과와 스모크·�
 
 ### 22.7 전환 단계 (AG) 및 필수 수용 테스트
 - **AG0 — Baseline & compatibility (선행):** 최신 main SHA, API/DB/openapi, 기존 G0~G10 기능, Queue, 247 backend/13 frontend 기록과 실제 최신 검사 결과를 수집한다. 기존 UI·E2E 보존. Gate: baseline 테스트와 CI PASS.
-- **AG1 — Agent shell/UI:** Figma Make를 참조하되 UI만 구성. Agent 기본 화면, Case/role, message, dynamic cards, queue navigation, provider badge, fallback. Gate: layout/accessibility 및 기존 메뉴 정상.
+- **AG1 — Agent shell/UI:** 기존 디자인 시스템을 재사용하되 UI만 구성. Agent 기본 화면, Case/role, message, dynamic cards, queue navigation, provider badge, fallback. Gate: layout/accessibility 및 기존 메뉴 정상.
 - **AG2 — Read-only tools:** intent planner + read-only tool registry, evidence/SPC/RAG/ML/history/queue. Gate: 근거 연결/권한 필터/무근거 주장 차단, 타 Case 혼동 차단, OFFLINE 동작(수동 경로).
 - **AG3 — Safe actions & human gates:** 기존 업무 API에 allowlisted writes, confirmation, server-side role validation, pause/resume, idempotency/retry. Gate: AI 승인 시도·Gate bypass·중복 클릭·stale versions 모두 거부.
 - **AG4 — Document/export & end-to-end:** G9 editing/validation/Diff, G10 verified DOCX/PDF, D0~D8 real HTTP success/failure plus existing UI parity. Gate: 최종 결과/감사 동일성.
@@ -626,4 +624,4 @@ E Meta LIVE: 자격 증명 독립 분기, 실행 시 LIVE 결과와 스모크·�
 - 테스트 추적표는 \`docs/testing/REQUIREMENT_TEST_TRACEABILITY.md\`에 **실제 코드 경로/테스트 이름/실행 결과**를 추후 구현 단계에서 추가한다. **이 절은 요구사항이며 현재 완료 상태를 뜻하지 않는다.**
 
 ### 22.8 완료 정의
-AG0~AG5의 구현·실행 결과를 실제 코드와 테스트로 검증하고, 기존 G0~G10 회귀 0건, 권한/승인/ClaimValidator 일관성, HTTP E2E, Figma 설계와 실 UI 매핑, 독립 Queue와 수동 fallback 확인 후에만 Agent-First UX 전환 완료로 선언한다. 현재 Meta LIVE 미검증 상태를 자동으로 해제하지 않는다.
+AG0~AG5의 구현·실행 결과를 실제 코드와 테스트로 검증하고, 기존 G0~G10 회귀 0건, 권한/승인/ClaimValidator 일관성, HTTP E2E, 설계 기준과 실 UI 매핑, 독립 Queue와 수동 fallback 확인 후에만 Agent-First UX 전환 완료로 선언한다. 현재 Meta LIVE 미검증 상태를 자동으로 해제하지 않는다.

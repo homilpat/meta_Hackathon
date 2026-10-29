@@ -17,17 +17,28 @@ What it does, by stage (each stage's checks are in the [work log](HACKATHON_WORK
 Containment items are proposals (`NOT_EXECUTED`) and the RCA stays `UNCONFIRMED`; the system never records an action
 as executed or a cause as confirmed. SHAP explains model scores, not physical causes.
 
+## Repository layout
+
+| Path | Contents |
+|---|---|
+| `backend/` | FastAPI app (`src/app`), Python tests (`tests`), scripts (`scripts`), Alembic (`migrations`), `pyproject.toml`, `alembic.ini` |
+| `frontend/` | React + Vite UI (`src/features`, `src/components`, `src/api`, …) and its tests (`tests`) |
+| `docs/` | `architecture/` (decisions, data, [refactor audit](docs/architecture/REFACTOR_AUDIT.md)), `implementation/` ([status](docs/implementation/V5_IMPLEMENTATION_STATUS.md)), `evaluations/` (measured results), `archive/` (superseded specs) |
+| `prompts/` | Execution prompt; the requirements spec is `QualityOps_AI_FINAL_REQUIREMENTS_v5_5_MONOREPO_FINAL.md` at the root |
+
 ## Run locally
 
-Python 3.12+:
+Python 3.12+, from `backend/` (paths no longer depend on the working directory):
 
 ```sh
+cd backend
 python -m venv .venv
 python -m pip install -e '.[dev]'
 python -m pytest -q
 python -m ruff check .
-alembic upgrade head
-uvicorn app.main:app --host 127.0.0.1 --port 8000
+python -m alembic upgrade head          # DB: $DATABASE_URL, default backend/qualityops.db
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+python -m scripts.integration_smoke     # real uvicorn on a fresh migrated scratch DB
 ```
 
 `GET /health` returns `{"status":"ok","stage":"S6"}` (web process only). Open `http://127.0.0.1:8000/ui` and pick a
@@ -36,10 +47,10 @@ engineer). Demo identities are selected by the `X-User` header with no password;
 
 ## Web UI
 
-`http://127.0.0.1:8000/app/` is the main UI (React + Vite, source in `web/`, design started in Figma Make and wired
-to the API; every value shown comes from the API). The built files are committed in `app/static/web/`, so Node is
-not needed to run it. To change the UI: `cd web && npm install && npm run dev` (proxies the API to :8000), then
-`npm run build` to update `app/static/web/`. The older single-file UI at `/ui` is kept as a fallback.
+`http://127.0.0.1:8000/app/` is the main UI (React + Vite, source in `frontend/src/`, design started in Figma Make and wired
+to the API; every value shown comes from the API). The built files are committed in `backend/src/app/static/web/`, so Node is
+not needed to run it. To change the UI: `cd frontend && npm ci && npm run dev` (proxies the API to :8000), `npm test`
+(vitest), then `npm run build` to update `backend/src/app/static/web/` (CI fails if the committed bundle is stale). The older single-file UI at `/ui` is kept as a fallback.
 
 ## Demo walk-through (`/ui` labels; `/app` has the same steps)
 
@@ -54,13 +65,13 @@ not needed to run it. To change the UI: `cd web && npm install && npm run dev` (
    *no scope impact* (or *revise*) on `/app`; only then can the new RCA be approved. Approval records are unchanged.
 7. **Run investigation (LIVE Meta model)** needs a key (below); without one the API returns 503 — there is no mock.
 
-The same flow by API is covered by `tests/test_s6_followups.py`.
+The same flow by API is covered by `backend/tests/test_s6_followups.py`.
 
 **Collaboration:** *할 일* shows "내 할 일" (items you own: reviews assigned to you, basis checks on plans you
 approved, redrafts and comment answers on your documents) and "부서 할 일" (everything open for your role).
 Reviewers leave comments on a single claim; the author answers and resolves them, and every comment stays in the
 append-only log. Each document shows a *책임 추적* trail (who did what, in which role). Concurrent use was
-simulated with `python -m scripts.concurrency_sim` ([results](docs/CONCURRENCY_RESULTS.md)): it found three
+simulated with `python -m scripts.concurrency_sim` ([results](docs/evaluations/CONCURRENCY_RESULTS.md)): it found three
 race conditions, which are fixed and covered by a regression test.
 
 **Line monitoring (SPC → case):** *SPC 라인 모니터링* replays a synthetic SMT line run (3 lots, 144 boards, 1,152
@@ -78,7 +89,7 @@ and not a cause. The replay stands in for a live event feed such as IPC-CFX, whi
 
 ## Meta LIVE
 
-Put `MODEL_API_KEY=...` in the git-ignored `.env` (see `.env.example`). **Calls may incur API charges.**
+Put `MODEL_API_KEY=...` in the git-ignored `.env` (working directory first, then the repo root) (see `.env.example`). **Calls may incur API charges.**
 
 - `python -m scripts.meta_smoke` — one fixed synthetic prompt. Exit 0 LIVE ok, 1 LIVE failure, 2 no key (no call).
 - `python -m scripts.meta_investigate_smoke` — one tool-calling investigation on a synthetic case.
@@ -87,25 +98,25 @@ Only SYNTHETIC + APPROVED_FOR_EXTERNAL rows can reach the model: tools fail clos
 provider blocks any outbound payload carrying another origin/sensitivity, the word CONFIDENTIAL, or secret-like
 text before the network call. **LIVE Meta has not been run in this repository yet.**
 
-## Evaluation
+## Evaluation (scripts run from `backend/`)
 
-- `python -m scripts.eval_s7` → [docs/EVAL_RESULTS.md](docs/EVAL_RESULTS.md): deterministic checks on 30 held-out
+- `python -m scripts.eval_s7` → [docs/evaluations/EVAL_RESULTS.md](docs/evaluations/EVAL_RESULTS.md): deterministic checks on 30 held-out
   synthetic cases (revision impact precision/recall, unsupported template claims, validator recall on seeded bad
   claims, egress gate). The A/B/C/D model comparison (incl. History OFF/ON) is **NOT RUN** until LIVE access exists.
-- `python -m scripts.train_model` → [docs/MODEL_CARD.md](docs/MODEL_CARD.md).
-- `python -m scripts.history_compare` → [docs/HISTORY_COMPARISON.md](docs/HISTORY_COMPARISON.md) (deterministic
+- `python -m scripts.train_model` → [docs/evaluations/MODEL_CARD.md](docs/evaluations/MODEL_CARD.md).
+- `python -m scripts.history_compare` → [docs/evaluations/HISTORY_COMPARISON.md](docs/evaluations/HISTORY_COMPARISON.md) (deterministic
   planner log, not an LLM result).
 
 ## Data and scope
 
 PHME 2022 access and usage rights are unresolved and none of its content is included.
 
-**Real public data check:** `python -m scripts.steel_model` downloads [UCI Steel Plates Faults](docs/UCI_STEEL_PLATES.md)
+**Real public data check:** `python -m scripts.steel_model` downloads [UCI Steel Plates Faults](docs/evaluations/UCI_STEEL_PLATES.md)
 (CC BY 4.0, hash-verified, kept in git-ignored `data/`) and runs the same LightGBM + TreeSHAP method as a separate
 fault-*type* classifier: test macro F1 0.810 vs 0.699 logistic regression and 0.074 majority class
-([model card](docs/STEEL_MODEL_CARD.md); shown on the prediction screen). Every row is a faulty plate, so it does
+([model card](docs/evaluations/STEEL_MODEL_CARD.md); shown on the prediction screen). Every row is a faulty plate, so it does
 not measure defect detection; its rows never enter a case or a model prompt. See [dataset
-decisions](docs/DATASET_ACCESS.md) and the [data dictionary](docs/DATA_DICTIONARY.md).
+decisions](docs/architecture/DATASET_ACCESS.md) and the [data dictionary](docs/architecture/DATA_DICTIONARY.md).
 
 Sources: [Meta event](https://dev.meta.ai/events/global-hackathon), [Meta API](https://dev.meta.ai/docs/overview),
 [Meta models](https://dev.meta.ai/docs/models). AI-assisted coding was used. Dependencies and licences:

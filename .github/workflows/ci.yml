@@ -1,21 +1,14 @@
-name: S0 checks
-on: [push, pull_request]
+# One run per commit: backend and frontend in parallel, integration only after both succeed on the same SHA.
+# No path filters, so a backend-only or frontend-only change still gets the integration verdict.
+name: CI
+on:
+  push:
+  pull_request:
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - run: python -m pip install -e '.[dev]'
-      - run: python -m pytest -q
-      - run: python -m ruff check .
-      - run: alembic upgrade head
-        env:
-          DATABASE_URL: sqlite:///ci-scratch.db
-      - run: python -c "from fastapi.testclient import TestClient; from app.main import app; assert TestClient(app).get('/health').json() == {'status':'ok','stage':'S6'}"
-
+  backend:
+    uses: ./.github/workflows/backend-ci.yml
+  frontend:
+    uses: ./.github/workflows/frontend-ci.yml
+  integration:
+    needs: [backend, frontend]
+    uses: ./.github/workflows/integration-ci.yml

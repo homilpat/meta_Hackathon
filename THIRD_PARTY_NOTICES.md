@@ -23,5 +23,5 @@ Direct version constraints are in `pyproject.toml`; transitive package licenses 
 
 - **UCI Steel Plates Faults** — Buscema, M., Terzi, S., & Tastle, W. (2010). UCI Machine Learning Repository.
   https://doi.org/10.24432/C5J88N — [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Used by
-  `scripts/steel_model.py` to train and evaluate a reference classifier. Modified: parsed and split for training;
-  only aggregate metrics and SHAP summaries are committed (`docs/steel_eval.json`), no source rows.
+  `backend/scripts/steel_model.py` to train and evaluate a reference classifier. Modified: parsed and split for training;
+  only aggregate metrics and SHAP summaries are committed (`docs/evaluations/steel_eval.json`), no source rows.

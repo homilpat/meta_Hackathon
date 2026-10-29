@@ -1,0 +1,22 @@
+name: Backend CI
+on:
+  workflow_call:
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: sqlite:///${{ github.workspace }}/backend-ci-scratch.db
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e '.[dev]'
+      - run: python -m pytest -q
+      - run: python -m ruff check .
+      - run: python -m alembic upgrade head
+      - run: python -m alembic check
+      - run: python -c "from fastapi.testclient import TestClient; from app.main import app; assert TestClient(app).get('/health').json() == {'status':'ok','stage':'S6'}"

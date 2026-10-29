@@ -1,7 +1,9 @@
 """C: the D0->D8 success and failure scenarios of tests/test_c_e2e.py against a real uvicorn process.
 
 Each scenario gets its own Alembic-migrated scratch DB and server. Run from backend/:
-    python -m scripts.e2e_http [--port 8798]
+    python -m scripts.e2e_http [--port 8798] [--out DIR]
+After the success scenario the closed case's 8D report and the approved NCR are downloaded as DOCX and PDF (G10),
+opened with python-docx / pypdf and saved to DIR (default: a new temp directory).
 """
 
 import argparse
@@ -21,6 +23,7 @@ from sqlalchemy import create_engine
 from app import BACKEND_DIR
 from app.synthetic import generate_line
 from tests.test_c_e2e import failure, success
+from tests.test_g10_export import opened
 from tests.v5_util import TEAM, H
 
 
@@ -56,16 +59,33 @@ def server(port: int):
         proc.wait(10)
 
 
+def download(c, out: Path) -> None:
+    for path in ("/cases/L/report/export", "/cases/L/documents/ncr/export"):
+        for fmt in ("docx", "pdf"):
+            r = c.get(f"{path}?format={fmt}", headers=H("bob"))
+            text = opened(r, fmt)
+            name = r.headers["content-disposition"].split('filename="')[1].rstrip('"')
+            assert r.headers["x-reference-sha256"] in "".join(text.split())
+            (out / name).write_bytes(r.content)
+            print(f"  {name} {r.headers['content-type']} {len(r.content)} bytes "
+                  f"fields_checked={r.headers['x-fields-checked']} sha256={r.headers['x-file-sha256'][:16]}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=8798)
-    port = ap.parse_args().port
+    ap.add_argument("--out", type=Path)
+    args = ap.parse_args()
+    port, out = args.port, args.out or Path(tempfile.mkdtemp(prefix="qualityops_export_"))
+    out.mkdir(parents=True, exist_ok=True)
     failed = 0
     for name, scenario in (("success D0->D8 CLOSED", success), ("failure D6 NOT_EFFECTIVE", failure)):
         try:
             with server(port) as c:
-                out = scenario(c)
-            print(f"PASS {name}" + (f" snapshot={out['snapshot_sha256'][:16]}" if out else ""))
+                res = scenario(c)
+                if res:
+                    download(c, out)
+            print(f"PASS {name}" + (f" snapshot={res['snapshot_sha256'][:16]}; files in {out}" if res else ""))
         except Exception:  # noqa: BLE001 - report every scenario
             failed += 1
             print(f"FAIL {name}\n{traceback.format_exc()}")

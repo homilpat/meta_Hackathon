@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { USERS } from '../../constants'
 import { Badge, Card, Cite, Empty, Field, Note, Page, SectionTitle } from '../../components/ui'
 import { ExperienceCard } from '../experience/ExperienceCard'
+import { ExportButtons } from '../../components/ExportButtons'
 import type { Ctx, J, Tone } from '../../types'
 
 export const STAGE_LABEL: Record<string, string> = { D0: '위험 평가', D1: '팀', D2: '문제 정의', D3: '임시 봉쇄', D4: '근본 원인', D5: '조치 선정', D6: '실행·효과', D7: '재발 방지', D8: '종결' }
@@ -145,6 +146,7 @@ export function EightD({ ctx }: { ctx: Ctx }) {
           <input className="input" placeholder="고객 통보 참조번호 (출하·고객 영향 시 필수)" value={f.notify} onChange={set('notify')}/>
           <div className="dual"><button className="button primary" onClick={() => run(api(`/cases/${cid}/closure`, 'POST', { residual_risks: [{ risk: f.risk8, mitigation: f.note || 'monitored', owner: f.owner8 }], customer_notification_ref: f.notify || null, comment: f.note || 'closure reviewed' }))}>D8 종결</button>
             <button className="button secondary" disabled={d8.state.D8 !== 'CLOSED'} onClick={() => run(api(`/cases/${cid}/closure/reopen`, 'POST', { reason: f.note || 'reopened for re-investigation' }))}>재오픈</button></div></div>}
+        {d8.state.D8 === 'CLOSED' && <ExportButtons user={me.id} path={`/cases/${cid}/report/export`} label="8D 보고서"/>}
         <p className="muted wrap mt">이력: {d8.history.map((h: J) => `${h.decision}(${h.actor_id}, ${h.snapshot_sha256.slice(0, 10)})`).join(' → ') || '-'}</p></Card>}
     </div>
     <Card className="mb"><SectionTitle title="조치 실행 기록" sub="REQUESTED → (PLAN_APPROVED) → EXECUTED → INDEPENDENTLY_VERIFIED · 실행자와 확인자는 달라야 함"/>

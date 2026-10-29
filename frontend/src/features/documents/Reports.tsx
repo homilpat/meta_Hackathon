@@ -4,6 +4,7 @@ import { Stages } from '../../components/Stages'
 import { Badge, Card, Cite, Empty, Icon, Note, Page, SectionTitle } from '../../components/ui'
 import { useLoad } from '../../hooks/useLoad'
 import { DocEditor } from './DocEditor'
+import { ExportButtons } from '../../components/ExportButtons'
 import type { Ctx, J } from '../../types'
 
 export function Reports({ ctx }: { ctx: Ctx }) {
@@ -35,6 +36,7 @@ export function Reports({ ctx }: { ctx: Ctx }) {
       {d ? <Card className="document-view"><div className="doc-title"><div><Badge tone="teal">{d.doc_type} · v{d.version}</Badge> <Badge tone={STATUS_TONE[d.status]}>{d.status}</Badge><h3>{d.doc_type} {d.case_id}</h3>
         <span>작성 {d.author_id} · {d.created_at.slice(0, 19)} · 템플릿 {d.template_version} · 기반 {d.based_on.join(', ') || '-'} · 생성기 {d.builder}</span></div>
         <a className="button secondary" href={`/cases/${d.case_id}/${d.kind}/${d.version}/html`} onClick={async e => { e.preventDefault(); const w = window.open(''); w?.document.write(await (await fetch(`/cases/${d.case_id}/${d.kind}/${d.version}/html`, { headers: { 'X-User': ctx.me.id } })).text()) }}>HTML 보기</a></div>
+        {d.status === 'APPROVED' && <ExportButtons key={`${d.kind}:${d.version}`} user={ctx.me.id} path={`/cases/${d.case_id}/documents/${d.kind}/export?version=${d.version}`} label="승인본"/>}
         {d.note && <Note>{d.note}</Note>}
         <div className="table-wrap"><table><thead><tr><th>ID</th><th>구분</th><th>주장</th><th>근거</th><th>코멘트</th></tr></thead><tbody>{d.claims.map((c: J) =>
           <tr key={c.claim_id}><td>{c.claim_id}</td><td><Badge tone={CLASS_TONE[c.classification]}>{c.classification}</Badge></td><td className="wrap">{c.text}</td><td className="wrap"><Cite ids={c.evidence_ids}/></td>

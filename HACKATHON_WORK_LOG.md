@@ -297,3 +297,12 @@
 - Found and fixed (P1): approving a new version of an upstream document left downstream approvals on the old basis unflagged. Now they become BASIS_CHANGED and need the existing basis check. P2 items recorded in `docs/implementation/POST_G9_REFACTOR_PLAN.md`.
 - Local: pytest 244 passed, ruff 0, alembic upgrade + check clean, integration smoke 24/24, HTTP E2E 2/2.
 
+- CI #39 (`3a4b684`) succeeded → C PASS.
+
+## Phase D — G10 DOCX/PDF export and single-case demo (2026-10-29)
+
+- `backend/src/app/export.py`: `GET /cases/{id}/documents/{kind}/export` (APPROVED version, approval bound to its hash, not replaced, not BLOCK) and `GET /cases/{id}/report/export` (CLOSED snapshot, document hashes re-checked, audit chain ok), `format=docx|pdf`. DOCX via the standard library, PDF via reportlab (new runtime deps `reportlab`, `pypdf`; dev `python-docx`). The server reads every file back and refuses (500) if any required snapshot field is missing; each export is logged as `EXPORTED` with the file hash. No migration.
+- That read-back check caught a real defect while building: a PDF table row taller than a page lost one line per page break. Long evidence lists now continue on extra rows.
+- UI: `ExportButtons` on approved documents and on the D8 card. Browser-checked on uvicorn (scratch DB): report PDF download, NCR v1 refused "replaced by approved v2", NCR v2 DOCX download; exports still work after a server restart. The report PDF opened in Chrome's viewer (84 pages). Word desktop automation stops at a hidden dialog on this PC, so the DOCX was checked with python-docx only.
+- `scripts/e2e_http.py` now downloads and opens the 4 files after the success scenario; README has the reproduction command.
+- Local: pytest 247 passed, ruff 0, integration smoke 24/24, HTTP E2E 2/2 (snapshot `19517fb45ba0de1b`, same as phase C), vitest 13, tsc 0, vite build 0. Old root `qualityops.db` unchanged.

@@ -83,6 +83,32 @@ limits, signals and per-lot Cpk as CALCULATED claims, and the containment plan p
 unshipped panels plus a QA decision on the shipped ones. A signal is a statistical cue: it is not a defect finding
 and not a cause. The replay stands in for a live event feed such as IPC-CFX, which is not implemented.
 
+## One synthetic case end to end, with DOCX/PDF export (G10)
+
+```sh
+cd backend
+python -m scripts.e2e_http [--out DIR]   # fresh migrated scratch DB + real uvicorn per scenario; prints where files went
+```
+
+The success scenario (`tests/test_c_e2e.py::success`) runs the SMT line case L: past-case retrieval (KNOWN) and a
+human "review prior response" choice → D0 triage → D1 team → D2/D3/D4 approvals → D3 hold executed and independently
+verified → D4 cause confirmed → D5 action → D6 EFFECTIVE on a pre-registered plan → D7 SOP/FMEA revisions with
+training → a person edits the approved NCR (a wrong count is refused 422; a wording edit becomes v2 and is
+re-validated) → D3/D4 flagged `BASIS_CHANGED` and re-confirmed → **CLOSED** → the case becomes a
+`NOT_YET_OBSERVED` reference for the next search. It then downloads the 8D report and the approved NCR as DOCX and
+PDF (default: a new temp directory). The failure scenario records D6 NOT_EFFECTIVE: the cause is reopened and closure is refused.
+
+- `GET /cases/{id}/report/export?format=docx|pdf` renders the snapshot archived by the **CLOSED** closure (every
+  document hash re-checked, audit chain must verify). `GET /cases/{id}/documents/{ncr|containment|rca}/export
+  ?format=docx|pdf[&version=n]` exports an **APPROVED** version whose approval names its exact content hash. Drafts,
+  `BASIS_CHANGED` / `REVALIDATION_REQUIRED`, BLOCK-validated or replaced versions get a 409 with the reason.
+- After writing, the server reads the file back (DOCX XML / PDF text) and checks every required value, unit,
+  evidence id (LOT), version, approver and hash from the snapshot; a miss returns 500 and no file. Each export is
+  logged (`EXPORTED`, file SHA-256). In `/app`: *문서 · 결재* (approved version) and *D0~D8 진행* → D8 (closed case).
+- Limits: synthetic data only. Hangul text is rendered in the PDF with reportlab's built-in CID font, but PDF text
+  extraction only round-trips ASCII, so Hangul statements are not part of the read-back check.
+- Reset: every run uses a new scratch DB; nothing touches `backend/qualityops.db`.
+
 ## Security
 
 [SECURITY.md](SECURITY.md) lists each enforced control with the test that proves it (egress allowlist, least-privilege tools, output validation, prompt-injection test, separation of duties, hash-chained append-only audit with `GET /audit/verify`, investigation quota) and what a real deployment still needs (SSO, self-hosted model or provider contract for real data, encryption, external anchoring of the audit chain).

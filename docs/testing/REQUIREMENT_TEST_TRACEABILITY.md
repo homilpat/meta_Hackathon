@@ -19,9 +19,11 @@ Status is what was actually executed; `NOT_RUN` / `NOT_IMPLEMENTED` are never co
 | TC-B-02 | 3.2%→2.1%, other lot, false execution / cause | `test_g9_docs::test_wrong_number_other_lot_and_false_execution_or_cause_are_blocked`; smoke "G9 wrong number blocked" | PASS (local + CI #38, B) |
 | TC-B-03 | concurrent edit / edit during review / policy change before approval | `test_g9_docs::test_concurrent_edit_review_and_stale_validation_are_refused`; smoke "G9 stale base refused" | PASS (local + CI #38, B) |
 | TC-B-04 | no-key AI proposal + manual edit | `test_g9_docs::test_ai_proposal_is_not_applied…` (OFFLINE 503, manual PASS, TEST_DOUBLE proposal not applied); browser: "AI OFFLINE" shown | PASS (local + CI #38, B) |
-| TC-C-01 | success D0→D8 + history choice + Docs edit/re-validation | `test_c_e2e::test_success_d0_to_d8_with_history_and_document_edit`; `scripts/e2e_http.py` (real uvicorn) | PASS (local, C) |
-| TC-C-02 | D6 failure / early closure | `test_c_e2e::test_failed_effectiveness_blocks_closure_and_reenters_d4`; `scripts/e2e_http.py` | PASS (local, C) |
-| TC-D-01 … TC-F-01 | G10, LIVE, final demo | — | NOT_STARTED |
+| TC-C-01 | success D0→D8 + history choice + Docs edit/re-validation | `test_c_e2e::test_success_d0_to_d8_with_history_and_document_edit`; `scripts/e2e_http.py` (real uvicorn) | PASS (local + CI #39) |
+| TC-C-02 | D6 failure / early closure | `test_c_e2e::test_failed_effectiveness_blocks_closure_and_reenters_d4`; `scripts/e2e_http.py` | PASS (local + CI #39) |
+| TC-D-01 | approved snapshot → DOCX/PDF, files opened, same LOT/values/versions/approvers | `test_g10_export::test_closed_case_report_and_approved_document_match_the_snapshot`; `scripts/e2e_http.py` (downloads + opens 4 files) | PASS (local, D) |
+| TC-D-02 | unapproved/stale/replaced document as final output | `test_g10_export::test_unapproved_stale_or_replaced_documents_are_not_exported`, `::test_file_missing_a_snapshot_field_is_not_returned` | PASS (local, D) |
+| TC-E-01 … TC-F-01 | LIVE, final demo | — | NOT_STARTED |
 
 ## Frontend tests (`frontend/tests`, vitest)
 

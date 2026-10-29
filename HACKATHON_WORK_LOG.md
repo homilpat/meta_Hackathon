@@ -316,3 +316,8 @@
 - Fresh Alembic DB: upgrade head, `alembic check` (no new operations), repeat upgrade, all OK. TC-F-01: `scripts.e2e_http` twice on fresh DBs, 2/2 each, same snapshot `19517fb45ba0de1b`.
 - SECURITY.md: export integrity control. Final status block in `docs/implementation/V5_IMPLEMENTATION_STATUS.md`.
 - CI #40 (`b81edd7`) succeeded (backend, frontend, integration incl. HTTP E2E with DOCX/PDF downloads) → D PASS.
+
+## Post-F — multilingual search glossary (2026-10-29)
+
+- P2 #3 fixed: `backend/src/app/glossary.py` maps Korean / Japanese / Chinese / English wording of each concept to the canonical term the records use; `retrieval.tokens` cuts non-ASCII words into glossary words longest-first (particles, compound words, scripts without spaces) and keeps unknown words as written. Ranking `bm25-k1.5-b0.75-glossary2`. `tests/test_glossary.py`: the same query in 4 languages returns the same top past cases and controlled documents.
+- Local: pytest 254 passed, ruff 0, integration smoke 24/24, HTTP E2E 2/2 (snapshot unchanged `19517fb45ba0de1b`).

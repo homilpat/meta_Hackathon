@@ -7,23 +7,47 @@ import math
 import re
 from collections import Counter
 
-VERSION = "bm25-k1.5-b0.75-terms1"
-# Domain wording normalised to one term so a new phrasing still finds the record (shortcut: a hand list; replace
-# with a measured synonym/embedding layer only once retrieval quality is evaluated on real wording).
-TERMS = {"insufficient": "low", "shortfall": "low", "under": "low", "lower": "low", "deposit": "volume",
-         "deposits": "volume", "paste": "solder", "overrun": "exceeded", "overdue": "exceeded",
-         "exceed": "exceeded", "exceeds": "exceeded", "interval": "interval", "worn": "wear", "wearing": "wear",
-         "clogged": "clog", "clogging": "clog", "apertures": "aperture", "cleaning": "clean", "cleaned": "clean",
-         "wipe": "clean", "defects": "defect", "joints": "joint", "boards": "board", "stencils": "stencil",
-         "replaced": "replace", "replacement": "replace", "calibration": "calibrate", "recalibration": "calibrate",
-         "false": "false", "alarms": "alarm", "calls": "call", "bridging": "bridge"}
+from app.glossary import GLOSSARY, PARTICLES
+
+VERSION = "bm25-k1.5-b0.75-glossary2"
+# Any wording of a concept, in any language, becomes its canonical term (see app/glossary.py; shortcut: a hand list,
+# replace with a measured synonym/embedding layer only once retrieval quality is evaluated on real wording).
+TERMS = {w.lower(): canon for canon, words in GLOSSARY.items() for w in (canon, *words)}
+LONGEST = max(map(len, TERMS))
 STOP = {"the", "a", "an", "of", "on", "in", "and", "or", "to", "for", "with", "is", "was", "were", "be", "by",
         "at", "from", "this", "that", "it", "as", "no", "not"}
 
 
+def _strip(rest: str) -> str:
+    for p in PARTICLES:
+        if rest.endswith(p) and len(rest) > len(p):
+            return rest[: -len(p)]
+    return "" if rest in PARTICLES else rest
+
+
+def _segment(word: str) -> list[str]:
+    """Non-ASCII words: glossary words cut out from the left, longest first, so suffixes (Korean particles) and
+    scripts written without spaces (Japanese, Chinese) still match; unknown stretches are kept as written."""
+    out, rest, i = [], "", 0
+    while i < len(word):
+        hit = next((word[i:i + n] for n in range(min(LONGEST, len(word) - i), 1, -1) if word[i:i + n] in TERMS),
+                   None)
+        if hit is None:
+            rest, i = rest + word[i], i + 1
+            continue
+        out += [_strip(rest), hit] if rest else [hit]
+        rest, i = "", i + len(hit)
+    return [*out, _strip(rest)] if rest else out
+
+
 def tokens(text: str) -> list[str]:
-    words = re.findall(r"[a-z0-9]+", text.lower())
-    return [TERMS.get(w, w) for w in words if w not in STOP and len(w) > 1]
+    out = []
+    for w in re.findall(r"[^\W_]+", text.lower()):
+        for piece in ([w] if w.isascii() else _segment(w)):
+            if piece in STOP or len(piece) < 2:
+                continue
+            out += TERMS.get(piece, piece).split()
+    return out
 
 
 def bm25(query: str, docs: list[str], k1: float = 1.5, b: float = 0.75) -> list[tuple[float, list[str]]]:

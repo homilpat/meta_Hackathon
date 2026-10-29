@@ -16,7 +16,7 @@ Tests: `backend/tests/test_g8a_validator.py` (8), `backend/tests/test_g8a_experi
 
 ## BM25 + term map limits (`backend/src/app/retrieval.py`, `bm25-k1.5-b0.75-terms1`)
 
-- **English ASCII only.** The tokenizer keeps `[a-z0-9]+`; Korean (or any non-ASCII) wording contributes no terms.
+- **English ASCII only** (fixed later by `app/glossary.py`, see `POST_G9_REFACTOR_PLAN.md` #3). The tokenizer kept `[a-z0-9]+`; Korean (or any non-ASCII) wording contributed no terms.
   A Korean-only query still ranks on the case's own structured text, but the user's words are ignored.
 - **Hand-made synonym list** (`TERMS`, ~40 entries) for SMT stencil/paste wording; unseen synonyms, misspellings
   and inflections outside it do not match. No stemming.

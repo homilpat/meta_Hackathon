@@ -1,0 +1,91 @@
+"""Search glossary: one canonical term per concept with its wording in any language.
+
+The canonical term is the English word the stored records use (the S5 bank, experience fixtures, controlled
+documents), so a query in Korean, Japanese, Chinese or other English wording ranks the same records. A canonical
+value with a space stands for several terms ("솔더량" -> solder + volume). To support a new language or phrasing,
+add its words to the tuple of the concept; matching is case-insensitive and needs no code change.
+Words outside the glossary are still searched as written, so a Korean record can be found by a Korean word.
+"""
+
+GLOSSARY: dict[str, tuple[str, ...]] = {
+    # --- material / process ---------------------------------------------------------------------------------
+    "solder": ("paste", "솔더", "땜납", "납땜", "크림솔더", "솔더페이스트", "はんだ", "半田", "ソルダー", "焊锡",
+               "锡膏", "焊膏"),
+    "solder volume": ("솔더량", "도포량", "인쇄량", "はんだ量", "锡量"),
+    "volume": ("deposit", "deposits", "체적", "부피", "볼륨", "体積", "体积"),
+    "stencil": ("stencils", "스텐실", "메탈마스크", "ステンシル", "メタルマスク", "钢网", "模板"),
+    "aperture": ("apertures", "개구부", "개구", "어퍼처", "開口", "开口"),
+    "squeegee": ("스퀴지", "스퀴즈", "スキージ", "刮刀"),
+    "blade": ("블레이드",),
+    "print": ("인쇄", "프린트", "印刷"),
+    "printer": ("인쇄기", "프린터", "印刷機", "印刷机"),
+    "pressure": ("압력", "圧力", "压力"),
+    "reflow": ("리플로우", "리플로", "リフロー", "回流焊"),
+    "profile": ("프로파일", "プロファイル", "曲线"),
+    "flux": ("플럭스", "フラックス", "助焊剂"),
+    "viscosity": ("점도", "粘度"),
+    "formulation": ("배합", "조성", "配合"),
+    "solvent": ("용제", "溶剤", "溶剂"),
+    "recipe": ("레시피", "レシピ", "配方"),
+    "process": ("공정", "工程"),
+    "line": ("라인", "ライン", "产线"),
+    "equipment": ("설비", "장비", "設備", "设备"),
+    "board": ("boards", "pcb", "보드", "기판", "基板", "电路板"),
+    "panel": ("패널", "パネル", "拼板"),
+    "pads": ("pad", "패드", "パッド", "焊盘"),
+    "component": ("부품", "部品", "元件"),
+    "supplier": ("공급사", "공급업체", "협력사", "サプライヤー", "供应商"),
+    "lot": ("로트", "랏", "ロット", "批次"),
+    # --- condition / symptom --------------------------------------------------------------------------------
+    "low": ("insufficient", "shortfall", "under", "lower", "부족", "미달", "저하", "감소", "적음", "낮음", "낮은",
+            "不足", "少锡"),
+    "high": ("과다", "많음", "높음", "높은", "過多", "过多"),
+    "thicker": ("두꺼운", "두껍게"),
+    "wear": ("worn", "wearing", "마모", "마멸", "노후", "摩耗", "磨耗", "磨损"),
+    "clog": ("clogged", "clogging", "막힘", "막힌", "막혀", "막혔", "클로깅", "폐색", "目詰まり", "詰まり", "堵塞",
+             "堵孔"),
+    "drift": ("drifted", "드리프트", "ドリフト", "漂移"),
+    "scatter": ("scattered", "산포", "튐", "飛散", "飞溅"),
+    "bridge": ("bridging", "브리지", "브릿지", "쇼트", "단락", "ブリッジ", "桥连", "连锡"),
+    "wet": ("젖은", "습기", "濡れ", "潮湿"),
+    "defect": ("defects", "불량", "결함", "결점", "디펙트", "不良", "欠陥", "缺陷"),
+    "fail": ("불합격", "페일", "不合格"),
+    "failed": ("실패", "失敗", "失败"),
+    "false alarm": ("오탐", "오알람", "오경보", "誤報", "误报"),
+    "alarm": ("alarms", "알람", "경보", "アラーム", "报警"),
+    "exceeded": ("overrun", "overdue", "exceed", "exceeds", "초과", "경과", "超過", "超过"),
+    "interval": ("주기", "간격", "인터벌", "周期", "間隔", "间隔"),
+    "threshold": ("임계값", "임계치", "기준값", "閾値", "阈值"),
+    "limits": ("limit", "한계", "관리한계", "管理限界", "控制限"),
+    # --- action ---------------------------------------------------------------------------------------------
+    "clean": ("cleaning", "cleaned", "wipe", "세정", "청소", "클리닝", "와이프", "닦기", "清掃", "洗浄", "清洗"),
+    "replace": ("replaced", "replacement", "교체", "교환", "交換", "更换"),
+    "change": ("변경", "変更", "变更"),
+    "adjust": ("조정", "조절", "調整", "调整"),
+    "tune": ("튜닝",),
+    "calibrate": ("calibration", "recalibration", "교정", "캘리브레이션", "보정", "校正", "校准"),
+    "inspection": ("검사", "점검", "検査", "检测", "检验"),
+    "aoi": ("외관검사", "자동광학검사", "外観検査"),
+    "magnification": ("배율", "倍率"),
+    "checklist": ("체크리스트", "점검표", "チェックリスト", "检查表"),
+    "pm": ("예방보전", "予防保全", "预防维护"),
+    "call": ("calls",),
+    "joint": ("joints",),
+    "operators": ("operator", "작업자", "운영자", "作業者", "操作员"),
+    "customer": ("고객", "顧客", "客户"),
+    "template": ("템플릿", "양식", "テンプレート"),
+    "revision": ("개정", "改訂", "修订"),
+    "spec": ("사양", "규격", "仕様", "规格"),
+    # --- 8D ---------------------------------------------------------------------------------------------------
+    "cause": ("causes", "원인", "原因"),
+    "root cause": ("근본원인", "根本原因"),
+    "containment": ("봉쇄", "격리", "封じ込め", "围堵"),
+    "corrective": ("시정조치", "是正処置", "纠正措施"),
+    "effectiveness": ("효과", "유효성", "有効性", "有效性"),
+    "prevention": ("재발방지", "再発防止", "预防"),
+    "closure": ("종결", "完了", "关闭"),
+}
+
+# Korean particles and endings left over after a glossary word ("스텐실의", "막혔다"); dropped, not searched.
+PARTICLES = ("에서", "으로", "에게", "까지", "부터", "이다", "입니다", "했다", "되었다", "됨", "다", "의", "가", "이", "은",
+             "는", "을", "를", "에", "로", "와", "과", "도", "만", "및")

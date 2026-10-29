@@ -15,11 +15,13 @@ Status is what was actually executed; `NOT_RUN` / `NOT_IMPLEMENTED` are never co
 | TC-A-01 | closed case retrieved again, recurrence `NOT_YET_OBSERVED` | `test_g8a_experience::test_closed_case_is_an_effect_verified_reference_not_known`; `test_v5_5_g8::test_closed_case_becomes_searchable…` | PASS (local + CI #37, A) |
 | TC-A-02 | failed / recurred prior action chosen | `test_g8a_experience::test_negative_precedent_cannot_be_chosen_as_success_and_choice_is_audited`; `test_v5_5_g8::test_failed_or_recurrent_precedent…`; revocation actor: `test_revocation_records_who_revoked_it` | PASS (local + CI #37, A) |
 | TC-A-03 | right and wrong numbers in one sentence | `test_g8a_validator` (8: extra %, bare value + wrong %, value nowhere, rounding not over-blocked, other lot, wrong unit, unexecuted action, unconfirmed cause) | PASS (local + CI #37, A) |
-| TC-B-01 | edit → new version + diff + re-validation, approved version unchanged | `test_g9_docs::test_edit_creates_a_new_version…`; `DocEditor.test.tsx`; smoke "G9 edit -> v2", "v1 unchanged"; browser: edit saved as v2 with diff + validation badge | PASS (local, B) |
-| TC-B-02 | 3.2%→2.1%, other lot, false execution / cause | `test_g9_docs::test_wrong_number_other_lot_and_false_execution_or_cause_are_blocked`; smoke "G9 wrong number blocked" | PASS (local, B) |
-| TC-B-03 | concurrent edit / edit during review / policy change before approval | `test_g9_docs::test_concurrent_edit_review_and_stale_validation_are_refused`; smoke "G9 stale base refused" | PASS (local, B) |
-| TC-B-04 | no-key AI proposal + manual edit | `test_g9_docs::test_ai_proposal_is_not_applied…` (OFFLINE 503, manual PASS, TEST_DOUBLE proposal not applied); browser: "AI OFFLINE" shown | PASS (local, B) |
-| TC-C-01 … TC-F-01 | post-G9, G10, LIVE, final demo | — | NOT_STARTED |
+| TC-B-01 | edit → new version + diff + re-validation, approved version unchanged | `test_g9_docs::test_edit_creates_a_new_version…`; `DocEditor.test.tsx`; smoke "G9 edit -> v2", "v1 unchanged"; browser: edit saved as v2 with diff + validation badge | PASS (local + CI #38, B) |
+| TC-B-02 | 3.2%→2.1%, other lot, false execution / cause | `test_g9_docs::test_wrong_number_other_lot_and_false_execution_or_cause_are_blocked`; smoke "G9 wrong number blocked" | PASS (local + CI #38, B) |
+| TC-B-03 | concurrent edit / edit during review / policy change before approval | `test_g9_docs::test_concurrent_edit_review_and_stale_validation_are_refused`; smoke "G9 stale base refused" | PASS (local + CI #38, B) |
+| TC-B-04 | no-key AI proposal + manual edit | `test_g9_docs::test_ai_proposal_is_not_applied…` (OFFLINE 503, manual PASS, TEST_DOUBLE proposal not applied); browser: "AI OFFLINE" shown | PASS (local + CI #38, B) |
+| TC-C-01 | success D0→D8 + history choice + Docs edit/re-validation | `test_c_e2e::test_success_d0_to_d8_with_history_and_document_edit`; `scripts/e2e_http.py` (real uvicorn) | PASS (local, C) |
+| TC-C-02 | D6 failure / early closure | `test_c_e2e::test_failed_effectiveness_blocks_closure_and_reenters_d4`; `scripts/e2e_http.py` | PASS (local, C) |
+| TC-D-01 … TC-F-01 | G10, LIVE, final demo | — | NOT_STARTED |
 
 ## Frontend tests (`frontend/tests`, vitest)
 

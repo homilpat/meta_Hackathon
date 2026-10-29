@@ -539,6 +539,14 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
                                       content_sha256=doc.content_sha256, comment=body.comment,
                                       created_at=now()))
             log(session, case_id, actor, body.decision, f"{doc_type} v{version}: {body.comment}{note}", doc.id)
+            if body.decision == "APPROVE" and session.scalar(select(ApprovalEvent.id).join(
+                    DocumentVersion, ApprovalEvent.document_version_id == DocumentVersion.id).where(
+                    DocumentVersion.case_id == case_id, DocumentVersion.doc_type == doc_type,
+                    DocumentVersion.version < doc.version, ApprovalEvent.action == "APPROVE").limit(1)):
+                for d in impact.flag_downstream(session, case_id, {doc_type}):  # a re-approved upstream
+                    log(session, case_id, actor, "BASIS_CHANGED", f"{d['doc_type']} v{d['version']} builds on "
+                        f"{doc_type} v{doc.version}, which replaced an approved version; "
+                        f"{_approver(session, case_id, d['doc_type'])} must confirm its scope", d["document_version_id"])
             session.flush()
             return 200, _doc_out(session, doc)
 

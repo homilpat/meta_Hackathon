@@ -21,6 +21,9 @@ jobs:
       # Real uvicorn on an Alembic-migrated scratch DB: /app bundle, /ui, access, validator, experience, approval, audit.
       - run: python -m scripts.integration_smoke
         working-directory: backend
+      # Synthetic case D0 -> D8 over real HTTP: success (history + Docs edit + CLOSED) and D6 failure re-entry.
+      - run: python -m scripts.e2e_http
+        working-directory: backend
       # Meta tool-calling contract with the TEST_DOUBLE (not LIVE) and the D0-D8 flows.
       - run: python -m pytest -q tests/test_s3_investigation.py tests/test_v5_5_g8.py tests/test_v5_5_g7_d7_d8.py tests/test_security.py
         working-directory: backend

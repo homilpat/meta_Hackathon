@@ -108,6 +108,21 @@ def import_revision(session: Session, case_id: str, asset: SourceAssetInput) -> 
     return sorted(set(changed))
 
 
+def flag_downstream(session: Session, case_id: str, changed: set[str]) -> list[dict]:
+    """Latest APPROVED documents built on a changed upstream type become BASIS_CHANGED (cascading down ORDER)."""
+    changed, flagged = set(changed), []
+    for i, doc_type in enumerate(ORDER):
+        doc = session.scalar(select(DocumentVersion).where(
+            DocumentVersion.case_id == case_id, DocumentVersion.doc_type == doc_type)
+            .order_by(DocumentVersion.version.desc()).limit(1))
+        if doc and doc.status == "APPROVED" and changed & set(ORDER[:i]):
+            doc.status = "BASIS_CHANGED"
+            changed.add(doc_type)  # cascades: an RCA built on this plan is flagged too
+            flagged.append({"document_version_id": doc.id, "doc_type": doc_type, "version": doc.version,
+                            "status_before": "APPROVED", "status_after": "BASIS_CHANGED"})
+    return flagged
+
+
 def reopen(session: Session, case_id: str, seeds: list[str]) -> dict:
     """Mark only the reachable active documents REVALIDATION_REQUIRED and hold their pending reviews.
 
@@ -130,16 +145,6 @@ def reopen(session: Session, case_id: str, seeds: list[str]) -> dict:
                      "status_before": before, "status_after": doc.status,
                      "claims": sorted((n.split(":")[2] for n in claims if n.split(":")[1] == str(doc.id)),
                                       key=lambda cid: int(cid[1:]))})
-    reopened = {d["doc_type"] for d in docs if d["status_after"] != d["status_before"]}
-    flagged = []
-    for i, doc_type in enumerate(ORDER):
-        doc = session.scalar(select(DocumentVersion).where(
-            DocumentVersion.case_id == case_id, DocumentVersion.doc_type == doc_type)
-            .order_by(DocumentVersion.version.desc()).limit(1))
-        if doc and doc.status == "APPROVED" and reopened & set(ORDER[:i]):
-            doc.status = "BASIS_CHANGED"
-            reopened.add(doc_type)  # cascades: an RCA built on this plan is flagged too
-            flagged.append({"document_version_id": doc.id, "doc_type": doc_type, "version": doc.version,
-                            "status_before": "APPROVED", "status_after": "BASIS_CHANGED"})
+    flagged = flag_downstream(session, case_id, {d["doc_type"] for d in docs if d["status_after"] != d["status_before"]})
     return {"derived": [n for n in nodes if n.startswith(("PRED-", "XAI-"))], "claims": claims, "documents": docs,
             "basis_changed": flagged}

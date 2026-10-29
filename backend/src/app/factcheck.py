@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 from app import ncr, quality, registry
 from app.db import Action, CauseHypothesis, EffectivenessResult, Evidence, ProcessContext
 
-RULES_VERSION = "v5.5-g8.1"
+RULES_VERSION = "v5.5-g8.2"
 LOT = re.compile(r"\bL\d{2}\b")
 MEASUREMENT_UNITS = {"mm3", "um3", "µm3", "mm", "um", "µm"}
 UNIT_OF = {"spi_measurements": "mm3"}
@@ -165,10 +165,19 @@ def validate(session: Session, case_id: str, claims: list[dict], role: str | Non
                                      "annotate before approval", "WARN"))
         value = c.get("value")
         if value is not None:
+            # The value must appear in the text. Other numbers written with the claim's unit are not recomputed:
+            # lists sharing one unit ("centre 0.12046, LCL .., UCL 0.12906 mm3") are legitimate, but so is a wrong
+            # "2.1%" next to the right value looks the same to a regex, so they are flagged for review (G8-A).
             anywhere = [float(n) for n in re.findall(r"(?<![\w.])\d+(?:\.\d+)?(?![\w.]\d)", text)]
-            if (said := text_numbers(text, c.get("unit"))) and not any(abs(n - value) < 1e-9 for n in anywhere):
+            said = text_numbers(text, c.get("unit"))
+            wrong = [n for n in said if abs(n - value) >= 1e-9]
+            if said and not any(abs(n - value) < 1e-9 for n in anywhere):
                 issues.append(_issue(cid, "TEXT_VALUE_MISMATCH", f"text states {', '.join(f'{n:g}' for n in said)} "
                                      f"{c.get('unit')} but the claim value is {value:g}"))
+            elif wrong:
+                issues.append(_issue(cid, "TEXT_EXTRA_VALUE", f"text also states {', '.join(f'{n:g}' for n in wrong)} "
+                                     f"{c.get('unit')}, which the server did not recompute; check against the "
+                                     "source or split the claim", "WARN"))
             pred, expected = recompute(c, [by_ev[e] for e in ev_ids if e in by_ev])
             if pred is None:
                 predicates[cid] = {"op": "NOT_RECOMPUTED", "reason": "claim shape has no server recomputation"}

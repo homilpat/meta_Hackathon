@@ -83,7 +83,7 @@ Behavioural notes:
 | 3. 226 tests before vs after | baseline 226 passed at `58d316a` (root); 226 passed at `ac5cd20` from `backend/` (277 s); no test removed or edited except the static path in `test_health.py` and one comment | PASS |
 | 4. permissions / approval / evidence / 8D / Experience Memory / validator / TEST_DOUBLE / audit contracts | full pytest; integration smoke (403 unassigned, 403 self-approval, 409 stale hash, validator WARN/PASS, KNOWN retrieval, 503 without key, audit chain ok) | PASS |
 | 5. imports, pytest discovery, Alembic, static assets, scripts, links | as above; `scripts.history_compare` / `token_budget` / `integration_smoke` from `backend/` | PASS |
-| 6. Backend / Frontend / Integration CI on the same SHA, integration not bypassable | see CI below | see CI |
+| 6. Backend / Frontend / Integration CI on the same SHA, integration not bypassable | CI `#36` on `a462edf`; `#34` showed the gate | PASS |
 | 7. small commits + this audit | 4 phase commits + 1 fix | PASS |
 | Browser check | `/app` on uvicorn (scratch DB): created the SMT line case, opened D0~D8, Experience Memory retrieval refused with the server's 409 text before process context, then KNOWN with 6 matches | PASS |
 | Old DB protected | root `qualityops.db` sha256 prefix `e39fac5e96ad602b` before and after; no `backend/qualityops.db` created by tests | PASS |
@@ -98,3 +98,4 @@ against the CI scratch file. Fix: `DATABASE_URL` now replaces only the `alembic.
 Reproduced and verified locally with `DATABASE_URL` set: the 2 tests pass, the CLI `alembic upgrade head` still
 follows `DATABASE_URL`, and the full suite under the same condition: 226 passed (272 s).
 
+`#36` (`a462edf`) **succeeded** in all three jobs (backend, frontend, integration; 11 m 37 s). R0 = **PASS**.

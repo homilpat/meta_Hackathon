@@ -277,3 +277,9 @@
 - Environment: `%TEMP%\pytest-of-user` belongs to another local account, so local pytest runs pass `--basetemp`; `gh` is not installed, CI status was read on the GitHub Actions page.
 - Meta LIVE: BLOCKED_NO_CREDENTIALS (empty `MODEL_API_KEY`).
 - CI #35 (`ac5cd20`) found an R0-B regression: with `DATABASE_URL` set (CI job env), `migrations/env.py` overrode the URL that two migration tests set explicitly. Fixed so `DATABASE_URL` only replaces the `alembic.ini` default; re-verified with `DATABASE_URL` set locally.
+- R0 CI #36 (`a462edf`) succeeded in backend, frontend and integration → R0 PASS.
+
+## Phase A — G8 focused audit (2026-10-29)
+
+- Counterexamples first (`test_g8a_validator.py` 8, `test_g8a_experience.py` 3). Reproduced: a right value plus a wrong percentage in one sentence passed silently; closed cases with unobserved recurrence were not marked as reference cases; manual revoke did not record who revoked. Fixed minimally (see `docs/implementation/G8_FOCUSED_AUDIT.md`). Not reproduced (already refused): mixed lots, wrong unit, unexecuted execution, unconfirmed cause, superseded sources, pre-filtering before search.
+

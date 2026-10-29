@@ -263,10 +263,17 @@ def retrieve(session: Session, case_id: str, role: str, q: str = "", k: int = 6)
             warnings.append(f"{e.action_text}: problem recurred ({e.recurrence_note}); do not reuse as is")
         if e.outcome == "UNKNOWN":
             warnings.append(f"{e.action_text}: effect never verified; not ranked as a success")
+        if e.outcome == POSITIVE and e.recurrence == "NOT_YET_OBSERVED":
+            warnings.append(f"{e.action_text}: effect verified at D6, recurrence not yet observed; "
+                            "an effect-verified reference case, not a known fix")
+        level = ("NEGATIVE" if role_ == "NEGATIVE_PRECEDENT" else "UNVERIFIED_EFFECT" if e.outcome != POSITIVE else
+                 "VERIFIED_NO_RECURRENCE" if e.recurrence == "NONE" else
+                 "EFFECT_VERIFIED_REFERENCE" if e.recurrence == "NOT_YET_OBSERVED" else "EFFECT_VERIFIED_RECURRENCE_UNKNOWN")
         differing = [c for c in checks if c["status"] != "PASS"]
         matches.append({
             "entry_key": e.entry_key, "version": e.version, "source_kind": e.source_kind, "source_ref": e.source_ref,
             "source_sha256": e.source_sha256, "mode": "KNOWN" if known else "ANALOGICAL", "role": role_,
+            "evidence_level": level,
             "symptom": e.symptom_text, "cause": e.cause_text, "cause_status": e.cause_status,
             "action_code": e.action_code, "action": e.action_text, "outcome": e.outcome,
             "outcome_evidence": e.outcome_evidence, "recurrence": e.recurrence, "matched_factors": matched,
@@ -469,7 +476,8 @@ def make_experience_router(sessions: sessionmaker, current_user: Callable[..., A
             raise HTTPException(403, "REVIEWER role required")
         with sessions.begin() as session:
             ensure_entries(session)
-            e = revoke(session, key, body.reason)
-            return {"entry_key": e.entry_key, "version": e.version, "status": e.status, "reason": e.reason}
+            e = revoke(session, key, f"{body.reason} (revoked by {actor.id})")
+            return {"entry_key": e.entry_key, "version": e.version, "status": e.status, "reason": e.reason,
+                    "revoked_by": actor.id}
 
     return router

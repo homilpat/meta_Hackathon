@@ -30,6 +30,7 @@ from app.db import (
     PreventionDeployment,
     ProcessContext,
 )
+from app.fields import FreeText, OptionalText, text
 from app.workflow import Actor, log, require_case
 
 OPEN_ACTION = ("REQUESTED", "PLAN_APPROVED", "EXECUTED")
@@ -157,7 +158,7 @@ class RevisionIn(BaseModel):
     kind: str
     base_revision: int = Field(ge=0)  # 0 for a new document
     title: str = Field(min_length=3, max_length=200)
-    body: str = Field(min_length=10, max_length=5000)
+    body: text(10, 5000)
     site: str = "SITE-A"
     process_type: str = "PCB_SMT"
     customer: str = "*"
@@ -167,7 +168,7 @@ class RevisionIn(BaseModel):
 
 class ReleaseIn(BaseModel):
     effective_from: datetime | None = None
-    reason: str = Field(min_length=5, max_length=500)
+    reason: FreeText
 
 
 class Training(BaseModel):
@@ -178,7 +179,7 @@ class Training(BaseModel):
 class SisterLine(BaseModel):
     line: str
     applies: bool
-    reason: str = Field(min_length=5)
+    reason: FreeText
 
 
 class PreventionIn(BaseModel):
@@ -188,27 +189,27 @@ class PreventionIn(BaseModel):
     operators_in_scope: list[str] = []
     training: list[Training] = []
     sister_lines: list[SisterLine] = []
-    exceptions: str = Field(default="", max_length=1000)
+    exceptions: OptionalText = ""
 
 
 class AckIn(BaseModel):
-    contribution: str = Field(min_length=5, max_length=500)
+    contribution: FreeText
 
 
 class Risk(BaseModel):
-    risk: str = Field(min_length=5)
-    mitigation: str = Field(min_length=5)
+    risk: FreeText
+    mitigation: FreeText
     owner: str = Field(min_length=2)
 
 
 class ClosureIn(BaseModel):
     residual_risks: list[Risk] = Field(min_length=1)
     customer_notification_ref: str | None = None
-    comment: str = Field(min_length=5, max_length=1000)
+    comment: FreeText
 
 
 class ReopenIn(BaseModel):
-    reason: str = Field(min_length=10, max_length=1000)
+    reason: FreeText
 
 
 def make_d7_d8_router(sessions: sessionmaker, current_user: Callable[..., Actor]) -> APIRouter:

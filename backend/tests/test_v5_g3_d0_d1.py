@@ -105,7 +105,7 @@ def test_only_authorised_role_executes_and_verifier_must_be_independent(c):
     aid = hold(c).json()["action_id"]
     assert event(c, aid, "bob", "INDEPENDENTLY_VERIFIED", evidence=["REF:count"]).status_code == 409  # not executed
     assert event(c, aid, "alice", "EXECUTED", note="held 4 boards in cage A").status_code == 403
-    assert event(c, aid, "erin", "EXECUTED", note="short").status_code == 422
+    assert event(c, aid, "erin", "EXECUTED", note="  ").status_code == 422  # a note is required, its length is free
     assert event(c, aid, "erin", "EXECUTED", note="held panel L02-P09 in cage A").status_code == 201
     assert event(c, aid, "erin", "INDEPENDENTLY_VERIFIED", evidence=["REF:count"]).status_code == 403  # self
     assert event(c, aid, "bob", "INDEPENDENTLY_VERIFIED").status_code == 422  # no verification evidence
@@ -173,8 +173,8 @@ def test_missing_actor_wrong_role_and_alternate_assignee(c):
 
 def test_exception_is_logged_with_reason(c):
     r = c.post("/cases/L/team", headers=H("alice"), json={"event": "EXCEPTION", "responsibility": "PROCESS",
-                                                          "note": "x"})
-    assert r.status_code == 422
+                                                          "note": " "})
+    assert r.status_code == 422  # blank; any written reason is accepted
     r = c.post("/cases/L/team", headers=H("alice"),
                json={"event": "EXCEPTION", "responsibility": "PROCESS", "note": "no process engineer on night shift"})
     assert r.json()["members"]["PROCESS"]["status"] == "EXCEPTION"

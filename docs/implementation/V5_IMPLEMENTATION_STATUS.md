@@ -43,8 +43,8 @@ repeat upgrade, vitest 13, tsc 0, vite build 0, integration smoke 24/24, HTTP E2
 (same snapshot `19517fb45ba0de1b`, same 1,770 / 1,681 checked fields; after template v5.g5 the snapshot is `9c378117190f7608`), browser download and restart check
 (`docs/implementation/G10_EXPORT.md`). Old root `qualityops.db` unchanged (`e39fac5e96ad602b`).
 
-Residual risks: P2 items in `docs/implementation/POST_G9_REFACTOR_PLAN.md` (reason minimums differ;
-non-English search covers only glossary wording); Hangul statements are not part of the PDF read-back check; the DOCX was not
+Residual risks: P2 items in `docs/implementation/POST_G9_REFACTOR_PLAN.md` (non-English search covers only glossary
+wording); Hangul statements are not part of the PDF read-back check; the DOCX was not
 opened in Word desktop (python-docx and Chrome PDF only); no measured ROI or plant results are claimed.
 
 ## Spec §9 acceptance tests now

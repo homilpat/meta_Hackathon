@@ -24,7 +24,7 @@ export function Reports({ ctx }: { ctx: Ctx }) {
   const stage = d && stages.find(s => s.kind === d.kind)
   const act = async (path: string, body: J) => { await ctx.api(`/cases/${ctx.cid}/${d.kind}/${d.version}/${path}`, 'POST', body, true); setComment(''); ctx.refresh() }
   const say = async () => { await act('comments', { body: note, claim_id: claimFor || null, reply_to: replyTo }); setNote(''); setReplyTo(null) }
-  const resolve = async (id: number) => { await act(`comments/${id}/resolve`, { body: note || '해결' }); setNote('') }
+  const resolve = async (id: number) => { await act(`comments/${id}/resolve`, { body: note }); setNote('') }
   const openOn = (cl: string) => (d?.comments ?? []).filter((x: J) => x.open && x.claim_id === cl).length
   return <Page title="문서 및 결재" desc="8D 순서: D2 NCR(검토자) → D3 임시조치 계획(QA/생산) → D4 원인 가설(공정 엔지니어). 초안은 미리 쓸 수 있지만 결재는 앞 단계 승인 후에만 열립니다."
     action={author && <span>{KINDS.map(([k, t]) => <button key={k} className="button secondary" onClick={() => create(k)}>{t} 초안 생성</button>)}</span>}>
@@ -50,14 +50,14 @@ export function Reports({ ctx }: { ctx: Ctx }) {
         {author && d.author_id === ctx.me.id && d.status === 'DRAFT' && latestOf(d) && <button className="button primary full" disabled={!stage?.approval_open} onClick={() => act('request-review', { reviewer_id: approver })}>{approver}에게 검토 요청</button>}
         {d.status === 'BASIS_CHANGED' && <Note>기반 문서가 정정으로 재검토 중입니다. 이 문서의 내용은 정정된 행을 인용하지 않아 그대로이지만, {APPROVER_ROLE[d.doc_type]}가 새 기반에서 범위가 유효한지 확인해야 다음 단계 결재가 열립니다.</Note>}
         {ctx.me?.role === APPROVER_ROLE[d.doc_type] && d.status === 'BASIS_CHANGED' && <>
-          <input className="input" placeholder="확인 의견 (3자 이상)" value={comment} onChange={e => setComment(e.target.value)}/>
-          <div className="dual"><button className="button success" onClick={() => act('basis-check', { decision: 'NO_SCOPE_IMPACT', comment, content_sha256: d.content_sha256 })}>범위 영향 없음</button>
-            <button className="button danger" onClick={() => act('basis-check', { decision: 'REVISE', comment, content_sha256: d.content_sha256 })}>재작성 필요</button></div></>}
+          <input className="input" placeholder="확인 의견 (필수 · 자유 서술)" value={comment} onChange={e => setComment(e.target.value)}/>
+          <div className="dual"><button className="button success" disabled={!comment.trim()} onClick={() => act('basis-check', { decision: 'NO_SCOPE_IMPACT', comment, content_sha256: d.content_sha256 })}>범위 영향 없음</button>
+            <button className="button danger" disabled={!comment.trim()} onClick={() => act('basis-check', { decision: 'REVISE', comment, content_sha256: d.content_sha256 })}>재작성 필요</button></div></>}
         {ctx.me?.role === APPROVER_ROLE[d.doc_type] && d.status === 'IN_REVIEW' && latestOf(d) && <>
-          <input className="input" placeholder="검토 의견" value={comment} onChange={e => setComment(e.target.value)}/>
+          <input className="input" placeholder="검토 의견 (반려·추가 정보 요청 시 필수)" value={comment} onChange={e => setComment(e.target.value)}/>
           <div className="dual"><button className="button success" onClick={() => act('decision', { decision: 'APPROVE', comment, content_sha256: d.content_sha256 })}>승인</button>
-            <button className="button danger" onClick={() => act('decision', { decision: 'REJECT', comment, content_sha256: d.content_sha256 })}>반려</button></div>
-          <button className="button secondary full" onClick={() => act('decision', { decision: 'REQUEST_INFO', comment, content_sha256: d.content_sha256 })}>추가 정보 요청</button></>}
+            <button className="button danger" disabled={!comment.trim()} onClick={() => act('decision', { decision: 'REJECT', comment, content_sha256: d.content_sha256 })}>반려</button></div>
+          <button className="button secondary full" disabled={!comment.trim()} onClick={() => act('decision', { decision: 'REQUEST_INFO', comment, content_sha256: d.content_sha256 })}>추가 정보 요청</button></>}
       </Card>
       <DocEditor ctx={ctx} d={d} latest={latestOf(d)} onSaved={v => setSelKey(`${d.kind}:${v}`)}/>
       <Card><SectionTitle title="검토 코멘트" sub="주장 단위 · 감사 기록에 남음" action={<Badge tone={d.comments.some((x: J) => x.open) ? 'violet' : 'slate'}>열림 {d.comments.filter((x: J) => x.open).length}</Badge>}/>
@@ -66,7 +66,7 @@ export function Reports({ ctx }: { ctx: Ctx }) {
           <p>{x.body}</p>
           {d.comments.filter((r: J) => r.reply_to === x.comment_id).map((r: J) => <p key={r.comment_id} className="muted">↳ {r.actor_id}{r.kind === 'RESOLVE' ? ' (해결)' : ''}: {r.body}</p>)}
           {x.open && <span className="row-gap"><button className="citation" onClick={() => { setReplyTo(x.comment_id); setClaimFor(x.claim_id ?? '') }}>답글</button>
-            {(ctx.me?.id === d.author_id || ctx.me?.id === x.actor_id) && <button className="citation" onClick={() => resolve(x.comment_id)}>해결 처리</button>}</span>}</div>)}
+            {(ctx.me?.id === d.author_id || ctx.me?.id === x.actor_id) && <button className="citation" disabled={!note.trim()} title="아래 코멘트 칸에 해결 내용을 적은 뒤 누르세요" onClick={() => resolve(x.comment_id)}>해결 처리</button>}</span>}</div>)}
         <div className="row-gap"><select value={claimFor} onChange={e => setClaimFor(e.target.value)}><option value="">문서 전체</option>{d.claims.map((c: J) => <option key={c.claim_id}>{c.claim_id}</option>)}</select>
           {replyTo && <Badge tone="violet">#{replyTo}에 답글</Badge>}</div>
         <input className="input" placeholder="코멘트 (해결 처리 시 메모로도 사용)" value={note} onChange={e => setNote(e.target.value)}/>

@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app import actions, causes, ncr, quality
 from app.db import Action, CausalDecision, EffectivenessPlan, EffectivenessResult
+from app.fields import FreeText, text
 from app.workflow import Actor, log, require_case
 
 D5_DETAILS = ("feasibility", "risk_analysis", "side_effects")
@@ -172,13 +173,13 @@ class PlanIn(BaseModel):
     min_sample: int = Field(ge=10)
     acceptance: dict  # {"op": ">=" | "<=", "value": float}
     inspection_conditions: dict[str, str] = Field(min_length=1)
-    monitoring: str = Field(min_length=10, max_length=500)
+    monitoring: text(10, 500)
 
 
 class EffectIn(BaseModel):
     plan_id: int
     decision: Literal["EFFECTIVE", "NOT_EFFECTIVE", "INCONCLUSIVE"]
-    note: str = Field(min_length=10, max_length=1000)
+    note: FreeText
 
 
 def plan_out(p: EffectivenessPlan) -> dict:

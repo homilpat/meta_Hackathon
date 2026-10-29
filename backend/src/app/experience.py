@@ -34,6 +34,7 @@ from app.db import (
     ProcessContext,
     RecommendationDecision,
 )
+from app.fields import FreeText
 from app.workflow import Actor, log, require_case
 
 METHOD = f"experience-1 prefilter>bm25({retrieval.VERSION})>verified-outcome>factors"
@@ -374,11 +375,11 @@ class DecisionIn(BaseModel):
     retrieval_id: int
     entry_key: str
     decision: Literal["REVIEW_PRIOR_RESPONSE", "INVESTIGATE_MORE", "CONSIDER_ALTERNATIVE"]
-    reason: str = Field(min_length=10, max_length=1000)
+    reason: FreeText
 
 
 class RevokeIn(BaseModel):
-    reason: str = Field(min_length=10, max_length=500)
+    reason: FreeText
 
 
 def decision_out(session: Session, d: RecommendationDecision) -> dict:

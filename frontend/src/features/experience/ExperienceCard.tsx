@@ -2,8 +2,8 @@ import { Badge, Card, Note, SectionTitle } from '../../components/ui'
 import type { Ctx, J } from '../../types'
 
 // Experience Memory on the D0~D8 screen: retrieval, mode, matches and the three human choices (never a D5 approval).
-export function ExperienceCard({ xp, cid, api, run, role, f }: { xp: J; cid: string; api: Ctx['api']; run: (p: Promise<unknown>) => Promise<unknown>
-  role: string | undefined; f: Record<string, string> }) {
+export function ExperienceCard({ xp, cid, api, run, role, f, set }: { xp: J; cid: string; api: Ctx['api']; run: (p: Promise<unknown>) => Promise<unknown>
+  role: string | undefined; f: Record<string, string>; set: (k: string) => (e: { target: { value: string } }) => void }) {
   return (
     <Card className="mb"><SectionTitle title="과거 동일·유사 사건 (Experience Memory)" sub={xp.latest ? `모드 ${xp.latest.mode} · 검색 #${xp.latest.retrieval_id} · 유사도 ≠ 원인 확정 · 선택 ≠ D5 승인` : '아직 검색하지 않았습니다'}/>
       <button className="button secondary" onClick={() => run(api(`/cases/${cid}/experience/retrievals`, 'POST', { q: f.htext }))}>과거 사례 검색 (서버 결정론)</button>
@@ -15,8 +15,9 @@ export function ExperienceCard({ xp, cid, api, run, role, f }: { xp: J; cid: str
           <td className="wrap">{m.action}</td><td>{m.outcome} · {m.recurrence}</td><td className="wrap">{m.matched_factors.join(', ')}</td>
           <td className="wrap">{[...m.differing_factors, ...m.warnings].join(' · ') || '-'}</td>
           <td><div className="row-gap">{xp.latest.choices.filter((ch: string) => ch !== 'REVIEW_PRIOR_RESPONSE' || m.role === 'PRIOR_RESPONSE').map((ch: string) => <button key={ch} className="button secondary" style={{ height: 26, padding: '0 6px' }}
-            disabled={!['AUTHOR', 'PROCESS_ENGINEER'].includes(role ?? '')} onClick={() => run(api(`/cases/${cid}/experience/decisions`, 'POST', { retrieval_id: xp.latest.retrieval_id, entry_key: m.entry_key, decision: ch, reason: f.note || 'reviewed against current line conditions' }))}>{ch}</button>)}</div></td></tr>)}
+            disabled={!['AUTHOR', 'PROCESS_ENGINEER'].includes(role ?? '') || !f.whyx.trim()} onClick={() => run(api(`/cases/${cid}/experience/decisions`, 'POST', { retrieval_id: xp.latest.retrieval_id, entry_key: m.entry_key, decision: ch, reason: f.whyx }))}>{ch}</button>)}</div></td></tr>)}
       </tbody></table></div>}
+      {xp.latest && ['AUTHOR', 'PROCESS_ENGINEER'].includes(role ?? '') && <input className="input" aria-label="선택 사유" placeholder="선택 사유 (필수 · 자유 서술 · 감사 기록에 그대로 남음)" value={f.whyx} onChange={set('whyx')}/>}
       {xp.decisions.length > 0 && <p className="muted wrap mt">선택 기록: {xp.decisions.map((d: J) => `${d.decision} ${d.entry_key} (${d.actor_id})${d.stale ? ' · STALE' : ''}`).join(' · ')}</p>}</Card>
   )
 }

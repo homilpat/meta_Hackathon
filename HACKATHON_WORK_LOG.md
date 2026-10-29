@@ -327,3 +327,10 @@
 - Root cause of the template WARN (P2 #2): the NCR template put centre line, LCL and UCL in one claim (one stored value), and the validator had no SPC formula, so LCL/UCL and the three Cpk claims were published without server recomputation (Cpk silently `NOT_RECOMPUTED`).
 - Fix: `spc.subgroups / limits / cpk` are the single implementation used by the monitor and by `factcheck.recompute` (new predicates `spc_limit`, `cpk`; rules `v5.5-g8.3`); template `v5.g5` states one statistic per claim. Recurrence guard: `tests/test_template_contract.py` (every number in every server template recomputed, no BLOCK/extra-value issue; wrong LCL or Cpk refused 422).
 - Local: pytest 258 passed, ruff 0, integration smoke 24/24, HTTP E2E 2/2 (snapshot now `9c378117190f7608` because the template changed).
+
+## Post-F — reasons are free text, written by a person (2026-10-30)
+
+- Root cause of P2 #4: every gate defined its own reason minimum (3/5/10/20 characters), whitespace-only reasons passed, REJECT / REQUEST_INFO needed no reason, and `/app` filled empty D4/D6/D8/Experience reasons with canned English sentences (the only reason input sat on the actions card). Decision (user): reasons are free wording, required, never blank.
+- Fix: `app/fields.py` (`FreeText`, `OptionalText`) used by every reason/comment/note field; branch checks are non-blank; REJECT / REQUEST_INFO need a comment; UI cards each have their own reason input, buttons disabled until written, canned text removed (legacy `/ui` precedent-link note too). Specification content keeps its 10-character minimum, now trimmed. Three tests that asserted "too short → 422" now assert "blank → 422" per the decision.
+- Guards: `tests/test_reasons.py` (inspects every request model), `frontend/tests/ExperienceCard.test.tsx`.
+- Local: pytest 261 passed, ruff 0, smoke 24/24, HTTP E2E 2/2, vitest 14, tsc 0, vite build 0.

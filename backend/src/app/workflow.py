@@ -8,7 +8,7 @@ from typing import Annotated, Literal, NamedTuple
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 from starlette.convertors import StringConvertor, register_url_convertor
@@ -30,6 +30,7 @@ from app.db import (
     User,
     WorkflowEvent,
 )
+from app.fields import FreeText, OptionalText
 from app.ingestion import SourceAssetInput
 from app.model_provider import ModelProvider
 
@@ -69,24 +70,24 @@ class ReviewRequest(BaseModel):
 
 class Decision(BaseModel):
     decision: Literal["APPROVE", "REJECT", "REQUEST_INFO"]
-    comment: str = ""
+    comment: OptionalText = ""  # required for REJECT / REQUEST_INFO (decide checks it)
     content_sha256: str  # the exact version content the reviewer saw
 
 
 class BasisCheck(BaseModel):
     decision: Literal["NO_SCOPE_IMPACT", "REVISE"]
-    comment: str = Field(min_length=3, max_length=300)
+    comment: FreeText
     content_sha256: str
 
 
 class CommentIn(BaseModel):
-    body: str = Field(min_length=1, max_length=1000)
+    body: FreeText
     claim_id: str | None = None  # anchor to one claim, or the whole version
     reply_to: int | None = None
 
 
 class ResolveIn(BaseModel):
-    body: str = Field(min_length=1, max_length=500)
+    body: FreeText
 
 
 class NcrCreate(BaseModel):
@@ -96,7 +97,7 @@ class NcrCreate(BaseModel):
 
 class RevisionIn(BaseModel):
     asset: SourceAssetInput  # SYNTHETIC + APPROVED_FOR_EXTERNAL only; anything else is a 422
-    reason: str = Field(min_length=3, max_length=200)
+    reason: FreeText
 
 
 class Assign(BaseModel):
@@ -111,7 +112,7 @@ class InvestigateIn(BaseModel):
 class LinkIn(BaseModel):
     historical_case_id: str
     decision: Literal["ACCEPTED", "REJECTED"]
-    note: str = ""
+    note: OptionalText = ""
 
 
 def make_auth(sessions: sessionmaker) -> Callable[..., Actor]:
@@ -507,6 +508,8 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
     @router.post("/cases/{case_id}/{kind:doc}/{version}/decision")
     def decide(case_id: str, kind: str, version: int, body: Decision, key: IdemKey, actor: Who):
         doc_type = KINDS[kind]
+        if body.decision != "APPROVE" and not body.comment:
+            raise HTTPException(422, f"{body.decision} needs a comment saying why (it goes back to the author)")
 
         def run(session: Session) -> tuple[int, dict]:
             require_case(session, case_id, actor)

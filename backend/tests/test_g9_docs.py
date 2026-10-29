@@ -105,7 +105,7 @@ def test_concurrent_edit_review_and_stale_validation_are_refused(c):  # TC-B-03
 def test_roles_case_scope_and_self_approval(c):
     _, cid = with_rate(c)
     assert edit(c, 1, user="bob", changes=[{"claim_id": cid, "text": "x"}]).status_code == 403  # reviewer, not author
-    assert edit(c, 1, reason="ok", changes=[{"claim_id": cid, "text": "x"}]).status_code == 422  # reason too short
+    assert edit(c, 1, reason="   ", changes=[{"claim_id": cid, "text": "x"}]).status_code == 422  # blank reason
     assert edit(c, 1, changes=[{"claim_id": "C9999", "text": "x"}]).status_code == 422
     assert c.get("/cases/L/ncr/1", headers=H("ivan")).status_code in (401, 403)  # unknown / unassigned user
     r = ok(c.post("/cases/L/ncr/1/request-review", json={"reviewer_id": "alice"}, headers=H("alice")), 422) \

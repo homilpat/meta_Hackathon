@@ -25,6 +25,7 @@ from app.db import (
     Experiment,
     WhyLink,
 )
+from app.fields import FreeText, OptionalText, text
 from app.workflow import Actor, log, require_case
 
 CATEGORIES = ("MAN", "MACHINE", "MATERIAL", "METHOD", "MEASUREMENT", "ENVIRONMENT")  # 6M; 4M = first four
@@ -88,7 +89,7 @@ def confirm_blocks(session: Session, h: CauseHypothesis, basis: list[Experiment]
     if against:
         blocks.append(f"experiments {against} contradict this hypothesis; record REJECTED or INCONCLUSIVE, or "
                       "test a narrower hypothesis")
-    if h.counter_evidence_ids and len(counter_response.strip()) < 20:
+    if h.counter_evidence_ids and not counter_response.strip():
         blocks.append(f"counter evidence {h.counter_evidence_ids} is not addressed (counter_evidence_response)")
     ids = list(dict.fromkeys([*h.evidence_ids, *(i for e in basis for i in e.evidence_ids)]))
     unfit, _ = quality.check_use(session, h.case_id, ids, "ROOT_CAUSE")
@@ -144,7 +145,7 @@ def experiment_out(e: Experiment) -> dict:
 class HypothesisIn(BaseModel):
     cause_type: Literal[CAUSE_TYPES]
     category: Literal[CATEGORIES]
-    text: str = Field(min_length=10, max_length=1000)
+    text: text(10, 1000)
     evidence_ids: list[str] = []
     counter_evidence_ids: list[str] = []
     origin: Literal["HUMAN", "RCA_DRAFT", "AI_PROPOSED", "SHAP", "PRECEDENT"] = "HUMAN"
@@ -155,17 +156,17 @@ class WhyIn(BaseModel):
     parent_id: int
     child_id: int
     supporting_ids: list[str] = Field(min_length=1)
-    falsification_criteria: str = Field(min_length=10, max_length=500)
+    falsification_criteria: text(10, 500)
 
 
 class ExperimentIn(BaseModel):
     hypothesis_id: int
-    method: str = Field(min_length=10, max_length=1000)
+    method: text(10, 1000)
     controlled_conditions: list[str] = Field(min_length=1)
     baseline: dict = Field(min_length=1)
     intervention: dict = Field(min_length=1)
     sample_size: int = Field(ge=2)
-    acceptance_rule: str = Field(min_length=10, max_length=500)  # stated before the result
+    acceptance_rule: text(10, 500)  # stated before the result
     evidence_ids: list[str] = Field(min_length=1)
     result: Literal["SUPPORTS", "CONTRADICTS", "INCONCLUSIVE"]
 
@@ -174,8 +175,8 @@ class DecisionIn(BaseModel):
     hypothesis_id: int
     decision: Literal["CONFIRMED", "REJECTED", "INCONCLUSIVE"]
     basis_experiment_ids: list[int] = []
-    rationale: str = Field(min_length=10, max_length=1000)
-    counter_evidence_response: str = Field(default="", max_length=1000)
+    rationale: FreeText
+    counter_evidence_response: OptionalText = ""  # required when the hypothesis has counter evidence
 
 
 def make_d4_router(sessions: sessionmaker, current_user: Callable[..., Actor]) -> APIRouter:

@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app import factcheck, impact, ncr, validation
 from app.db import DocumentClaim, DocumentVersion
+from app.fields import FreeText
 from app.model_provider import ModelProvider, ProviderError
 from app.workflow import (
     KINDS,
@@ -44,7 +45,7 @@ class ClaimChange(BaseModel):
 
 class EditIn(BaseModel):
     expected_sha256: str  # content hash of the version the editor started from
-    reason: str = Field(min_length=5, max_length=500)
+    reason: FreeText
     changes: list[ClaimChange] = []
     add: list[dict] = []
     remove: list[str] = []
@@ -52,7 +53,7 @@ class EditIn(BaseModel):
 
 
 class ProposalIn(BaseModel):
-    instruction: str = Field(min_length=3, max_length=500)
+    instruction: FreeText
 
 
 def claims_of(session: Session, doc: DocumentVersion) -> list[dict]:

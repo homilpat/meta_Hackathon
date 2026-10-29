@@ -96,8 +96,8 @@ def record(session: Session, a: Action, event_type: str, actor_id: str, role: st
             raise HTTPException(403, "verifier must be independent of the executor")
         if not evidence:
             raise HTTPException(422, "independent verification needs verification evidence")
-    if event_type in ("EXECUTED", "NOT_EFFECTIVE", "RELEASED") and len(note) < 10:
-        raise HTTPException(422, f"{event_type} needs a note of at least 10 characters (what was done, where)")
+    if event_type in ("EXECUTED", "NOT_EFFECTIVE", "RELEASED") and not note.strip():
+        raise HTTPException(422, f"{event_type} needs a note (what was done, where)")
     known = set(session.scalars(select(Evidence.evidence_id).where(Evidence.case_id == a.case_id)))
     if bad := sorted(e for e in evidence if e.startswith("EV-") and e not in known):
         raise HTTPException(422, f"unknown evidence {bad}")

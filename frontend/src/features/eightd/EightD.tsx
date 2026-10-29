@@ -25,7 +25,7 @@ export function EightD({ ctx }: { ctx: Ctx }) {
   const [d8, setD8] = useState<J>(null)
   const [f, setF] = useState<Record<string, string>>({ signal_kind: 'SPC_SIGNAL', observed_defect: 'SIGNAL_ONLY', route: 'FULL_8D', severity: 'MEDIUM', scope_lots: '', rationale: '', evidence_ids: '',
     responsibility: 'QUALITY', user_id: 'bob', action_type: 'HOLD', targets: '', description: '', note: '', evidence: '',
-    cause_type: 'OCCURRENCE', category: 'MACHINE', htext: '', hev: '', causes: '', feasibility: '', risk: '', side: '', risk8: '', owner8: '', notify: '' })
+    cause_type: 'OCCURRENCE', category: 'MACHINE', htext: '', hev: '', causes: '', feasibility: '', risk: '', side: '', risk8: '', owner8: '', notify: '', mit8: '', why4: '', why6: '', why8: '', whyx: '' })
   const set = (k: string) => (e: { target: { value: string } }) => setF(x => ({ ...x, [k]: e.target.value }))
   useEffect(() => {
     if (!cid) return
@@ -96,7 +96,7 @@ export function EightD({ ctx }: { ctx: Ctx }) {
           <td><Badge tone={pd[k].status === 'KNOWN' ? 'green' : 'slate'}>{pd[k].status}</Badge></td><td>{pd[k].evidence_ids.length}건</td></tr>)}
       </tbody></table></div>
       <p className="muted wrap mt">범위 미상 {pd.unknown_scope.length}건 · 원본 버전 {Object.entries(pd.effective_source_versions).map(([k, v]) => `${k} v${v}`).join(', ')} · {pd.note}</p></Card>}
-    {xp && <ExperienceCard xp={xp} cid={cid} api={api} run={run} role={role} f={f}/>}
+    {xp && <ExperienceCard xp={xp} cid={cid} api={api} run={run} role={role} f={f} set={set}/>}
     {d4 && <Card className="mb"><SectionTitle title="D4 원인 가설 → 실험 → 판정" sub="원인 확정은 독립된 공정 엔지니어가 지지 실험(VALID 증거)으로만 기록 · SHAP·선례·AI 제안만으로는 확정 불가"/>
       <div className="table-wrap"><table><thead><tr><th>#</th><th>6M</th><th>유형</th><th>가설</th><th>출처</th><th>실험</th><th>상태</th><th>판정</th></tr></thead><tbody>
         {d4.hypotheses.map((h: J) => { const sup = h.experiments.filter((e: J) => e.result === 'SUPPORTS').map((e: J) => e.experiment_id)
@@ -104,10 +104,11 @@ export function EightD({ ctx }: { ctx: Ctx }) {
             <td className="wrap">{h.experiments.map((e: J) => `E${e.experiment_id} ${e.result} n=${e.sample_size} (${e.performed_by}, ${e.execution_mode})`).join(' · ') || '-'}</td>
             <td><Badge tone={h.status === 'CONFIRMED' ? 'green' : h.status === 'REJECTED' ? 'red' : 'amber'}>{h.status}</Badge></td>
             <td>{role === 'PROCESS_ENGINEER' && h.status === 'OPEN' && <div className="row-gap">
-              <button className="button success" style={{ height: 26, padding: '0 6px' }} onClick={() => run(api(`/cases/${cid}/causal-decisions`, 'POST', { hypothesis_id: h.hypothesis_id, decision: 'CONFIRMED', basis_experiment_ids: sup, rationale: f.note || 'supporting experiment reviewed' }))}>CONFIRMED</button>
-              <button className="button secondary" style={{ height: 26, padding: '0 6px' }} onClick={() => run(api(`/cases/${cid}/causal-decisions`, 'POST', { hypothesis_id: h.hypothesis_id, decision: 'INCONCLUSIVE', rationale: f.note || 'evidence insufficient' }))}>INCONCLUSIVE</button></div>}</td></tr> })}
+              <button className="button success" style={{ height: 26, padding: '0 6px' }} onClick={() => run(api(`/cases/${cid}/causal-decisions`, 'POST', { hypothesis_id: h.hypothesis_id, decision: 'CONFIRMED', basis_experiment_ids: sup, rationale: f.why4 }))} disabled={!f.why4.trim()}>CONFIRMED</button>
+              <button className="button secondary" style={{ height: 26, padding: '0 6px' }} onClick={() => run(api(`/cases/${cid}/causal-decisions`, 'POST', { hypothesis_id: h.hypothesis_id, decision: 'INCONCLUSIVE', rationale: f.why4 }))} disabled={!f.why4.trim()}>INCONCLUSIVE</button></div>}</td></tr> })}
         {!d4.hypotheses.length && <tr><td colSpan={8}><Empty>가설이 없습니다.</Empty></td></tr>}
       </tbody></table></div>
+      {role === 'PROCESS_ENGINEER' && <input className="input" aria-label="D4 판정 사유" placeholder="D4 판정 사유 (필수 · 자유 서술 · 감사 기록에 그대로 남음)" value={f.why4} onChange={set('why4')}/>}
       <div className="row-gap mt" style={{ flexWrap: 'wrap' }}><select value={f.category} onChange={set('category')}>{['MAN', 'MACHINE', 'MATERIAL', 'METHOD', 'MEASUREMENT', 'ENVIRONMENT'].map(x => <option key={x}>{x}</option>)}</select>
         <select value={f.cause_type} onChange={set('cause_type')}>{['OCCURRENCE', 'NON_DETECTION', 'SYSTEMIC'].map(x => <option key={x}>{x}</option>)}</select>
         <input className="input" style={{ flex: 2, marginTop: 0 }} placeholder="가설 (10자 이상)" value={f.htext} onChange={set('htext')}/>
@@ -128,9 +129,10 @@ export function EightD({ ctx }: { ctx: Ctx }) {
             <td className="wrap"><Badge tone={pv.computed === 'MEETS_CRITERIA' ? 'green' : pv.computed === 'FAILS_CRITERIA' ? 'red' : 'amber'}>{pv.computed}</Badge> {pv.observed.post ? `전 ${pv.observed.baseline.mean} (n=${pv.observed.baseline.n}) → 후 ${pv.observed.post.mean} (n=${pv.observed.post.n})` : ''} {pv.reasons.join(' · ')}</td>
             <td>{res.map((r: J) => <Badge key={r.result_id} tone={r.decision === 'EFFECTIVE' ? 'green' : r.decision === 'NOT_EFFECTIVE' ? 'red' : 'amber'}>{r.decision} ({r.reviewer_id})</Badge>)}</td>
             <td>{role === 'REVIEWER' && <div className="row-gap">{['EFFECTIVE', 'NOT_EFFECTIVE', 'INCONCLUSIVE'].map(d => <button key={d} className="button secondary" style={{ height: 26, padding: '0 6px' }}
-              onClick={() => run(api(`/cases/${cid}/effectiveness`, 'POST', { plan_id: p.plan_id, decision: d, note: f.note || 'reviewed the server comparison' }))}>{d}</button>)}</div>}</td></tr> })}
+              onClick={() => run(api(`/cases/${cid}/effectiveness`, 'POST', { plan_id: p.plan_id, decision: d, note: f.why6 }))} disabled={!f.why6.trim()}>{d}</button>)}</div>}</td></tr> })}
         {!d6.plans.length && <tr><td colSpan={6}><Empty>효과 검증 계획이 없습니다. (API: POST /effectiveness-plans, 실행 전 등록)</Empty></td></tr>}
-      </tbody></table></div></Card>}
+      </tbody></table></div>
+      {role === 'REVIEWER' && <input className="input" aria-label="D6 판정 사유" placeholder="D6 효과 판정 사유 (필수 · 자유 서술 · 감사 기록에 그대로 남음)" value={f.why6} onChange={set('why6')}/>}</Card>}
     <div className="dashboard-main">
       {d7 && <Card><SectionTitle title="D7 재발 방지 (문서 개정·교육·수평 전개)" sub={`상태 ${d7.state ?? '—'} · 등록부의 발효된 개정본만 인정 · '개정했다'는 문장은 증거가 아님`}/>
         <div className="table-wrap"><table><thead><tr><th>문서</th><th>개정</th><th>범위</th><th>교육</th><th>수평 전개</th></tr></thead><tbody>
@@ -141,16 +143,18 @@ export function EightD({ ctx }: { ctx: Ctx }) {
         {d7.reasons.length > 0 && <p className="muted wrap mt">미완료: {d7.reasons.join(' · ')}</p>}</Card>}
       {d8 && <Card><SectionTitle title="D8 종결" sub={`정책 ${d8.policy.policy_id} v${d8.policy.version} · 고객 통보 필요 ${String(d8.needs_customer_notification)} · 서명 ${d8.acknowledged.join(', ') || '-'}`}/>
         {d8.blocks.length ? <ul className="wrap muted" style={{ fontSize: 11 }}>{d8.blocks.map((b: string) => <li key={b}>{b}</li>)}</ul> : <Note>모든 종결 조건 충족 (합성 데이터 기준)</Note>}
-        {d8.team[me?.id ?? ''] && !d8.acknowledged.includes(me?.id) && <button className="button success" onClick={() => run(api(`/cases/${cid}/closure/acknowledgements`, 'POST', { contribution: f.note || 'reviewed the final result' }))}>결과 확인 서명</button>}
+        <input className="input" aria-label="D8 사유" placeholder="확인 내용 · 종결 의견 · 재오픈 사유 사유 (필수 · 자유 서술 · 감사 기록에 그대로 남음)" value={f.why8} onChange={set('why8')}/>
+        {d8.team[me?.id ?? ''] && !d8.acknowledged.includes(me?.id) && <button className="button success" disabled={!f.why8.trim()} onClick={() => run(api(`/cases/${cid}/closure/acknowledgements`, 'POST', { contribution: f.why8 }))}>결과 확인 서명</button>}
         {role === 'REVIEWER' && <div className="mt"><div className="dual"><input className="input" placeholder="잔여 위험" value={f.risk8} onChange={set('risk8')}/><input className="input" placeholder="위험 담당" value={f.owner8} onChange={set('owner8')}/></div>
+          <input className="input" placeholder="잔여 위험 완화 방안" value={f.mit8} onChange={set('mit8')}/>
           <input className="input" placeholder="고객 통보 참조번호 (출하·고객 영향 시 필수)" value={f.notify} onChange={set('notify')}/>
-          <div className="dual"><button className="button primary" onClick={() => run(api(`/cases/${cid}/closure`, 'POST', { residual_risks: [{ risk: f.risk8, mitigation: f.note || 'monitored', owner: f.owner8 }], customer_notification_ref: f.notify || null, comment: f.note || 'closure reviewed' }))}>D8 종결</button>
-            <button className="button secondary" disabled={d8.state.D8 !== 'CLOSED'} onClick={() => run(api(`/cases/${cid}/closure/reopen`, 'POST', { reason: f.note || 'reopened for re-investigation' }))}>재오픈</button></div></div>}
+          <div className="dual"><button className="button primary" disabled={!f.why8.trim() || !f.risk8.trim() || !f.mit8.trim()} onClick={() => run(api(`/cases/${cid}/closure`, 'POST', { residual_risks: [{ risk: f.risk8, mitigation: f.mit8, owner: f.owner8 }], customer_notification_ref: f.notify || null, comment: f.why8 }))}>D8 종결</button>
+            <button className="button secondary" disabled={d8.state.D8 !== 'CLOSED' || !f.why8.trim()} onClick={() => run(api(`/cases/${cid}/closure/reopen`, 'POST', { reason: f.why8 }))}>재오픈</button></div></div>}
         {d8.state.D8 === 'CLOSED' && <ExportButtons user={me.id} path={`/cases/${cid}/report/export`} label="8D 보고서"/>}
         <p className="muted wrap mt">이력: {d8.history.map((h: J) => `${h.decision}(${h.actor_id}, ${h.snapshot_sha256.slice(0, 10)})`).join(' → ') || '-'}</p></Card>}
     </div>
     <Card className="mb"><SectionTitle title="조치 실행 기록" sub="REQUESTED → (PLAN_APPROVED) → EXECUTED → INDEPENDENTLY_VERIFIED · 실행자와 확인자는 달라야 함"/>
-      <div className="dual"><input className="input" placeholder="실행/확인 메모 (실행은 10자 이상)" value={f.note} onChange={set('note')}/><input className="input" placeholder="확인 근거 (쉼표 구분, EV-... 또는 REF:...)" value={f.evidence} onChange={set('evidence')}/></div>
+      <div className="dual"><input className="input" placeholder="실행/확인 메모 (EXECUTED·RELEASED·NOT_EFFECTIVE는 필수)" value={f.note} onChange={set('note')}/><input className="input" placeholder="확인 근거 (쉼표 구분, EV-... 또는 REF:...)" value={f.evidence} onChange={set('evidence')}/></div>
       <div className="table-wrap mt"><table><thead><tr><th>#</th><th>단계</th><th>조치</th><th>대상</th><th>상태</th><th>이력</th><th>기록</th></tr></thead><tbody>
         {acts.map(a => <tr key={a.action_id}><td className="id">{a.action_id}</td><td>{a.stage}</td><td>{a.action_type}</td><td>{a.targets.join(', ')}</td><td><Badge tone={stageTone(a.status)}>{a.status}</Badge> <Badge tone="amber">{a.execution_mode}</Badge></td>
           <td className="wrap">{a.events.map((e: J) => `${e.event_type}(${e.actor_id})`).join(' → ')}</td>

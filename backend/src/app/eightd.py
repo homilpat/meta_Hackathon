@@ -22,6 +22,7 @@ from app.db import (
     TriageAssessment,
     WorkflowPolicy,
 )
+from app.fields import FreeText, OptionalText, text
 from app.workflow import DEMO_USERS, KINDS, STEP, Actor, log, require_case, require_role
 
 
@@ -143,7 +144,7 @@ class PolicyIn(BaseModel):
 class QualityIn(BaseModel):
     evidence_id: str
     quality_state: Literal["VALID", "UNVERIFIED", "SUSPECT", "CONFLICTED", "SUPERSEDED"]
-    reason: str = Field(min_length=5, max_length=500)
+    reason: FreeText
 
 
 class ProcessIn(BaseModel):
@@ -159,7 +160,7 @@ class TriageIn(BaseModel):
     scope_lots: list[str] = []
     route: Literal["NCR_ONLY", "FULL_8D", "EMERGENCY_FULL_8D"]
     severity: Literal["LOW", "MEDIUM", "HIGH"]
-    rationale: str = Field(min_length=10, max_length=1000)
+    rationale: FreeText
     evidence_ids: list[str] = Field(min_length=1)
 
 
@@ -168,13 +169,13 @@ class TeamIn(BaseModel):
     responsibility: Literal["LEAD", "QUALITY", "PRODUCTION", "PROCESS", "SUPPLIER", "CUSTOMER"]
     user_id: str | None = None
     due_at: str | None = None
-    note: str = Field(default="", max_length=500)
+    note: OptionalText = ""  # required for EXCEPTION
 
 
 class ActionIn(BaseModel):
     action_type: Literal["HOLD", "SORT", "STOP_SHIP", "QUARANTINE", "CUSTOMER_NOTIFY_REQUEST", "OTHER",
                          "PROCESS_CHANGE", "EQUIPMENT_CHANGE", "INSPECTION_CHANGE", "TRAINING"]
-    description: str = Field(min_length=10, max_length=1000)
+    description: text(10, 1000)
     targets: list[str] = []  # D3/urgent: at least one affected object
     stage: Literal["D3", "D5"] = "D3"
     cause_ids: list[int] = []  # D5: cause hypotheses this corrective action addresses
@@ -184,7 +185,7 @@ class ActionIn(BaseModel):
 class ActionEventIn(BaseModel):
     event_type: Literal["PLAN_APPROVED", "EXECUTED", "INDEPENDENTLY_VERIFIED", "RELEASED", "NOT_EFFECTIVE",
                         "CANCELLED"]
-    note: str = Field(default="", max_length=1000)
+    note: OptionalText = ""  # required for EXECUTED / NOT_EFFECTIVE / RELEASED
     evidence: list[str] = []
 
 
@@ -362,7 +363,7 @@ def make_v5_router(sessions: sessionmaker, current_user: Callable[..., Actor]) -
             user = body.user_id
             if body.event in ("ASSIGN", "EXCEPTION") and actor.role != lead_role:
                 raise HTTPException(403, f"only the {lead_role} (D1 lead role) assigns the team")
-            if body.event == "EXCEPTION" and len(body.note) < 10:
+            if body.event == "EXCEPTION" and not body.note:
                 raise HTTPException(422, "an exception needs a reason (missing skill, alternate plan)")
             if body.event == "ASSIGN":
                 if user not in DEMO_USERS or not session.scalar(select(Assignment.id).where(

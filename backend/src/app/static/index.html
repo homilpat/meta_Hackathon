@@ -62,7 +62,7 @@ async function loadDetail(){
   $('fix').onclick=async()=>{const a=await (await fetch('/synthetic/7/spi-correction')).json();await api(`/cases/${cur}/source-revisions`,'POST',{asset:a,reason:'SPI re-measurement of P02/B01 pin 1'},uid());loadDetail()};
   $('pr').onclick=async()=>{await api('/models/train','POST',{seed:11});await api(`/cases/${cur}/predictions`,'POST',{},uid());loadDetail()};
   document.querySelectorAll('[data-ev]').forEach(a=>a.onclick=e=>{e.preventDefault();showPred(a.dataset.ev,preds)});
-  document.querySelectorAll('[data-link]').forEach(b=>b.onclick=async()=>{await api(`/cases/${cur}/history/links`,'POST',{historical_case_id:b.dataset.link,decision:b.dataset.d,note:'set in UI'});loadDetail()});
+  document.querySelectorAll('[data-link]').forEach(b=>b.onclick=async()=>{await api(`/cases/${cur}/history/links`,'POST',{historical_case_id:b.dataset.link,decision:b.dataset.d});loadDetail()});
   $('inv').onclick=async()=>{$('msg').textContent='Investigation running…';await api(`/cases/${cur}/investigations`,'POST',{},uid());loadDetail()};
   document.querySelectorAll('[data-run]').forEach(b=>b.onclick=async()=>{await api(`/cases/${cur}/ncr`,'POST',{investigation_run_id:+b.dataset.run},uid());loadDetail()});
   $('as').onclick=async()=>{for(const u of ['bob','erin','frank'])await api(`/cases/${cur}/assignments`,'POST',{user_id:u});loadDetail()};

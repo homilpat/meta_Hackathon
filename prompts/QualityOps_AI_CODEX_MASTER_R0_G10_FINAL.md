@@ -418,3 +418,95 @@ RISKS: <P0/P1/P2, reproducer, mitigation>
 ### 종료 규칙
 
 **R0를 완료하지 못한 채 G9 인수를 진행하지 않는다. G9·통합 감사가 미완료면 G10 승인본 출력을 완료로 표시하지 않는다. Meta LIVE 미검증은 별도 명시하고 TEST_DOUBLE로 대체 주장하지 않는다.** 모든 변경에서 신뢰 가능한 실제 실행 증거를 남긴다.
+
+
+---
+
+## 12. NEW — AG0~AG5 Agent-First UX 전환 실행 명령 (기존 R0~G10 이후, 신규 작업)
+
+> 반드시 루트 요구사항 \`QualityOps_AI_FINAL_REQUIREMENTS_v5_5_MONOREPO_FINAL.md\` **§22**를 최신 추가 계약으로 읽는다. 이전 단계의 수행 기록·Gate·테스트는 재작성/삭제하지 않는다. Figma 지시문: \`prompts/FIGMA_MAKE_AGENT_FIRST_UI.md\`. **본 장은 개발 명령이며 구현 완료 기록이 아니다.**
+
+### 12.1 Codex에게 보내는 실행 지시
+\`\`\`text
+You are implementing AGENT-FIRST UX (AG0 -> AG5) on homilpat/meta_Hackathon.
+Read the root v5.5 MONOREPO FINAL specification including §22, the current master prompt,
+README, V5_IMPLEMENTATION_STATUS, traceability and latest GitHub CI, and inspect actual code.
+GOAL: show users one primary QualityOps AI Agent, while preserving all G0-G10 functionality,
+the same API/domain semantics, same human approvals, validated evidence, full audit trail,
+and independently accessible My Tasks / Department Tasks / approval and manual fallback UI.
+Do NOT merge backend feature modules into one LLM prompt. Do NOT replace validators, workflow
+gates, role enforcement, document versioning, or export conditions. Do NOT invent new approval
+semantics or let the model directly modify DB records. Do NOT claim Meta LIVE success without
+a successful validated external tool call.
+
+Implement incrementally AG0 then AG1 then AG2 then AG3 then AG4 then AG5; stop for genuine
+blocking dependencies, but proceed with independently testable work. Each phase must include
+tests, observed evidence, limitations, commit SHA and CI. Prefer narrowly scoped refactors.
+Keep existing frontend feature components and /queue?scope=mine|department; add a primary
+Agent screen and reusable inline evidence/chart/D0-D8/approval/diff/export cards.
+Reuse backend tools and endpoints, enforcing server-side access control and state transitions.
+The agent is an orchestrator, not a privileged actor. Respect authorization and idempotency.
+Pause at NEEDS_HUMAN; never auto-approve, fake action execution, confirm untested causes,
+or close cases without all required conditions.
+Use a read-only tool allowlist first. Add write workflows only after passing security tests.
+Report per-phase: baseline SHA, dependency state, files changed, endpoint contracts, migrations,
+unit/UI/HTTP E2E, negative tests, model/provider mode, CI status and remaining risks.
+Do not mark tests PASS unless run. Do not redesign unrelated visual styles or delete old features.
+\`\`\`
+
+### 12.2 Phase DAG
+\`\`\`text
+Existing R0 / G0-G10 preserved & baseline verified
+  └─ AG0 contract inventory / tests / baseline
+       └─ AG1 Agent shell + Queue navigation + UI fallback
+            └─ AG2 read-only tools + evidence cards
+                 └─ AG3 safe writes, approvals, resumable tasks
+                      └─ AG4 G9/G10 + parity E2E
+                           └─ AG5 usability + regression + release evidence
+Meta LIVE verification: independent credential-gated track, never simulated as LIVE
+\`\`\`
+
+### 12.3 Detailed execution / exit criteria
+| Phase | Implement | Explicit exit criteria |
+|---|---|---|
+| AG0 | inspect repo and collect OpenAPI/role/route/test baseline; draw tool safety matrix read/write/human-only | current SHA/CI + full baseline tests + protected contracts documented; no feature code regression |
+| AG1 | primary Agent UI, current Case/role context, online badge, chat timeline, task list links, manual screen fallback, responsive components | frontend typecheck/vitest/build, Queue existing tests and navigation, no broken static bundle |
+| AG2 | server intent parser and read-only tool registry using existing adapters; render evidence/lot/version/SPC/RAG/ML/queue cards | ACL/LOT correctness, unsupported-cause guard, prompt-injection guard, deterministic offline contract tests; no new mutations |
+| AG3 | allowlisted write tools, typed confirmation cards, human review workflow, pause/resume/revalidate, idempotency | unauthorized approval/false execution/stale hash/duplicate retries blocked; persisted task survives refresh and role switch; audit intact |
+| AG4 | document editor/diff/validation/export from chat; same underlying endpoints as old UI; dual-route comparison | D0→D8 success and D6 failure via real HTTP; exported snapshot and audit matches old UI; full legacy regression |
+| AG5 | compare user action count/time/errors; keyboard/mobile/error/Meta unavailable states; repeated fresh DB E2E, latest CI | documented measured results and risks; backend/frontend/integration jobs successful at same SHA; no fabricated LIVE pass |
+
+### 12.4 Implementation boundaries
+- Frontend reuse \`frontend/src/App.tsx\`, \`frontend/src/features/queue/Queue.tsx\`, \`frontend/src/features/eightd/EightD.tsx\`, \`frontend/src/features/documents/DocEditor.tsx\`, \`frontend/src/api/client.ts\`. New directory \`frontend/src/features/agent/\` is suggested, not mandatory. Preserve React feature boundaries, no monolithic App.tsx rewrite.
+- Backend reuse \`backend/src/app/taskrouter.py\`, \`tools.py\`, \`investigator.py\`, \`workflow.py\`, \`validation.py\`, \`factcheck.py\`, \`experience.py\`, \`export.py\`; server API adapter/allowlist preferred over direct database access. New \`agent/\` package only if justified.
+- Show server origin, effective version/hash/role, validation state and provenance per result card. Approval card must use real permission checks; never just change frontend state to 'approved'.
+- Do not create speculative endpoint names as if they already exist; enumerate actual routes and add only missing capabilities, with API tests and migration as needed.
+- Reuse real CI workflow and same SHA: backend, frontend, integration. New test names should be added to \`docs/testing/REQUIREMENT_TEST_TRACEABILITY.md\` after they actually exist.
+- Existing spec §9 and §20.4 failure/stop rules remain binding.
+
+### 12.5 New acceptance cases
+AG-T01 wrong Case/LOT → clarify; AG-T02 bypass role/approval → 403/409;
+AG-T03 D6 ineffective → D4 reopened; AG-T04 unsupported number/source → BLOCK;
+AG-T05 stale version → blocked; AG-T06 retrieved prompt injection → treated as data;
+AG-T07 model outage → Queue/manual workflow usable; AG-T08 refresh → persisted task;
+AG-T09 duplicate retries → once-only mutation; AG-T10 prior UI vs Agent parity;
+AG-T11 exported approved file vs draft denial; AG-T12 role switch no cross-user task leak.
+
+### 12.6 Per-phase report template
+\`\`\`text
+PHASE: AG0 / AG1 / AG2 / AG3 / AG4 / AG5
+BASE_SHA / HEAD_SHA:
+DEPENDENCY_GATE:
+CHANGED_FILES:
+FUNCTIONAL_PARITY:
+AUTOMATION_VS_HUMAN_BOUNDARY:
+TESTS_RUN: (actual commands/results/counts)
+SECURITY_NEGATIVE_TESTS:
+REAL_HTTP_E2E:
+FRONTEND_BUILD / BUNDLE_PARITY:
+META: LIVE_VERIFIED / TEST_DOUBLE / BLOCKED_NO_CREDENTIALS
+CI: exact run URL / PASS / CI_NOT_VERIFIED
+RISKS / BLOCKERS:
+EXIT: PASS / PARTIAL / BLOCKED / NOT_RUN
+NEXT_UNLOCKED:
+\`\`\`

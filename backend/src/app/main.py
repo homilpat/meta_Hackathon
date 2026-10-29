@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, event, func, select
 from sqlalchemy.orm import sessionmaker
 
+import app as paths
 from app import effect, ncr, spc
 from app.causes import make_d4_router
 from app.closure import make_d7_d8_router
@@ -108,9 +109,10 @@ def serialize_sqlite(engine) -> None:
         conn.exec_driver_sql("BEGIN IMMEDIATE")
 
 
-def create_app(database_url: str = "sqlite:///qualityops.db",
+def create_app(database_url: str | None = None,
                provider: ModelProvider | None = None) -> FastAPI:
     app = FastAPI(title="QualityOps AI", version="0.6.0")
+    database_url = database_url or paths.database_url()
     engine = create_engine(database_url, connect_args={"timeout": 30} if database_url.startswith("sqlite") else {})
     if engine.dialect.name == "sqlite":
         serialize_sqlite(engine)
@@ -343,7 +345,7 @@ def create_app(database_url: str = "sqlite:///qualityops.db",
     @app.get("/reference-models/steel")
     def steel_reference() -> dict:
         """Aggregate results of the REAL-data reference model (scripts/steel_model.py); no source rows."""
-        path = Path("docs/steel_eval.json")
+        path = paths.EVAL_DIR / "steel_eval.json"
         if not path.is_file():
             raise HTTPException(404, "Run python -m scripts.steel_model first")
         return json.loads(path.read_text(encoding="utf-8"))

@@ -22,12 +22,12 @@ def test_built_web_ui_is_served_when_present():
     from pathlib import Path
 
     client = TestClient(app)
-    if (Path(__file__).parents[1] / "app" / "static" / "web" / "index.html").is_file():
+    if (Path(__file__).parents[1] / "src" / "app" / "static" / "web" / "index.html").is_file():
         assert '<div id="root">' in client.get("/app/").text
 
 
 def test_steel_reference_is_aggregates_only_and_beats_baselines():
-    out = TestClient(app).get("/reference-models/steel").json()  # committed docs/steel_eval.json
+    out = TestClient(app).get("/reference-models/steel").json()  # committed docs/evaluations/steel_eval.json
     assert out["data_origin"] == "REAL" and "CC BY 4.0" in out["attribution"]
     m = out["metrics_test"]
     assert m["lightgbm"]["macro_f1"] > m["logistic_regression"]["macro_f1"] > m["majority_class"]["macro_f1"]

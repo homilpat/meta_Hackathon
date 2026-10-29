@@ -41,4 +41,4 @@ ON checks ['AOI_RERUN', 'XRAY_CROSS_SECTION']; ON warnings ['H02: PRINTER_PRESSU
 | Q19 | QF-K | NORMAL+AOI_PASS | - |  |  | - | no |
 | Q20 | QF-K | SPI_VOLUME_LOW+AOI_PASS | - |  |  | - | no |
 
-Raw per-query output: `docs/history_eval.json`.
+Raw per-query output: `docs/evaluations/history_eval.json`.

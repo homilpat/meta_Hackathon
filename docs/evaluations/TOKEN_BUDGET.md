@@ -6,9 +6,9 @@ half scored by the SPI model). No model was called.
 | | tool calls | mean tool-result chars | est. tokens (chars/4) |
 |---|---|---|---|
 | Before: raw reads (context, 4 event types, integrity, predictions) | 7 | 11953 | 2988 |
-| After: `get_case_summary` | 1 | 1055 | 264 |
+| After: `get_case_summary` | 1 | 1065 | 266 |
 
-Tool-result payload reduction: **91.2%**. Fixed per-request overhead (system prompt + tool specs):
+Tool-result payload reduction: **91.1%**. Fixed per-request overhead (system prompt + tool specs):
 4250 chars, sent on every round, so fewer rounds also save it again each time.
 Every source/model evidence id cited by the NCR template is present in the summary: True
 (0 cases missing ids).

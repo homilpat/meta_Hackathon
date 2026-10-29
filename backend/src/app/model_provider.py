@@ -8,6 +8,8 @@ from typing import Protocol
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from app import REPO_ROOT
+
 MODEL = "muse-spark-1.3"
 URL = "https://api.meta.ai/v1/chat/completions"
 # Last-line egress check on the exact bytes we are about to send.
@@ -38,10 +40,11 @@ class ModelProvider(Protocol):
 def read_key() -> str:
     if key := os.environ.get("MODEL_API_KEY"):
         return key
-    if Path(".env").is_file():
-        for line in Path(".env").read_text(encoding="utf-8").splitlines():
-            if line.startswith("MODEL_API_KEY="):
-                return line.partition("=")[2].strip().strip('"').strip("'")
+    for env in (Path(".env"), REPO_ROOT / ".env"):  # working directory first (as before), then the repo root
+        if env.is_file():
+            for line in env.read_text(encoding="utf-8").splitlines():
+                if line.startswith("MODEL_API_KEY="):
+                    return line.partition("=")[2].strip().strip('"').strip("'")
     return ""
 
 

@@ -561,3 +561,69 @@ E Meta LIVE: 자격 증명 독립 분기, 실행 시 LIVE 결과와 스모크·�
 - **경로 이전:** 이전 `app/`, `web/`, `tests/`, `scripts/`, `migrations/` 문서 경로는 옛 구조다. **실행 명령과 새 문서에는 반드시 실제 파일의 새 경로**를 사용한다. 검증용 이력 문서의 과거 경로·결과를 삭제하지 않는다.
 - **미구현 테스트:** 실제로 존재하지 않는 Frontend 테스트·Meta LIVE·실환경 데이터/ROI 실험은 `NOT_RUN` 또는 `NOT_IMPLEMENTED`로 구분하고 성공이라고 기록하지 않는다.
 - **최종 인수 자료:** README 실행법, `docs/architecture/REFACTOR_AUDIT.md`, 요구사항↔코드↔테스트 추적표, 최신 구현 상태, 감사/보안 한계, G10 DOCX/PDF 검증 증거, Meta LIVE 로그, 데모 재현 순서, 작업 커밋 목록.
+
+
+---
+
+## 22. Agent-First UX 전환 계약 (v5.6 추가 요구사항, 기존 v5.5 계약 보존)
+
+### 22.1 목표와 범위
+- **목표:** 기존 G0~G10 전체 도메인 기능을 삭제·간소화·재구현하지 않고 사용자 진입점만 대화형 QualityOps Agent 중심으로 통합한다. 사용자는 자연어 요청 후 증거, 분석, 작업 상태, 승인 요청, 문서, 이력을 같은 대화 안에서 확인한다.
+- **제품 형태:** Agent-First + 독립 업무 관리(내 할 일/부서 할 일) + 필요 시 열리는 기존 전문 상세 화면. 주 진입점은 Agent이고 기존 UI는 회귀 검증 및 Meta 장애 시 수동 경로로 보존한다.
+- **명시적 비범위:** 다중 LLM 에이전트 도입, 기존 Backend 도메인 모듈 병합, 기존 Gate 우회, AI의 독자적 승인/조치 실행/원인 확정, 실제 제조 데이터로 전환, 인증·배포 체계 완성.
+- **Source of Truth:** 1~21절의 기존 승인·증거·상태·데이터·API·보안 계약을 상속한다. 22절과 충돌하면 기존 안전/검증 계약 우선. 다른 구현 전략이 필요할 때 먼저 차이와 테스트를 문서화한다.
+
+### 22.2 사용자 정보구조 및 화면
+- 기본 라우트/화면: **AI Agent**. 기존 Case selector와 현재 사용자(데모 X-User) 컨텍스트, SYNTHETIC 표시, Meta 상태를 계속 보여준다.
+- **독립적으로 계속 접근 가능한 업무 화면:** 내 할 일, 부서 할 일(기존 /queue?scope=mine|department), 검토/승인 대기, Case 진행 상태 및 차단 사유, 문서 편집·Diff, 감사 이력. 별도 승인 대기 백엔드 테이블을 중복 생성하지 않는다. 기존 Queue의 REVIEW/BASIS_CHECK/REDRAFT/ANSWER_COMMENT 등을 그대로 사용한다.
+- **대화 내 동적 결과 컴포넌트:** 출처 표시된 증거 테이블(LOT/근거 ID/버전), SPC 차트와 이상 신호, ML 예측·SHAP의 비인과적 설명, RAG 과거 사례·실패 사례, D0~D8 타임라인/차단 사유, 문서 초안·validation issues·Diff, 승인/반려 카드(실제 권한 확인), 완료된 승인본의 DOCX/PDF 링크, 관련 감사 이벤트.
+- 상세 컴포넌트는 **실제 서버 응답**을 바인딩한다. 하드코딩된 '성공', 'LIVE', '승인됨' 배지와 합성 UI를 실측 결과처럼 표시하는 것은 금지한다.
+- 접근성: 키보드 탐색, 상태의 문자 표현(색만으로 구분 금지), 로딩/실패/재시도/빈 결과, 좁은 화면 대응, 재진입 시 사건/작업 상태 복원.
+
+### 22.3 Agent의 권한과 책임
+1. 자연어 요청 → **구조화된 intent, 대상 case/LOT, 사용자 role, 실행 계획**으로 변환한다. 모호한 사건 식별자는 조용히 추정하거나 다른 Case에 쓰지 않고 사용자 확인을 요구한다.
+2. 기존 \`taskrouter.py\`, \`investigator.py\`, \`tools.py\`, SPC/ML, \`experience.py\`, \`validation.py\`, \`workflow.py\`, \`export.py\` 및 기존 API를 우선 **어댑터로 재사용**한다. UI 전용 중복 업무 규칙 생성 금지.
+3. 사전 조회·분석·추천은 자동 수행 가능. 서버에 변화를 만드는 동작은 allowlist에 등록된 명시적 tool schema 및 **서버 권한/상태 검사**를 통과해야 한다. 문서 초안 작성, 검토 요청 등 각 작업의 사용자 승인 필요 여부는 기존 엔드포인트 계약에 따른다.
+4. **AI가 자기 승인·타인 역할 가장·실제 조치 EXECUTED 기록·원인 CONFIRMED 판정·D8 종결을 자의적으로 수행하지 않는다.** 해당 서버 결정이 요구하는 근거와 인간 승인·권한을 유지한다.
+5. 자동 실행 순서는 dependency-aware. 막힌 단계에서 **PAUSED/NEEDS_HUMAN/BLOCKED**를 표시하고 허용된 다음 작업만 제안한다. 이미 승인된 입력을 AI 추론으로 덮어쓰지 않는다.
+6. 수행 결과는 불변 감사 이벤트와 링크를 통해 확인 가능하도록 한다. conversation log는 승인 기록의 대체물이 아니다.
+7. 사용자 권한은 세션의 인증 주체(데모 단계에서는 기존 X-User)에서 서버가 결정한다. 사용자 문장이나 모델이 반환한 role/user ID를 신뢰하지 않는다.
+
+### 22.4 Agent 실행 상태와 복구
+- 최소 실행 상태: \`PLANNED → RUNNING → NEEDS_HUMAN / BLOCKED / FAILED / COMPLETED\`; 재개 전 서버의 case/document/policy/evidence 최신 상태를 재조회한다.
+- 쓰기 도구의 idempotency key, optimistic version/hash, 재시도 안전성, timeout, 중복 클릭 방어를 정의한다. 동일 요청 재전송으로 중복 조치/승인이 생기면 P0.
+- DB를 변경하는 에이전트 도구에 과도한 권한을 부여하지 않는다. 프롬프트 인젝션/외부 문서에 들어 있는 명령은 데이터로만 처리한다. 원본 검증과 외부 egress 제한은 기존 서버에서 강제한다.
+- Meta LIVE 실패·키 미설정 시 **AI 오프라인 상태를 명확히 표시**하고 내 할 일, 승인, 수동 8D, 문서 편집/검증, 기존 UI가 동작해야 한다. TEST_DOUBLE 결과를 LIVE로 표기하지 않는다.
+- 진행 중 앱 새로고침·역할/Case 변경·모델 오류에도 서버 작업 상태를 잃지 않는다. 백엔드에 영속 작업 저장이 필요하면 기존 DB 마이그레이션으로 분리하고 재개 테스트를 추가한다. 대화 메시지 재표시는 실제 서버 상태와 동기화한다.
+
+### 22.5 기능별 UX 보존 매핑
+| 기존 기능 | Agent 인터페이스 | 보존할 상세/수동 경로 |
+|---|---|---|
+| SPC / source / ML | 원인 조사의 필요 데이터 자동 조회·인라인 차트 | 원본 차트, 데이터 워크스페이스 |
+| Investigator / RAG / Experience | 근거·비교 결과 카드와 next-evidence 설명 | 원본 상세·검색 결과 |
+| D0~D8 / approval gates | 단계별 다음 허용 작업과 차단 이유 | 기존 8D 화면, 역할별 승인/수동 실행 |
+| Documents / G9 | 인라인 수정 제안·검증 결과 / 상세 Diff 진입 | 기존 문서 편집기 |
+| Queue | '내 할 일 알려줘', 승인 요청 알림 | **내 할 일 / 부서 할 일 독립 메뉴 필수** |
+| Audit / History | 근거로 이동 가능한 로그·이력 카드 | 감사·이력 상세 화면 |
+| G10 Export | 승인된 DOCX/PDF 다운로드 카드 | 기존 문서/보고서 다운로드 |
+| Provider | LIVE/TEST_DOUBLE/OFFLINE 정확한 라벨 | 수동 경로 항상 가능 |
+
+### 22.6 Agent-First 전환의 비기능/평가 지표
+- **기능 동등성:** 같은 서버 초기 상태, 사용자 role, 입력, 근거 버전이면 기존 UI와 Agent 경로는 동일한 도메인 상태·문서 hash/validation·승인 및 감사 결과를 생성한다. 표현과 agent interaction log만 달라도 된다.
+- **안전성:** 서버 Gate 우회 0건, 타 사용자 승인 0건, 외부 데이터 누출 0건, 거짓 확정 0건, 중복 mutation 0건.
+- **편의성:** 동일 시나리오에서 사용자 조작 수, 완료 소요 시간, 오류/되돌리기 횟수를 기존 UI와 비교해 보고한다. 목표 수치는 측정 전 임의 확정하지 않는다.
+- **관측성:** tool 이름/입력의 민감 정보 제거본/소요 시간/성공·실패/대상 Case·서버 감사 ID를 확인 가능하게 한다. latency/token/cost는 LIVE 측정 결과가 있을 때만 수치로 주장한다.
+- **대표 시나리오:** "L02 이상 분석 → 증거 및 과거 실패 이력 → D4 가설 → 검증 필요 표시 → 인간 승인 → D6 효과 평가 → 문서 편집·Diff → 검증 → D8 종결 → PDF/DOCX" (실행/승인 없는 단계를 자동 완료하지 않는다).
+
+### 22.7 전환 단계 (AG) 및 필수 수용 테스트
+- **AG0 — Baseline & compatibility (선행):** 최신 main SHA, API/DB/openapi, 기존 G0~G10 기능, Queue, 247 backend/13 frontend 기록과 실제 최신 검사 결과를 수집한다. 기존 UI·E2E 보존. Gate: baseline 테스트와 CI PASS.
+- **AG1 — Agent shell/UI:** Figma Make를 참조하되 UI만 구성. Agent 기본 화면, Case/role, message, dynamic cards, queue navigation, provider badge, fallback. Gate: layout/accessibility 및 기존 메뉴 정상.
+- **AG2 — Read-only tools:** intent planner + read-only tool registry, evidence/SPC/RAG/ML/history/queue. Gate: 근거 연결/권한 필터/무근거 주장 차단, 타 Case 혼동 차단, OFFLINE 동작(수동 경로).
+- **AG3 — Safe actions & human gates:** 기존 업무 API에 allowlisted writes, confirmation, server-side role validation, pause/resume, idempotency/retry. Gate: AI 승인 시도·Gate bypass·중복 클릭·stale versions 모두 거부.
+- **AG4 — Document/export & end-to-end:** G9 editing/validation/Diff, G10 verified DOCX/PDF, D0~D8 real HTTP success/failure plus existing UI parity. Gate: 최종 결과/감사 동일성.
+- **AG5 — UX/Meta LIVE evaluation & release:** 실제 작업 효율 측정, browser/a11y/manual fallback, fresh DB twice, full Backend/Frontend/Integration CI. LIVE는 API credential 있을 때 별도 조건부 검증; 미검증이면 \`BLOCKED_NO_CREDENTIALS\`로 보고하며 AG 오프라인 기능 PASS와 구분.
+- **AG 필수 반례:** AG-T01 다른 LOT/Case 혼동 → 확인 필요; T02 서버 권한/승인 없이 D4 CONFIRMED·D8 CLOSED 시도 → 차단; T03 D6 FAIL → D4 재개; T04 잘못된 수치/근거→BLOCK; T05 오래된 문서 승인→409; T06 인젝션된 문서 명령 무시; T07 AI 장애 중 내 할 일·승인·수동 편집 동작; T08 새로고침 후 상태 복원; T09 같은 mutation 재시도 중복 없음; T10 기존 UI/Agent 결과 동등; T11 승인본 출력과 DRAFT 제한; T12 역할 전환 시 다른 사용자의 할 일 표시 금지.
+- 테스트 추적표는 \`docs/testing/REQUIREMENT_TEST_TRACEABILITY.md\`에 **실제 코드 경로/테스트 이름/실행 결과**를 추후 구현 단계에서 추가한다. **이 절은 요구사항이며 현재 완료 상태를 뜻하지 않는다.**
+
+### 22.8 완료 정의
+AG0~AG5의 구현·실행 결과를 실제 코드와 테스트로 검증하고, 기존 G0~G10 회귀 0건, 권한/승인/ClaimValidator 일관성, HTTP E2E, Figma 설계와 실 UI 매핑, 독립 Queue와 수동 fallback 확인 후에만 Agent-First UX 전환 완료로 선언한다. 현재 Meta LIVE 미검증 상태를 자동으로 해제하지 않는다.

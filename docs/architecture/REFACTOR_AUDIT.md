@@ -1,6 +1,6 @@
 # R0 refactor audit — monorepo move (frontend/ + backend/)
 
-Source of truth: `QualityOps_AI_FINAL_REQUIREMENTS_v5_5_MONOREPO_FINAL.md` §19; execution order: `prompts/QualityOps_AI_CODEX_MASTER_R0_G10_FINAL.md` §2.
+Source of truth: `QualityOps_AI_FINAL_REQUIREMENTS_v5_5_MONOREPO_FINAL.md` §19. This file records the historical R0 implementation sequence.
 
 ## R0-A — baseline (HEAD `58d316a`, branch `main`, clean tree, 2026-10-29 KST, Windows 11, Python 3.12 venv, Node 24.19 / npm 11.17)
 
@@ -32,7 +32,7 @@ Protected local data: the git-ignored `qualityops.db` at the repo root (pre-S0 s
 | `web/` (11) | `frontend/` | `src/` split into `features/`, `components/`, `api/`, `types/`; new `tests/` |
 | `docs/*.md|json` | `docs/{architecture,implementation,evaluations}/` | nothing deleted; links rewritten |
 | root v5.5 FINAL requirements / CODEX prompts | `docs/archive/` | historical; superseded by the MONOREPO spec |
-| — | `QualityOps_AI_FINAL_REQUIREMENTS_v5_5_MONOREPO_FINAL.md` (root), `prompts/QualityOps_AI_CODEX_MASTER_R0_G10_FINAL.md` | added |
+| — | `QualityOps_AI_FINAL_REQUIREMENTS_v5_5_MONOREPO_FINAL.md` (root) | added; AI execution prompts removed from repository in subsequent documentation cleanup |
 | `.github/workflows/ci.yml` | `ci.yml` + `backend-ci.yml` + `frontend-ci.yml` + `integration-ci.yml` | reusable workflows, top-level `needs` |
 
 ## Path-dependent code found (must change with the move)

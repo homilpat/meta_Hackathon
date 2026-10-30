@@ -41,7 +41,7 @@ Also in the file:
 
 | Check | Result |
 |---|---|
-| `pytest tests/test_agent_ag4.py` | 4 passed (agent tests total: 22) |
+| `pytest tests/test_agent_ag4.py` | 3 passed (agent tests total: 21) |
 | full backend `pytest` | 282 passed |
 | `ruff check .` | All checks passed |
 | `scripts.e2e_http` (real uvicorn) | 3/3: D0→D8 CLOSED + DOCX/PDF, D6 failure, agent scenario |

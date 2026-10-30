@@ -51,6 +51,14 @@ to the API; every value shown comes from the API). The built files are committed
 not needed to run it. To change the UI: `cd frontend && npm ci && npm run dev` (proxies the API to :8000), `npm test`
 (vitest), then `npm run build` to update `backend/src/app/static/web/` (CI fails if the committed bundle is stale). The older single-file UI at `/ui` is kept as a fallback.
 
+The app opens on the **AI Agent** (Agent-First, spec §22). Type a goal such as "이번 LOT 불량을 조사하고 8D 보고서 초안을
+준비해 줘."
+- **What the server does:** it plans and runs allowlisted tools as the current user (`backend/src/app/agent.py`, routes `/agent/*`). It can save and validate the next 8D draft, then stops until you pick a reviewer and confirm.
+- **What it never does:** approve, confirm a cause, execute an action, close a case, or download a file for you.
+- **Without a Meta key:** a server rule planner runs instead.
+- **Manual path:** 내 할 일, 부서 할 일 and 승인 대기 read the same `/queue`, and every earlier screen is under **전문 도구**.
+- Records: `docs/implementation/AG0_BASELINE.md` … `AG5_RELEASE_VERIFICATION.md`.
+
 ## Demo walk-through (`/ui` labels; `/app` has the same steps)
 
 1. As alice: **New synthetic PCB case**, then **Assign bob, erin, frank as reviewers**.

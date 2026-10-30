@@ -342,3 +342,26 @@
 - The original lines above are historical records of files that existed when their phases were run, **not** current file references. Past Git commits still retain the historical contents; no history rewrite was performed.
 - The root requirements specification (including new Agent-First §22) remains the source of truth. README, requirement traceability and architecture audit links were corrected. Runtime system prompts in backend investigation code remain because they implement product behavior, not developer-tool instructions.
 - This cleanup changes documentation only. No code/test/CI or Meta LIVE success claim is implied.
+
+## 2026-10-30/31 — Agent-First UX (spec §22, AG0–AG5)
+
+- **AG0** `061c1c1`: baseline, with no product change.
+  - pytest 261, ruff, fresh-DB alembic head 0016 + check, frontend 14 tests + build, CI green.
+  - The local `.venv` still imported the pre-monorepo `app/`; reinstalled `-e backend[dev]`.
+- **AG1** `5ff55ae`: Agent default screen, 내 할 일 / 부서 할 일 / 승인 대기 on `/queue`, existing screens under 전문 도구, context panel, run view, fallback.
+  - Layout comes from the local Figma Make mock-up `agent_first design/` (not committed). Its hard-coded values were not copied.
+  - The first CI failed on the stale-bundle check because Windows `autocrlf` gave the served `index.html` CRLF lines (JS/CSS were identical). Fixed in `42269bf` / `c65dbf3` with `.gitattributes` (`frontend/**` and `static/web/**` → LF).
+- **AG2** `438c998`: `backend/src/app/agent.py`, migration `0017_agent_runs` (runs + append-only steps).
+  - Server rule planner and model planner over allowlisted read tools that call the existing route handlers as the user.
+  - Scope ask-back, denied-tool record, model-failure fallback.
+  - FastAPI 0.162 nests included routers; route lookup walks `original_router`.
+- **AG3** `5512bc7`: draft + validate through the existing routes.
+  - Review request only after the user confirms one of the server's candidates.
+  - Document re-read before (stale → BLOCKED) and after (hand-off verified in DB and the reviewer's queue).
+  - `await` resumes only on server-visible decisions. Duplicate answers get 409; pending decisions survive a restart.
+- **AG4** `c27e47e`: D8 closure readiness read, approved-only export links (no agent download), G9 edits picked up.
+  - Agent scenario added to `scripts/e2e_http.py`.
+  - Fixed an intent bug: "8D"/"NCR" in a status or export question had planned a draft; writes now need an explicit ask.
+- **AG5**: real-browser check (headless Chrome against uvicorn and a real agent run) found the data-integrity card unrendered; fixed.
+  - Fresh-DB smoke and E2E run twice; interaction counts recorded in `docs/implementation/AG5_RELEASE_VERIFICATION.md`.
+  - Meta LIVE: BLOCKED_NO_CREDENTIALS.

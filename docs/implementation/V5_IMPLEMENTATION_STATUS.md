@@ -47,6 +47,20 @@ Residual risks: P2 items in `docs/implementation/POST_G9_REFACTOR_PLAN.md` (non-
 wording); Hangul statements are not part of the PDF read-back check; the DOCX was not
 opened in Word desktop (python-docx and Chrome PDF only); no measured ROI or plant results are claimed.
 
+## Agent-First UX (spec §22, AG0–AG5, 2026-10-30/31)
+
+| Phase | Status | Record |
+|---|---|---|
+| AG0 baseline | PASS (`061c1c1`) | `docs/implementation/AG0_BASELINE.md` |
+| AG1 Agent shell / UI | PASS (`5ff55ae`, bundle LF fix `42269bf`, `c65dbf3`) | `docs/implementation/AG1_AGENT_UI.md` |
+| AG2 server planner + read-only tools | PASS (`438c998`) | `docs/implementation/AG2_READ_TOOLS.md` |
+| AG3 allowlisted writes + human gates | PASS (`5512bc7`) | `docs/implementation/AG3_SAFE_WRITES.md` |
+| AG4 documents / export / E2E | PASS (`c27e47e`) | `docs/implementation/AG4_DOCS_EXPORT_E2E.md` |
+| AG5 release verification | see record | `docs/implementation/AG5_RELEASE_VERIFICATION.md` |
+
+AGENT_FIRST_OFFLINE: PASS (server rule planner, TEST_DOUBLE model planner).
+AGENT_FIRST_META_LIVE: BLOCKED_NO_CREDENTIALS. This is separate from the offline PASS and is not turned into a pass.
+
 ## Spec §9 acceptance tests now
 
 | # | Status | # | Status |

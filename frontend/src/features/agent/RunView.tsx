@@ -37,6 +37,9 @@ function StepBody({ s, ctx }: { s: J; ctx: Ctx }) {
     case 'case_summary': return <div className="table-wrap"><table><thead><tr><th>LOT</th><th>스텐실</th><th>AOI</th><th>FAIL</th><th>미해소</th><th>근거</th></tr></thead><tbody>
       {r.lots.map((l: J) => <tr key={l.lot}><td><b className="id">{l.lot}</b></td><td>{l.stencil}</td><td>{l.aoi}</td><td>{l.fail}</td><td>{l.not_cleared}</td><td><Cite ids={[l.lot_ev]}/></td></tr>)}
     </tbody></table>{r.aoi_fail.slice(0, 5).map((f: J) => <p key={f.board} className="muted wrap">AOI FAIL {f.board} · {f.aoi[0]} <Cite ids={[f.aoi[1], ...(f.human ? [f.human[1]] : [])]}/>{f.human && ` · 사람 판정 ${f.human[0]}`}</p>)}</div>
+    case 'data_integrity': return <><div className="row-gap">{Object.entries(r.issue_counts as Record<string, number>).map(([k, n]) => <Badge key={k} tone="amber">{k} {n}</Badge>)}</div>
+      {r.issues.slice(0, 4).map((i: J, n: number) => <p key={n} className="muted wrap">{i.code} · {i.detail} <Cite ids={[i.evidence_id]}/></p>)}
+      {!r.issues.length && <span className="muted">기록된 데이터 품질 이슈 없음</span>}</>
     case 'spc': return r.points ? <><ControlChart m={r}/>{r.first_alarm && <Badge tone="red">첫 경보 {r.first_alarm.lot} {r.first_alarm.panel}/{r.first_alarm.board} · {r.first_alarm.rules.join(', ')}</Badge>}
       <Note>관리도 신호는 통계 신호입니다. 불량 판정이나 원인 확정이 아닙니다.</Note></> : null
     case 'predictions': return <>{r.predictions.slice(0, 5).map((p: J) => <p key={p.evidence_id} className="muted">{p.target_key.join('/')} · 위험 {p.risk_score} (임계 {p.threshold}) {p.above_threshold && <Badge tone="amber">임계 초과</Badge>} <Cite ids={[p.evidence_id]}/></p>)}

@@ -47,6 +47,9 @@ function StepBody({ s, ctx }: { s: J; ctx: Ctx }) {
     case 'experience': return <><p><Badge tone={r.mode === 'KNOWN' ? 'green' : r.mode === 'ANALOGICAL' ? 'amber' : 'slate'}>{r.mode}</Badge> 추천 {r.recommendations.length}건 · 실패 사례 {r.negative_precedents.length}건</p><Note>{r.note}</Note></>
     case 'history': return <p className="muted wrap">{r.precedents.map((p: J) => p.historical_case_id).join(', ') || '적격 과거 사례 없음'} · 유사도는 인과 근거가 아닙니다.</p>
     case 'stages': return <div className="row-gap">{r.stages.map((x: J) => <Badge key={x.kind} tone={STATUS_TONE[x.status] ?? 'slate'}>{x.step} {x.doc_type} {x.status ?? '미작성'}{!x.approval_open && ' · 잠금'}</Badge>)}</div>
+    case 'documents': return <>{r.documents.map((d: J) => <p key={d.kind}><Badge tone="teal">{d.doc_type} v{d.version}</Badge> <Badge tone={STATUS_TONE[d.status]}>{d.status}</Badge>
+      {d.validation ? <> <Badge tone={d.validation.result === 'BLOCK' ? 'red' : d.validation.result === 'WARN' ? 'amber' : 'green'}>검증 {d.validation.result}{d.validation.stale ? ' · STALE' : ''}</Badge></> : <> <Badge tone="slate">미검증</Badge></>}
+      {' '}<button className="citation" onClick={() => ctx.open(ctx.cid, `${d.kind}:${d.version}`)}>문서 열기</button></p>)}{!r.documents.length && <span className="muted">D2~D4 문서 없음</span>}</>
     case 'queue': return <>{r.mine.map((i: J, n: number) => <p key={n}><Badge tone={TASK[i.task]?.[1] ?? 'slate'}>{TASK[i.task]?.[0] ?? i.task}</Badge> {i.doc_type} v{i.version} · {i.owner ?? '부서'} <button className="citation" onClick={() => ctx.open(i.case_id, `${i.kind}:${i.version}`)}>열기</button></p>)}
       {!r.mine.length && <p className="muted">{r.user}의 이 사건 할 일 없음 · 부서({r.role}) {r.department.length}건</p>}</>
     case 'create_draft': case 'request_review': return <p><Badge tone="teal">{r.doc_type} v{r.version}</Badge> <Badge tone={STATUS_TONE[r.status]}>{r.status}</Badge>{r.status === 'DRAFT' && <> <Badge tone="slate">승인 아님</Badge></>} 주장 {r.claims.length}개

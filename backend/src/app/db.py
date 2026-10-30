@@ -823,6 +823,47 @@ class RecommendationDecision(Base):
     created_at: Mapped[str] = mapped_column(String(40))
 
 
+class AgentRun(Base):
+    """One Agent-First request: the goal, the server's plan and where it stopped. The DB, not the chat, is the state."""
+
+    __tablename__ = "agent_runs"
+    __table_args__ = (UniqueConstraint("user_id", "idem_key"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    idem_key: Mapped[str] = mapped_column(String(80))
+    goal: Mapped[str] = mapped_column(Text)
+    intents: Mapped[list] = mapped_column(JSON)
+    planner: Mapped[str] = mapped_column(String(20))  # SERVER_RULES | LIVE | TEST_DOUBLE
+    status: Mapped[str] = mapped_column(String(20))  # PLANNED RUNNING NEEDS_HUMAN BLOCKED FAILED COMPLETED
+    plan: Mapped[list] = mapped_column(JSON)
+    pending: Mapped[dict | None] = mapped_column(JSON)  # the human decision the run waits for
+    reply: Mapped[list] = mapped_column(JSON)  # server-written lines, each from a recorded step
+    created_at: Mapped[str] = mapped_column(String(40))
+    updated_at: Mapped[str] = mapped_column(String(40))
+
+
+class AgentStep(Base):
+    """One tool execution (or refusal) inside an AgentRun, as the server saw it."""
+
+    __tablename__ = "agent_steps"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("agent_runs.id"), index=True)
+    seq: Mapped[int] = mapped_column(Integer)
+    tool: Mapped[str] = mapped_column(String(60))
+    kind: Mapped[str] = mapped_column(String(10))  # READ | WRITE | CHECK
+    args: Mapped[dict] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String(12))  # OK ERROR DENIED
+    http_status: Mapped[int | None] = mapped_column(Integer)
+    result: Mapped[dict | list | None] = mapped_column(JSON)
+    error: Mapped[str | None] = mapped_column(Text)
+    audit_event_ids: Mapped[list] = mapped_column(JSON)
+    duration_ms: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
 # Audit rows are append-only at the database level, not just by convention.
 APPEND_ONLY = ("approval_events", "workflow_events", "doc_comments", "audit_chain",
                "workflow_policies", "evidence_quality", "process_contexts", "affected_objects",
@@ -831,7 +872,7 @@ APPEND_ONLY = ("approval_events", "workflow_events", "doc_comments", "audit_chai
                "effectiveness_plans", "effectiveness_results",
                "controlled_documents", "prevention_deployments", "closure_acks", "closures",
                "template_contracts", "validation_runs",
-               "experience_entries", "experience_retrievals", "recommendation_decisions")
+               "experience_entries", "experience_retrievals", "recommendation_decisions", "agent_steps")
 
 
 def append_only_ddl(table: str) -> list[str]:

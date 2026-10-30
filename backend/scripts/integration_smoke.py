@@ -104,6 +104,16 @@ def main() -> int:
         status, _ = call(base, f"/cases/{cid}/investigations", body={"use_history": True})
         check("investigation without key is 503 (no mock)", status == 503, str(status))
 
+        # Agent-First AG2 without a key: the server rule planner runs read-only tools; the run is persisted.
+        status, ag = call(base, "/agent/runs", body={"case_id": cid, "goal": "이번 LOT 불량을 조사해 줘"})
+        check("agent offline plan, read-only", status == 201 and ag["planner"] == "SERVER_RULES"
+              and ag["status"] == "COMPLETED" and {s["kind"] for s in ag["steps"]} == {"READ"}
+              and all(s["status"] == "OK" for s in ag["steps"] if s["tool"] != "predictions"),
+              f"{status} {ag.get('status') if isinstance(ag, dict) else ag}")
+        status, listed = call(base, f"/agent/runs?case_id={cid}")
+        check("agent run restored", status == 200 and listed[0]["run_id"] == ag["run_id"], str(status))
+        check("agent run private", call(base, f"/agent/runs/{ag['run_id']}", user="bob")[0] == 404)
+
         sha = doc["content_sha256"]
         check("request review", call(base, f"/cases/{cid}/ncr/1/request-review", body={"reviewer_id": "bob"})[0]
               in (200, 201))

@@ -14,6 +14,7 @@ from sqlalchemy.orm import sessionmaker
 
 import app as paths
 from app import effect, ncr, spc
+from app.agent import make_agent_router
 from app.causes import make_d4_router
 from app.closure import make_d7_d8_router
 from app.db import (
@@ -134,6 +135,7 @@ def create_app(database_url: str | None = None,
     app.include_router(make_experience_router(sessions, current_user))
     app.include_router(make_docs_router(sessions, current_user, app.state.provider))
     app.include_router(make_export_router(sessions, current_user))
+    app.include_router(make_agent_router(app, sessions, current_user, app.state.provider))
 
     @app.get("/task-router")
     def task_router(actor: Who) -> list[dict]:

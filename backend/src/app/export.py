@@ -105,12 +105,14 @@ def case_report(session: Session, case_id: str) -> tuple[Closure, list[Block], l
         raise HTTPException(409, f"audit chain is broken ({len(chain['breaks'])} problems); nothing is exported")
     s = c.snapshot
     state = {**s["state"], "D8": "CLOSED"}
+    simple = s["route"] == "NCR_ONLY"  # D0 chose the simple route: D4-D7 were never required
+    shown = {k: (v or ("N/A (NCR_ONLY)" if simple and k in ("D4", "D5", "D6", "D7") else "-")) for k, v in state.items()}
     blocks: list[Block] = [
         ("h", "Closure"),
         ("p", (f"Closed by {c.actor_id} at {c.created_at} (closure #{c.id}); policy {s['policy']['policy_id']} "
                f"v{s['policy']['version']} ({s['policy']['policy_hash'][:16]}); route {s['route']}")),
         ("p", f"Snapshot SHA-256 {c.snapshot_sha256}"),
-        ("t", ["Stage", "State"], [[k, str(v or "-")] for k, v in state.items()], [1, 3]),
+        ("t", ["Stage", "State"], [[k, str(v)] for k, v in shown.items()], [1, 3]),
         ("t", ["Document", "Version", "Status at closure", "Content SHA-256"],
          [[d["doc_type"], f"v{d['version']}", d["status"], d["content_sha256"]] for d in s["documents"]],
          [2, 1, 2, 6]),
@@ -131,7 +133,11 @@ def case_report(session: Session, case_id: str) -> tuple[Closure, list[Block], l
         blocks += b
         required += r
     hyps = {h.id: h for h in causes.confirmed(session, case_id)}
-    blocks += [
+    if simple:
+        blocks.append(("p", ("Route NCR_ONLY: the D0 decision found no defect needing a full 8D, so the policy "
+                             "required D0-D3 only. D4-D7 (cause, corrective action, effectiveness, prevention) were "
+                             "not required.")))
+    sections = [
         ("h", "D4 confirmed causes"),
         ("t", ["Cause", "Type", "Statement", "Evidence"],
          [[f"H{i}", f"{hyps[i].cause_type}/{hyps[i].category}" if i in hyps else "-",
@@ -151,6 +157,12 @@ def case_report(session: Session, case_id: str) -> tuple[Closure, list[Block], l
                  PreventionDeployment.case_id == case_id, PreventionDeployment.doc_number == p["doc_number"],
                  PreventionDeployment.new_revision == p["revision"])) for t in d.training}))]
           for p in s["prevention"]], [3, 1.4, 4]),
+    ]
+    for head, table in zip(sections[::2], sections[1::2], strict=True):
+        # NCR_ONLY: leave out a not-required section only when it is empty, so every recorded row is still printed
+        if not simple or table[2] or head[1] == "D3/D5 actions":
+            blocks += [head, table]
+    blocks += [
         ("h", "D8 sign-off"),
         ("p", f"Acknowledged by: {', '.join(s['acknowledged'])}"),
         ("t", ["Residual risk", "Mitigation", "Owner"],
@@ -338,7 +350,9 @@ def make_export_router(sessions: sessionmaker, current_user: Callable[..., Actor
         with sessions.begin() as session:
             require_case(session, case_id, actor)
             c, blocks, required = case_report(session, case_id)
-            return respond(session, case_id, actor, format, f"{case_id}_8D_report",
-                           f"8D report {case_id} - CLOSED", c.snapshot_sha256, blocks, required)
+            simple = c.snapshot["route"] == "NCR_ONLY"  # closed early on the simple route: say so in the title
+            name, title = ("NCR_closure_report", "NCR closure report") if simple else ("8D_report", "8D report")
+            return respond(session, case_id, actor, format, f"{case_id}_{name}",
+                           f"{title} {case_id} - CLOSED", c.snapshot_sha256, blocks, required)
 
     return router

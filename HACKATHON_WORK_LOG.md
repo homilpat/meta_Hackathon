@@ -367,3 +367,7 @@
   - Meta LIVE: BLOCKED_NO_CREDENTIALS.
 - CI (GitHub Actions, backend → frontend → integration): green on `5512bc7` (AG3), `c27e47e` (AG4) and `302cf6f` (AG5).
 - **Meta LIVE (2026-10-31, key in git-ignored `.env`)**: the smoke passed. The Agent LIVE planner went goal → reads → NCR draft + validation → NEEDS_HUMAN. Fixed from the LIVE runs: reasoning-token cut-offs (budgets, and `finish_reason=length` is now a failure), agent model-call cap, unsupported citation flag, recorded route status, tests and offline scripts never reading the real key. Final regression with `.env` present: pytest 287, smoke 27/27, e2e 3/3. Details in `docs/evaluations/META_LIVE_LOG.md`.
+- **Agent hybrid planner (2026-10-31)**: the model now makes **one** strict-JSON plan call with the server's situation card; the server runs the tools.
+  - Added: ask-back on vague goals, an 8D-report note, D0 "채울까요?" (a proposal filled by server rules that only the D0 role submits), and NCR_ONLY early closure with an "NCR closure report".
+  - LIVE: judgment goal 4.9 s (was 11.7–25.5 s with the tool loop); the optional investigation summary call is about 20 s.
+  - Local: pytest 293, smoke 27/27, e2e 3/3, frontend 25. Record: `docs/implementation/AGENT_HYBRID_PLANNER.md`.

@@ -65,6 +65,7 @@ function StepBody({ s, ctx }: { s: J; ctx: Ctx }) {
       {!r.mine.length && <p className="muted">{r.user}의 이 사건 할 일 없음 · 부서({r.role}) {r.department.length}건</p>}</>
     case 'create_draft': case 'request_review': return <p><Badge tone="teal">{r.doc_type} v{r.version}</Badge> <Badge tone={STATUS_TONE[r.status]}>{r.status}</Badge>{r.status === 'DRAFT' && <> <Badge tone="slate">승인 아님</Badge></>} 주장 {r.claims.length}개
       {r.reviews?.length > 0 && ` · 검토자 ${r.reviews.map((x: J) => `${x.reviewer_id}(${x.state})`).join(', ')}`} <button className="citation" onClick={() => ctx.open(ctx.cid, `${s.args.kind}:${r.version}`)}>문서 열기</button></p>
+    case 'fill_triage': return <TriageForm r={r} ctx={ctx}/>
     case 'validate_document': return <><p><Badge tone={r.result === 'BLOCK' ? 'red' : r.result === 'WARN' ? 'amber' : 'green'}>검증 {r.result}</Badge> 이슈 {r.issues.length}건{r.stale && <> <Badge tone="red">STALE</Badge></>}</p>
       {r.issues.slice(0, 6).map((i: J, n: number) => <p key={n} className="muted wrap"><Badge tone={i.severity === 'BLOCK' ? 'red' : 'amber'}>{i.code}</Badge> {i.claim_id ?? '문서'}: {i.message}</p>)}</>
     default: return null
@@ -72,12 +73,36 @@ function StepBody({ s, ctx }: { s: J; ctx: Ctx }) {
 }
 
 const TOOL_TITLE: Record<string, string> = {
-  create_draft: '문서 초안 저장', validate_document: '문서 검증', request_review: '검토 요청',
+  create_draft: '문서 초안 저장', validate_document: '문서 검증', request_review: '검토 요청', fill_triage: 'D0 판정 양식 (제출 전)',
+}
+export type Resume = (confirm: boolean, reviewer?: string, answer?: string) => void
+
+// D0 form filled by the server's rules. Nothing is stored until a person with the D0 role submits it to /triage.
+function TriageForm({ r, ctx }: { r: J; ctx: Ctx }) {
+  const [f, setF] = useState<J>(r.fields)
+  const [msg, setMsg] = useState('')
+  const set = (k: string) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value })
+  const submit = async () => {
+    try { const t = await ctx.api(r.submit.path, 'POST', f); setMsg(`D0 판정 기록됨 (서버 확인): ${t.route} · ${t.severity}`); ctx.refresh() }
+    catch (e) { setMsg(`제출 거부 (${(e as Error).message}). 상단 오류 메시지에 서버 사유가 있습니다.`) }
+  }
+  return <div>
+    {r.basis.map((b: string) => <p key={b} className="muted wrap">· {b}</p>)}
+    {r.notes.map((n: string) => <p key={n} className="wrap"><Badge tone="amber">확인</Badge> {n}</p>)}
+    <label className="muted">경로 <select className="input" value={f.route} onChange={set('route')}>{['NCR_ONLY', 'FULL_8D', 'EMERGENCY_FULL_8D'].map(x => <option key={x}>{x}</option>)}</select></label>
+    <label className="muted">심각도 <select className="input" value={f.severity} onChange={set('severity')}>{['LOW', 'MEDIUM', 'HIGH'].map(x => <option key={x}>{x}</option>)}</select></label>
+    <p className="muted">신호 {f.signal_kind} · 관측 {f.observed_defect} · LOT {f.scope_lots.join(', ') || '-'}</p>
+    <label className="muted">판정 사유<textarea className="input" rows={3} value={f.rationale} onChange={set('rationale')}/></label>
+    <p className="muted">근거 <Cite ids={f.evidence_ids}/></p>
+    <button className="button primary" disabled={!r.submit.can_submit} onClick={submit}>{r.submit.can_submit ? '검토 후 D0 판정 제출' : `제출 권한: ${r.submit.role}`}</button>
+    {msg && <p className="wrap" role="status">{msg}</p>}
+    <Note>Agent가 채운 권장안입니다. 제출하기 전까지 아무것도 기록되지 않으며, 제출 시 서버가 근거·권한·출하 영향 규칙을 다시 검사합니다.</Note>
+  </div>
 }
 
 function StepCard({ s, title, ctx }: { s: J; title: string; ctx: Ctx }) {
   const tone: Tone = s.status === 'OK' ? 'green' : 'red'
-  return <Card className="tool-card"><div className="tool-top"><span className={`tool-icon ${s.kind === 'WRITE' ? 'violet' : ''}`}><Icon name={s.kind === 'WRITE' ? 'document' : 'database'}/></span>
+  return <Card className="tool-card"><div className="tool-top"><span className={`tool-icon ${s.kind === 'READ' ? '' : 'violet'}`}><Icon name={s.kind === 'READ' ? 'database' : 'document'}/></span>
     <div><b>{title}</b><small>#{s.seq} · {s.kind} · {s.tool} · {s.duration_ms}ms{s.http_status ? ` · HTTP ${s.http_status}` : ''}</small></div>
     <Badge tone={tone}>{s.status === 'OK' ? '서버 응답 확인' : s.status === 'DENIED' ? '거부됨' : '오류'}</Badge></div>
     <div className="tool-result">{s.status === 'OK' ? (StepBody({ s, ctx }) ?? <span className="muted">결과 없음</span>) : <span className="wrap">{s.error}</span>}</div>
@@ -85,9 +110,10 @@ function StepCard({ s, title, ctx }: { s: J; title: string; ctx: Ctx }) {
   </Card>
 }
 
-export function PendingCard({ run, busy, onResume }: { run: J; busy: boolean; onResume: (confirm: boolean, reviewer?: string) => void }) {
+export function PendingCard({ run, busy, onResume }: { run: J; busy: boolean; onResume: Resume }) {
   const p = run.pending
   const [who, setWho] = useState<string>(p?.candidates?.length === 1 ? p.candidates[0].user_id : '')
+  const [answer, setAnswer] = useState('')
   if (!p || run.status !== 'NEEDS_HUMAN') return null
   return <Card className="missing-card"><div className="missing-icon"><Icon name="warning"/></div><div>
     {p.action === 'confirm_scope' && <><b>대상 사건 확인이 필요합니다</b><p>{p.question}</p>
@@ -99,10 +125,17 @@ export function PendingCard({ run, busy, onResume }: { run: J; busy: boolean; on
     {p.action === 'await' && <><b>다른 담당자의 결정을 기다립니다</b><p>{p.kind.toUpperCase()} v{p.version} · {p.owner ?? `${p.owner_role} 부서`}. 결정 후 '다시 확인'을 누르면 서버 상태를 다시 읽고 이어갑니다.</p>
       <div className="handoff"><span>{p.owner ?? p.owner_role}</span><Badge tone="amber">응답 대기</Badge></div>
       <div className="row-gap mt"><button className="button secondary" disabled={busy} onClick={() => onResume(true)}>다시 확인</button></div></>}
+    {p.action === 'clarify' && <><b>조금 더 알려 주세요</b><p>{p.question}</p>
+      <textarea className="input" aria-label="Agent 질문에 대한 답변" rows={2} value={answer} disabled={busy} onChange={e => setAnswer(e.target.value)}/>
+      <div className="row-gap mt"><button className="button primary" disabled={busy || !answer.trim()} onClick={() => onResume(true, undefined, answer.trim())}>답변 보내기</button>
+        <button className="button secondary" disabled={busy} onClick={() => onResume(false)}>그만두기</button></div></>}
+    {p.action === 'offer_fill' && <><b>양식을 채워 드릴까요?</b><p>{p.question}</p>
+      <div className="row-gap mt"><button className="button primary" disabled={busy} onClick={() => onResume(true)}>예, 채워 주세요</button>
+        <button className="button secondary" disabled={busy} onClick={() => onResume(false)}>아니요</button></div></>}
   </div></Card>
 }
 
-export function RunView({ run, ctx, busy, onResume }: { run: J; ctx: Ctx; busy: boolean; onResume: (confirm: boolean, reviewer?: string) => void }) {
+export function RunView({ run, ctx, busy, onResume }: { run: J; ctx: Ctx; busy: boolean; onResume: Resume }) {
   const titles: Record<string, string> = Object.fromEntries((run.plan ?? []).map((p: J) => [p.tool, p.title]))
   return <div className="message agent-message"><div className="avatar muse"><Icon name="spark" size={17}/></div><div className="message-body">
     <div className="agent-label"><b>QualityOps Agent</b><Badge tone={RUN_TONE[run.status]}>{RUN_LABEL[run.status] ?? run.status}</Badge><span className="muted">run #{run.run_id} · {run.updated_at?.slice(0, 19)}</span></div>

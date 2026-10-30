@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.db import ApprovalEvent, DocumentVersion, Review
 from app.main import create_app
-from tests.test_agent_ag2 import Scripted, tool_call
+from tests.test_agent_ag2 import Scripted, plan
 from tests.v5_util import H, evidence, line_client, ok
 
 GOAL = "이번 LOT 불량을 조사하고 8D 보고서 초안을 준비해 줘."
@@ -151,13 +151,10 @@ def test_a_pending_decision_survives_a_server_restart(tmp_path):
 
 
 def test_model_planner_can_prepare_but_never_send_or_approve(tmp_path):
-    p = Scripted([
-        {"role": "assistant", "content": "", "tool_calls": [tool_call("case_summary", 1), tool_call("request_review", 2)]},
-        {"role": "assistant", "content": "", "tool_calls": [tool_call("prepare_document", 3)]},
-    ])
+    p = Scripted([plan(["DRAFT_DOC"], ["stages", "request_review", "prepare_document"])])
     c = line_client(tmp_path, provider=p)
     out = run(c).json()
-    assert "request_review" not in p.seen[0]["tools"] and "prepare_document" in p.seen[0]["tools"]
+    assert "request_review" not in str(p.seen[0]["response_format"])  # never a plan tool
     assert [s["tool"] for s in out["steps"] if s["status"] == "DENIED"] == ["request_review"]
     assert out["status"] == "NEEDS_HUMAN" and out["pending"]["action"] == "request_review"
     assert count(c, Review) == 0 and count(c, ApprovalEvent) == 0

@@ -11,7 +11,7 @@ export function plannerLabel(provider: J): [string, Tone] {
   return [`Meta ${provider.model} · 키 설정됨, LIVE 미검증`, 'amber']
 }
 
-const EXAMPLES = ['이번 LOT 불량을 조사하고 8D 보고서 초안을 준비해 줘.', '내 할 일 알려줘', '이 사건 8D 진행 상태와 차단 사유 알려줘']
+const EXAMPLES = ['이번 SPC 경보, 8D로 가야 할지 판정해 줘', '이번 LOT 불량 원인을 조사해 줘', 'NCR 초안 써 줘', '내 할 일 알려줘', '8D 진행 상태와 차단 사유 알려줘']
 
 export function Agent({ ctx, provider, go }: { ctx: Ctx; provider: J; go: (view: string) => void }) {
   const [runs, setRuns] = useState<J[] | null>(null)
@@ -43,8 +43,8 @@ export function Agent({ ctx, provider, go }: { ctx: Ctx; provider: J; go: (view:
     if (!text) return
     if (await act(() => ctx.api('/agent/runs', 'POST', { case_id: ctx.cid, goal: text }, true))) setGoal('')
   }
-  const resume = (run: J) => (confirm: boolean, reviewer?: string) =>
-    act(() => ctx.api(`/agent/runs/${run.run_id}/resume`, 'POST', { token: run.pending.token, confirm, reviewer_id: reviewer ?? null }))
+  const resume = (run: J) => (confirm: boolean, reviewer?: string, answer?: string) =>
+    act(() => ctx.api(`/agent/runs/${run.run_id}/resume`, 'POST', { token: run.pending.token, confirm, reviewer_id: reviewer ?? null, answer: answer ?? null }))
 
   const [label, tone] = plannerLabel(provider)
   const ordered = [...(runs ?? [])].reverse() // oldest first, like a conversation

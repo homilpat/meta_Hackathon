@@ -56,7 +56,7 @@ describe('Agent workspace', () => {
     fireEvent.click(screen.getByLabelText(/Bob \(reviewer\)/))
     await act(async () => { fireEvent.click(send); fireEvent.click(send) })
     const posts = api.mock.calls.filter(c => c[1] === 'POST')
-    expect(posts).toEqual([['/agent/runs/7/resume', 'POST', { token: '7:4', confirm: true, reviewer_id: 'bob' }]])
+    expect(posts).toEqual([['/agent/runs/7/resume', 'POST', { token: '7:4', confirm: true, reviewer_id: 'bob', answer: null }]])
     await act(async () => { resolve({ ...RUN, status: 'COMPLETED', pending: null, reply: [{ text: '서버 확인: NCR v1 IN_REVIEW → bob', steps: [5] }] }) })
     expect(await screen.findByText('서버 확인: NCR v1 IN_REVIEW → bob')).toBeTruthy()
     expect(screen.queryByRole('button', { name: '검토 요청 보내기' })).toBeNull()
@@ -96,6 +96,38 @@ describe('Agent workspace', () => {
     expect(screen.getByText(/초안은 승인본으로 내보낼 수 없습니다/)).toBeTruthy()
     expect(fetchSpy).not.toHaveBeenCalled() // a file is made only when the user clicks
     vi.unstubAllGlobals()
+  })
+
+  it('asks back for a vague goal and sends the typed answer with the pending token', async () => {
+    const asked = { ...RUN, status: 'NEEDS_HUMAN', steps: [], plan: [], reply: [{ text: '무엇을 도와드릴까요?', steps: [] }],
+      pending: { action: 'clarify', token: '7:1', question: '무엇을 도와드릴까요?' } }
+    const api = vi.fn(async (path: string, _m?: string, _b?: unknown) => path.startsWith('/agent/runs?') ? [asked] : { ...asked, status: 'COMPLETED', pending: null })
+    render(<Agent ctx={ctxWith(api as Ctx['api'])} provider={null} go={vi.fn()}/>)
+    const send = await screen.findByRole('button', { name: '답변 보내기' })
+    expect((send as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText('Agent 질문에 대한 답변'), { target: { value: '불량 원인 조사' } })
+    await act(async () => { fireEvent.click(send) })
+    expect(api).toHaveBeenCalledWith('/agent/runs/7/resume', 'POST', { token: '7:1', confirm: true, reviewer_id: null, answer: '불량 원인 조사' })
+  })
+
+  it('offers to fill D0 first; the filled form is submitted only by the D0 role and by a click', async () => {
+    const offer = { ...RUN, status: 'NEEDS_HUMAN', steps: [], plan: [], reply: [],
+      pending: { action: 'offer_fill', token: '7:2', form: 'triage', question: 'D0 판정 양식을 채워 드릴까요?' } }
+    const filled = { ...RUN, status: 'COMPLETED', pending: null, plan: [], reply: [], steps: [
+      { seq: 3, tool: 'fill_triage', kind: 'PROPOSE', status: 'OK', http_status: 200, duration_ms: 5, audit_event_ids: [], args: {},
+        result: { form: 'triage', basis: ['SPC 첫 경보: L02'], notes: [],
+          fields: { signal_kind: 'SPC_SIGNAL', observed_defect: 'DEFECT_CONFIRMED', scope_lots: ['L02'], route: 'EMERGENCY_FULL_8D',
+            severity: 'HIGH', risk_flags: { customer_impact: true }, rationale: '불량 확정, 출하 포함', evidence_ids: ['EV-1'] },
+          submit: { path: '/cases/C1/triage', role: 'REVIEWER', can_submit: false } } }] }
+    const api = vi.fn(async (path: string, method?: string, _b?: unknown) => path.startsWith('/agent/runs?') ? [offer] : method === 'POST' ? filled : [])
+    render(<Agent ctx={ctxWith(api as Ctx['api'])} provider={null} go={vi.fn()}/>)
+    const yes = await screen.findByRole('button', { name: '예, 채워 주세요' }) // find outside act: act holds renders
+    await act(async () => { fireEvent.click(yes) })
+    expect(api).toHaveBeenCalledWith('/agent/runs/7/resume', 'POST', { token: '7:2', confirm: true, reviewer_id: null, answer: null })
+    const submit = await screen.findByRole('button', { name: '제출 권한: REVIEWER' })
+    expect((submit as HTMLButtonElement).disabled).toBe(true) // alice cannot record D0; nothing was stored
+    expect(screen.getByDisplayValue('EMERGENCY_FULL_8D')).toBeTruthy()
+    expect(api.mock.calls.some(c => c[0] === '/cases/C1/triage')).toBe(false)
   })
 
   it('labels the planner from the provider status and never claims LIVE without verification', () => {

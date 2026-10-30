@@ -33,8 +33,8 @@ class ModelProvider(Protocol):
     mode: str  # "LIVE" for the real provider; test doubles must use "TEST_DOUBLE"
     model: str
 
-    def chat(self, messages: list[dict], tools: list[dict]) -> dict:
-        """Return {"message": assistant message dict, "usage": dict}."""
+    def chat(self, messages: list[dict], tools: list[dict], response_format: dict | None = None) -> dict:
+        """Return {"message": assistant message dict, "usage": dict}. response_format forces a JSON schema."""
 
 
 def read_key() -> str:
@@ -61,9 +61,13 @@ class MetaProvider:
         key = read_key()
         return cls(key) if key else None
 
-    def chat(self, messages: list[dict], tools: list[dict]) -> dict:
-        body = json.dumps({"model": MODEL, "messages": messages, "tools": tools,
-                           "max_tokens": self._max_tokens}).encode("utf-8")
+    def chat(self, messages: list[dict], tools: list[dict], response_format: dict | None = None) -> dict:
+        payload = {"model": MODEL, "messages": messages, "max_tokens": self._max_tokens}
+        if tools:
+            payload["tools"] = tools
+        if response_format:  # strict JSON schema: the answer must parse into the expected shape
+            payload["response_format"] = response_format
+        body = json.dumps(payload).encode("utf-8")
         text = body.decode("utf-8")
         if self._key in text or SECRET_PATTERN.search(text):
             raise EgressBlocked("secret-like content in outbound payload")

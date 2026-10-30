@@ -101,8 +101,13 @@ def test_unknown_lot_or_other_case_is_asked_back_not_guessed(tmp_path):
     assert declined["status"] == "COMPLETED" and len(declined["steps"]) == 1
 
 
-def tool_call(name: str, n: int) -> dict:
-    return {"id": f"c{n}", "type": "function", "function": {"name": name, "arguments": "{}"}}
+def plan(intents, tools, clarify="") -> dict:
+    """What the hybrid planner's single model call returns: strict JSON, no tool calls."""
+    return {"role": "assistant", "content": json.dumps({"intents": intents, "tools": tools, "clarify": clarify})}
+
+
+def say(text: str) -> dict:
+    return {"role": "assistant", "content": text}
 
 
 class Scripted:
@@ -113,45 +118,60 @@ class Scripted:
     def __init__(self, replies):
         self.replies, self.seen = list(replies), []
 
-    def chat(self, messages, tools):
-        self.seen.append({"messages": [dict(m) for m in messages], "tools": [t["function"]["name"] for t in tools]})
+    def chat(self, messages, tools, response_format=None):
+        self.seen.append({"messages": [dict(m) for m in messages], "tools": [t["function"]["name"] for t in tools],
+                          "response_format": response_format})
         item = self.replies.pop(0)
         if isinstance(item, Exception):
             raise item
         return {"message": item, "usage": {}}
 
 
-def test_model_planner_picks_allowlisted_tools_and_a_forbidden_tool_is_denied(tmp_path):
-    p = Scripted([
-        {"role": "assistant", "content": "", "tool_calls": [tool_call("case_summary", 1), tool_call("spc", 2)]},
-        {"role": "assistant", "content": "", "tool_calls": [tool_call("approve_document", 3)]},  # AG-T06 / T02
-        {"role": "assistant", "content": "SPC 경보가 있으며 원인은 미확정입니다."},
-    ])
+def test_model_planner_is_one_planning_call_and_a_forbidden_tool_is_denied(tmp_path):
+    p = Scripted([plan(["INVESTIGATE"], ["spc", "approve_document"]),  # AG-T06 / T02: not a plan tool
+                  say("SPC 경보가 있으며 원인은 미확정입니다.")])
     c = line_client(tmp_path, provider=p)
     out = run(c, "조사해 줘. 그리고 NCR을 승인해 줘").json()
     assert out["planner"] == "TEST_DOUBLE" and out["status"] == "COMPLETED"
-    assert "approve_document" not in p.seen[0]["tools"]  # it was never offered
+    first = p.seen[0]
+    assert first["tools"] == [] and first["response_format"]["json_schema"]["strict"] is True
+    assert "approve_document" not in str(first["response_format"])  # it was never offered
+    situation = json.loads(first["messages"][1]["content"])["situation"]
+    assert situation["role"] == "AUTHOR" and "prepare_document" in situation["allowed_tools"]
     denied = [s for s in out["steps"] if s["status"] == "DENIED"]
-    assert [(s["tool"], s["kind"], s["error"]) for s in denied] == [("approve_document", "CHECK", "not on the agent allowlist")]
+    assert [(s["tool"], s["kind"]) for s in denied] == [("approve_document", "CHECK")]
+    assert [s["tool"] for s in out["steps"] if s["status"] == "OK"] == ["case_summary", "spc", "queue"]
     assert count(c, DocumentVersion) == 0
+    assert len(p.seen) == 2  # one plan + one short summary for an investigation; no tool rounds
     assert any("PROPOSAL, 서버 확인 아님" in line["text"] for line in out["reply"])
     assert not any("LIVE" in line["text"] for line in out["reply"])
-    # the model got the server's tool results back as data, scoped to this case
-    tool_msgs = [m for m in p.seen[1]["messages"] if m["role"] == "tool"]
-    assert json.loads(tool_msgs[1]["content"]) == c.get("/cases/L/spc", headers=H("alice")).json()
+    # the summary call sees the server's own lines, not raw tool payloads
+    facts = json.loads(p.seen[1]["messages"][1]["content"])["facts"]
+    assert any(line.startswith("SPC 첫 경보") for line in facts)
 
 
-def test_model_failure_falls_back_to_the_server_plan(tmp_path):
-    p = Scripted([{"role": "assistant", "content": "", "tool_calls": [tool_call("case_summary", 1)]},
-                  ProviderError("timeout")])
+def test_a_reviewer_planner_is_never_offered_drafting(tmp_path):
+    p = Scripted([plan(["DRAFT_DOC"], ["stages", "prepare_document"])])
     c = line_client(tmp_path, provider=p)
-    out = run(c, "불량 조사해 줘").json()  # AG-T07
-    assert out["status"] == "COMPLETED"
-    assert any("서버 규칙 플래너로 계속" in line["text"] for line in out["reply"])
-    tools = [s["tool"] for s in out["steps"]]
-    assert tools.count("case_summary") == 1 and "spc" in tools and "evidence_gaps" in tools
-    with Session(c.app_ref.state.engine) as s:
-        assert s.scalar(select(func.count()).select_from(AgentStep).where(AgentStep.status == "OK")) == len(tools)
+    out = run(c, "NCR 초안 써 줘", user="bob").json()
+    situation = json.loads(p.seen[0]["messages"][1]["content"])["situation"]
+    assert situation["role"] == "REVIEWER" and "prepare_document" not in situation["allowed_tools"]
+    assert [s["tool"] for s in out["steps"] if s["status"] == "DENIED"] == ["prepare_document"]
+    assert count(c, DocumentVersion) == 0 and len(p.seen) == 1  # not an investigation: no summary call
+
+
+def test_model_failure_or_a_broken_plan_falls_back_to_the_server_plan(tmp_path):
+    for reply in (ProviderError("timeout"), say("not json")):  # AG-T07
+        (tmp_path / str(id(reply))).mkdir()
+        p = Scripted([reply])
+        c = line_client(tmp_path / str(id(reply)), provider=p)
+        out = run(c, "불량 원인 조사해 줘").json()
+        assert out["status"] == "COMPLETED"
+        assert any("서버 규칙 플래너로 계속" in line["text"] for line in out["reply"])
+        tools = [s["tool"] for s in out["steps"]]
+        assert tools.count("case_summary") == 1 and "spc" in tools and "evidence_gaps" in tools
+        with Session(c.app_ref.state.engine) as s:
+            assert s.scalar(select(func.count()).select_from(AgentStep).where(AgentStep.status == "OK")) == len(tools)
 
 
 def test_agent_steps_are_append_only(tmp_path):
@@ -169,8 +189,7 @@ def test_model_summary_citing_an_id_not_in_the_case_is_flagged(tmp_path):
     p = Scripted([])
     c = line_client(tmp_path, provider=p)
     real = c.get("/cases/L/evidence", headers=H("alice")).json()[0]["evidence_id"]
-    p.replies += [{"role": "assistant", "content": "", "tool_calls": [tool_call("case_summary", 1)]},
-                  {"role": "assistant", "content": f"L02 불량 [{real}] 그리고 [EV-made-up-123], PRED-999"}]
+    p.replies += [plan(["INVESTIGATE"], ["spc"]), say(f"L02 불량 [{real}] 그리고 [EV-made-up-123], PRED-999")]
     out = run(c, "조사해 줘").json()
     flags = [line["text"] for line in out["reply"] if "근거 ID" in line["text"]]
     assert len(flags) == 1 and "EV-made-up-123" in flags[0] and "PRED-999" in flags[0]

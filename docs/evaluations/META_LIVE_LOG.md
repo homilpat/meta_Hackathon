@@ -18,6 +18,10 @@ Each row is a command actually run on this machine. No secret is ever recorded.
 | 2026-10-31 | same, `max_tokens` 8192 (round-by-round log) | muse-spark-1.3 | **VALIDATED**: 3 rounds, report finished (`stop`) and passed the server validator | prompt 2487 / completion 3871 (final round) |
 | 2026-10-31 | `python -m scripts.meta_investigate_smoke` | muse-spark-1.3 | **JSON_ERROR**: 3 tool calls OK; the final report did not match the report schema (`ValidationError`) and was refused (fail closed) | prompt 7539 / completion 8410 |
 
+| 2026-10-31 | Agent **hybrid planner** (one strict-JSON plan call with the server's situation card; server runs the tools; optional summary call only for investigations): "이번 SPC 경보, 8D로 가야 할지 판정해 줘" | muse-spark-1.3 | **NEEDS_HUMAN** `offer_fill` after 4 reads, 1 model call | **4.9 s** wall |
+| 2026-10-31 | same, "이번 LOT 불량 원인을 조사해 줘" | muse-spark-1.3 | **COMPLETED**: 6 reads + summary (cited ids all exist in the case; none flagged) | 24.6 s wall (plan ≈ 4–5 s, summary call ≈ 20 s) |
+| 2026-10-31 | same, "이번 LOT 불량을 조사하고 8D 보고서 초안을 준비해 줘." | muse-spark-1.3 | **NEEDS_HUMAN** `request_review`: 8D-report note → 7 reads → NCR v1 DRAFT (201) + validation WARN (201) → summary | 28.0 s wall |
+
 Status (2026-10-31): **LIVE Meta works.** The structured smoke passed, and Agent-First LIVE tool calling went from goal to tools, a
 server-checked draft, and a stop for the human. The LIVE investigation *report* validated in 1 of the 2 runs made after the token fix. The
 other run's report did not fit the schema and was refused, as designed. So report-format reliability is the open item; the

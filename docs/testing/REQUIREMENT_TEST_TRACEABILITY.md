@@ -25,6 +25,13 @@ Status is what was actually executed; `NOT_RUN` / `NOT_IMPLEMENTED` are never co
 | TC-E-01 | Meta LIVE real tool call | `scripts/meta_smoke.py`, `scripts/meta_investigate_smoke.py` | BLOCKED_NO_CREDENTIALS (exit 2, no call) |
 | TC-F-01 | fresh-DB final demo twice | `python -m scripts.e2e_http` ×2 on new scratch DBs | PASS (local: same snapshot `19517fb45ba0de1b`, 2/2 each) |
 
+## §22 Agent-First
+
+| ID | Scenario | Where it is checked | Status |
+|---|---|---|---|
+| AG0 | baseline before Agent-First changes (`d24c6b5`) | `docs/implementation/AG0_BASELINE.md`: pytest 261, ruff, fresh-DB alembic head + check, frontend typecheck / 14 tests / build, CI run 41006853191 | PASS (local + CI) |
+| AG1–AG5, AG-T01..T12 | Agent UI, tools, safe writes, documents, release | — | NOT_IMPLEMENTED |
+
 ## Frontend tests (`frontend/tests`, vitest)
 
 | Test | Covers |

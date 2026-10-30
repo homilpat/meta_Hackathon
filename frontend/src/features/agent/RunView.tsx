@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { STATUS_TONE } from '../../constants'
 import { Badge, Card, Cite, Icon, Note, SectionTitle } from '../../components/ui'
+import { ExportButtons } from '../../components/ExportButtons'
 import { ControlChart } from '../spc/Spc'
 import { TASK } from '../queue/Queue'
 import type { Ctx, J, Tone } from '../../types'
@@ -46,7 +47,14 @@ function StepBody({ s, ctx }: { s: J; ctx: Ctx }) {
       {r.next_checks.map((c: J, i: number) => <p key={`c${i}`} className="muted wrap"><Badge tone="teal">다음 확인</Badge> {typeof c === 'string' ? c : c.check ?? JSON.stringify(c)}</p>)}</>
     case 'experience': return <><p><Badge tone={r.mode === 'KNOWN' ? 'green' : r.mode === 'ANALOGICAL' ? 'amber' : 'slate'}>{r.mode}</Badge> 추천 {r.recommendations.length}건 · 실패 사례 {r.negative_precedents.length}건</p><Note>{r.note}</Note></>
     case 'history': return <p className="muted wrap">{r.precedents.map((p: J) => p.historical_case_id).join(', ') || '적격 과거 사례 없음'} · 유사도는 인과 근거가 아닙니다.</p>
-    case 'stages': return <div className="row-gap">{r.stages.map((x: J) => <Badge key={x.kind} tone={STATUS_TONE[x.status] ?? 'slate'}>{x.step} {x.doc_type} {x.status ?? '미작성'}{!x.approval_open && ' · 잠금'}</Badge>)}</div>
+    case 'stages': return <><div className="row-gap">{r.stages.map((x: J) => <Badge key={x.kind} tone={STATUS_TONE[x.status] ?? 'slate'}>{x.step} {x.doc_type} {x.status ?? '미작성'}{!x.approval_open && ' · 잠금'}</Badge>)}</div>
+      {r.closure && <p className="muted wrap">D8 종료 {r.closure.ready ? <Badge tone="green">조건 충족</Badge> : <Badge tone="amber">미충족</Badge>} {(r.closure.blocks ?? []).slice(0, 4).join(' · ')}</p>}
+      <button className="citation" onClick={() => ctx.open(ctx.cid, '', 'eightd')}>D0~D8 화면 열기</button></>
+    case 'exports': return <>{r.documents.map((d: J) => <div key={d.kind}><Badge tone="green">{d.doc_type} v{d.version} APPROVED</Badge>
+      <ExportButtons user={ctx.me?.id} path={d.path} label={`${d.doc_type} 승인본`}/></div>)}
+      {r.report && <ExportButtons user={ctx.me?.id} path={r.report} label="8D 종료 보고서"/>}
+      {!r.documents.length && !r.report && <span className="muted">승인된 문서가 없어 내보낼 파일이 없습니다. 초안은 승인본으로 내보낼 수 없습니다.</span>}
+      <Note>파일은 버튼을 누를 때 서버가 승인 해시를 다시 확인해 만듭니다. Agent는 파일을 미리 만들거나 대신 내려받지 않습니다.</Note></>
     case 'documents': return <>{r.documents.map((d: J) => <p key={d.kind}><Badge tone="teal">{d.doc_type} v{d.version}</Badge> <Badge tone={STATUS_TONE[d.status]}>{d.status}</Badge>
       {d.validation ? <> <Badge tone={d.validation.result === 'BLOCK' ? 'red' : d.validation.result === 'WARN' ? 'amber' : 'green'}>검증 {d.validation.result}{d.validation.stale ? ' · STALE' : ''}</Badge></> : <> <Badge tone="slate">미검증</Badge></>}
       {' '}<button className="citation" onClick={() => ctx.open(ctx.cid, `${d.kind}:${d.version}`)}>문서 열기</button></p>)}{!r.documents.length && <span className="muted">D2~D4 문서 없음</span>}</>

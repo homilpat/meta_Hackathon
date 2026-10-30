@@ -82,6 +82,22 @@ describe('Agent workspace', () => {
     expect(go).toHaveBeenCalledWith('approvals')
   })
 
+  it('offers only the approved versions for export and never downloads by itself', async () => {
+    const exportsRun = { ...RUN, status: 'COMPLETED', pending: null, plan: [], reply: [], steps: [
+      { seq: 1, tool: 'exports', kind: 'READ', status: 'OK', http_status: 200, duration_ms: 3, audit_event_ids: [], args: {},
+        result: { documents: [{ kind: 'ncr', doc_type: 'NCR', version: 2, path: '/cases/C1/documents/ncr/export?version=2' }], report: null } },
+      { seq: 2, tool: 'exports', kind: 'READ', status: 'OK', http_status: 200, duration_ms: 3, audit_event_ids: [], args: {},
+        result: { documents: [], report: null } }] }
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+    render(<Agent ctx={ctxWith(vi.fn(async () => [exportsRun]))} provider={null} go={vi.fn()}/>)
+    expect(await screen.findByRole('button', { name: 'NCR 승인본 PDF' })).toBeTruthy()
+    expect(screen.getByText('NCR v2 APPROVED')).toBeTruthy()
+    expect(screen.getByText(/초안은 승인본으로 내보낼 수 없습니다/)).toBeTruthy()
+    expect(fetchSpy).not.toHaveBeenCalled() // a file is made only when the user clicks
+    vi.unstubAllGlobals()
+  })
+
   it('labels the planner from the provider status and never claims LIVE without verification', () => {
     expect(plannerLabel(null)[0]).toBe('AI 오프라인 · 서버 규칙 플래너')
     expect(plannerLabel({ configured: true, live_status: 'TEST_DOUBLE' })[0]).toMatch(/LIVE 아님/)

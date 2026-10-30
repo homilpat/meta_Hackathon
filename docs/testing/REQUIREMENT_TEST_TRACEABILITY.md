@@ -33,7 +33,9 @@ Status is what was actually executed; `NOT_RUN` / `NOT_IMPLEMENTED` are never co
 | AG1 | Agent-First shell: Agent default screen, 내 할 일 / 부서 할 일 / 승인 대기 menus on `/queue`, all 9 existing screens under "전문 도구", case context panel, honest planner label, manual fallback when the agent API is absent | `frontend/tests/App.test.tsx`, `frontend/tests/Agent.test.tsx`; `docs/implementation/AG1_AGENT_UI.md` | PASS (local): typecheck, 22 vitest, build, `scripts.integration_smoke` 24/24 |
 | AG2 | server planner + read-only tools; AG-T01 scope ask-back, AG-T06 forbidden tool denied, AG-T07 offline / model failure, AG-T08 restore, AG-T09 run idempotency, AG-T12 user isolation | `backend/tests/test_agent_ag2.py` (8); `scripts/integration_smoke.py` agent checks; `docs/implementation/AG2_READ_TOOLS.md` | PASS (local) |
 | AG3 | allowlisted draft/validate, human-confirmed review request with server candidates, await/resume, restart; AG-T02 no agent approval, AG-T05 stale refused, AG-T09 no duplicate review/draft, AG-T10 agent draft = manual draft; §22.10 (1)–(6) | `backend/tests/test_agent_ag3.py` (10); `docs/implementation/AG3_SAFE_WRITES.md` | PASS (local): pytest 279, smoke 27/27, e2e_http 2/2 |
-| AG4–AG5, AG-T03/T04/T11, §22.10 (7) | documents/export end to end, release | — | NOT_IMPLEMENTED |
+| AG4 | D8 readiness read, approved-only export links, G9 edit picked up and old question refused, human approval, AG-T11 draft not exported; explicit-ask-only writes | `backend/tests/test_agent_ag4.py` (4); `scripts/e2e_http.py` agent scenario; `docs/implementation/AG4_DOCS_EXPORT_E2E.md` | PASS (local): pytest 282, e2e_http 3/3, smoke 27/27 |
+| AG-T03, AG-T04 | D6 FAIL reopens D4; wrong number/evidence blocked | existing `tests/test_c_e2e.py::failure`, `tests/test_g9_docs.py`, `tests/test_g8a_validator.py` (agent writes use the same routes) | PASS (existing) |
+| AG5, §22.10 (7) | release verification, model failure with manual fallback | — | NOT_RUN |
 
 ## Frontend tests (`frontend/tests`, vitest)
 

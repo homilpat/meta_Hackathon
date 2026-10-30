@@ -38,8 +38,8 @@ class ModelProvider(Protocol):
 
 
 def read_key() -> str:
-    if key := os.environ.get("MODEL_API_KEY"):
-        return key
+    if "MODEL_API_KEY" in os.environ:  # set, even to "", wins: the offline smoke/E2E servers must not pick up .env
+        return os.environ["MODEL_API_KEY"].strip()
     for env in (Path(".env"), REPO_ROOT / ".env"):  # working directory first (as before), then the repo root
         if env.is_file():
             for line in env.read_text(encoding="utf-8").splitlines():
@@ -52,7 +52,8 @@ class MetaProvider:
     mode = "LIVE"
     model = MODEL
 
-    def __init__(self, key: str, timeout: float = 30.0, max_tokens: int = 1500, opener=urlopen):
+    # muse-spark reasons before it answers: 1500 and 4096 tokens both cut a LIVE investigation report off
+    def __init__(self, key: str, timeout: float = 60.0, max_tokens: int = 8192, opener=urlopen):
         self._key, self._timeout, self._max_tokens, self._open = key, timeout, max_tokens, opener
 
     @classmethod
@@ -75,7 +76,14 @@ class MetaProvider:
                 result = json.load(response)
             if result.get("model") != MODEL:
                 raise ProviderError("unexpected model id in response")
-            return {"message": result["choices"][0]["message"], "usage": result.get("usage") or {}}
+            choice = result["choices"][0]
+            # A reasoning model can spend max_tokens before or while answering (seen LIVE): a cut-off reply is a
+            # failure, never a short or partial answer handed on as complete.
+            if choice.get("finish_reason") == "length":
+                raise ProviderError("answer cut off at max_tokens (finish_reason=length)")
+            if not choice["message"].get("content") and not choice["message"].get("tool_calls"):
+                raise ProviderError(f"no answer or tool call (finish_reason={choice.get('finish_reason')})")
+            return {"message": choice["message"], "usage": result.get("usage") or {}}
         except ProviderError:
             raise
         except HTTPError as exc:

@@ -35,7 +35,8 @@ Status is what was actually executed; `NOT_RUN` / `NOT_IMPLEMENTED` are never co
 | AG3 | allowlisted draft/validate, human-confirmed review request with server candidates, await/resume, restart; AG-T02 no agent approval, AG-T05 stale refused, AG-T09 no duplicate review/draft, AG-T10 agent draft = manual draft; §22.10 (1)–(6) | `backend/tests/test_agent_ag3.py` (10); `docs/implementation/AG3_SAFE_WRITES.md` | PASS (local): pytest 279, smoke 27/27, e2e_http 2/2 |
 | AG4 | D8 readiness read, approved-only export links, G9 edit picked up and old question refused, human approval, AG-T11 draft not exported; explicit-ask-only writes | `backend/tests/test_agent_ag4.py` (3); `scripts/e2e_http.py` agent scenario; `docs/implementation/AG4_DOCS_EXPORT_E2E.md` | PASS (local): pytest 282, e2e_http 3/3, smoke 27/27 |
 | AG-T03, AG-T04 | D6 FAIL reopens D4; wrong number/evidence blocked | existing `tests/test_c_e2e.py::failure`, `tests/test_g9_docs.py`, `tests/test_g8a_validator.py` (agent writes use the same routes) | PASS (existing) |
-| AG5, §22.10 (7) | release verification: fresh DB twice, real browser, role separation, hand-off, model failure + manual fallback, interaction counts | `docs/implementation/AG5_RELEASE_VERIFICATION.md` | PASS (local); Meta LIVE: BLOCKED_NO_CREDENTIALS |
+| AG5, §22.10 (7) | release verification: fresh DB twice, real browser, role separation, hand-off, model failure + manual fallback, interaction counts | `docs/implementation/AG5_RELEASE_VERIFICATION.md` | PASS (local) |
+| AG5 Meta LIVE | real muse-spark tool calling through the agent and the investigation loop | `docs/evaluations/META_LIVE_LOG.md` (commands actually run); regression tests for what LIVE exposed in `tests/test_meta_smoke.py` and `tests/test_agent_ag2.py::test_model_summary_citing_an_id_not_in_the_case_is_flagged` | LIVE tool calling PASS; investigation report VALIDATED 1/2 after fix |
 
 ## Frontend tests (`frontend/tests`, vitest)
 

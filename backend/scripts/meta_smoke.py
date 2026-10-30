@@ -38,7 +38,7 @@ def main() -> int:
                 },
             },
         },
-        "max_tokens": 64,
+        "max_tokens": 1024,  # muse-spark reasons before answering; 64 tokens ended at finish_reason=length, no content
     }
     request = Request(
         URL,
@@ -52,7 +52,11 @@ def main() -> int:
             result = json.load(response)
         if result.get("model") != MODEL:
             raise ValueError("Unexpected model ID")
-        parse_answer(result["choices"][0]["message"]["content"])
+        choice = result["choices"][0]
+        if choice["message"].get("content") is None:
+            print(f"LIVE FAILED: no answer content (finish_reason={choice.get('finish_reason')})")
+            return 1
+        parse_answer(choice["message"]["content"])
     except HTTPError as exc:
         print(f"LIVE FAILED: HTTPError {exc.code}")  # status only; the body may echo request details
         return 1

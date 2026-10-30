@@ -53,6 +53,7 @@ def test_a_draft_is_saved_and_validated_but_is_not_an_approval(tmp_path):
     assert out["status"] == "NEEDS_HUMAN" and out["pending"]["action"] == "request_review"
     writes = [(s["tool"], s["status"]) for s in out["steps"] if s["kind"] == "WRITE"]
     assert writes == [("create_draft", "OK"), ("validate_document", "OK")]
+    assert [s["http_status"] for s in out["steps"] if s["kind"] == "WRITE"] == [201, 201]  # what the routes return
     draft = next(s for s in out["steps"] if s["tool"] == "create_draft")
     assert draft["result"]["status"] == "DRAFT" and draft["audit_event_ids"]  # DRAFT_CREATED is in the audit log
     assert [c["user_id"] for c in out["pending"]["candidates"]] == ["bob", "carol"]  # server-chosen, not the model's

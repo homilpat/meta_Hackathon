@@ -59,7 +59,9 @@ opened in Word desktop (python-docx and Chrome PDF only); no measured ROI or pla
 | AG5 release verification | see record | `docs/implementation/AG5_RELEASE_VERIFICATION.md` |
 
 AGENT_FIRST_OFFLINE: PASS (server rule planner, TEST_DOUBLE model planner).
-AGENT_FIRST_META_LIVE: BLOCKED_NO_CREDENTIALS. This is separate from the offline PASS and is not turned into a pass.
+AGENT_FIRST_META_LIVE (2026-10-31, key in git-ignored `.env`): tool calling PASS. A real muse-spark planner went from goal →
+reads → server-checked NCR draft → NEEDS_HUMAN. LIVE investigation report: VALIDATED in 1 of 2 runs after the token fix; the
+other was refused for schema mismatch. See `docs/evaluations/META_LIVE_LOG.md`.
 
 ## Spec §9 acceptance tests now
 

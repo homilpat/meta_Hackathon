@@ -366,3 +366,4 @@
   - Fresh-DB smoke and E2E run twice; interaction counts recorded in `docs/implementation/AG5_RELEASE_VERIFICATION.md`.
   - Meta LIVE: BLOCKED_NO_CREDENTIALS.
 - CI (GitHub Actions, backend → frontend → integration): green on `5512bc7` (AG3), `c27e47e` (AG4) and `302cf6f` (AG5).
+- **Meta LIVE (2026-10-31, key in git-ignored `.env`)**: the smoke passed. The Agent LIVE planner went goal → reads → NCR draft + validation → NEEDS_HUMAN. Fixed from the LIVE runs: reasoning-token cut-offs (budgets, and `finish_reason=length` is now a failure), agent model-call cap, unsupported citation flag, recorded route status, tests and offline scripts never reading the real key. Final regression with `.env` present: pytest 287, smoke 27/27, e2e 3/3. Details in `docs/evaluations/META_LIVE_LOG.md`.

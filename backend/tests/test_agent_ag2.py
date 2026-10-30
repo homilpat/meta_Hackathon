@@ -163,3 +163,15 @@ def test_agent_steps_are_append_only(tmp_path):
     run(c, "상태 알려줘")
     with Session(c.app_ref.state.engine) as s, pytest.raises(DatabaseError, match="append-only"):
         s.execute(text("UPDATE agent_steps SET status='OK'"))
+
+
+def test_model_summary_citing_an_id_not_in_the_case_is_flagged(tmp_path):
+    p = Scripted([])
+    c = line_client(tmp_path, provider=p)
+    real = c.get("/cases/L/evidence", headers=H("alice")).json()[0]["evidence_id"]
+    p.replies += [{"role": "assistant", "content": "", "tool_calls": [tool_call("case_summary", 1)]},
+                  {"role": "assistant", "content": f"L02 불량 [{real}] 그리고 [EV-made-up-123], PRED-999"}]
+    out = run(c, "조사해 줘").json()
+    flags = [line["text"] for line in out["reply"] if "근거 ID" in line["text"]]
+    assert len(flags) == 1 and "EV-made-up-123" in flags[0] and "PRED-999" in flags[0]
+    assert real not in flags[0]  # a real id of this case is not flagged

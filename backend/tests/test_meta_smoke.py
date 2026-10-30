@@ -32,6 +32,13 @@ def test_key_loads_from_local_env_file(tmp_path, monkeypatch) -> None:
     assert read_key() == "test-only"
 
 
+def test_an_empty_key_in_the_environment_disables_the_env_file(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("MODEL_API_KEY=test-only\n", encoding="utf-8")
+    monkeypatch.setenv("MODEL_API_KEY", "")  # what scripts/integration_smoke.py and e2e_http.py pass to their servers
+    assert read_key() == ""
+
+
 
 class _Reply(io.BytesIO):
     def __enter__(self):
@@ -78,6 +85,35 @@ def test_smoke_wrong_model_id_is_failure(monkeypatch, capsys) -> None:
     monkeypatch.setattr(meta_smoke, "read_key", lambda: "k" * 12)
     monkeypatch.setattr(meta_smoke, "urlopen", lambda *a, **k: _Reply(json.dumps(body).encode()))
     assert meta_smoke.main() == 1
+
+
+def test_reasoning_cut_off_before_answer_is_a_clear_failure(monkeypatch, capsys) -> None:
+    # observed LIVE 2026-10-31: muse-spark spent max_tokens on reasoning -> content None, finish_reason "length"
+    body = {"model": meta_smoke.MODEL, "choices": [{"message": {"content": None}, "finish_reason": "length"}]}
+    monkeypatch.setattr(meta_smoke, "read_key", lambda: "k" * 12)
+    monkeypatch.setattr(meta_smoke, "urlopen", lambda *a, **k: _Reply(json.dumps(body).encode()))
+    assert meta_smoke.main() == 1
+    assert capsys.readouterr().out.strip() == "LIVE FAILED: no answer content (finish_reason=length)"
+
+
+def test_provider_reports_a_reply_without_answer_or_tool_call_as_a_failure() -> None:
+    from app.model_provider import MetaProvider, ProviderError
+
+    body = {"model": meta_smoke.MODEL, "choices": [{"message": {"role": "assistant", "content": None},
+                                                   "finish_reason": "length"}]}
+    p = MetaProvider("k" * 12, opener=lambda *a, **k: _Reply(json.dumps(body).encode()))
+    with pytest.raises(ProviderError, match="finish_reason=length"):  # also when partial content came back
+        p.chat([{"role": "user", "content": "x"}], [])
+
+
+def test_provider_treats_a_cut_off_partial_answer_as_a_failure() -> None:
+    from app.model_provider import MetaProvider, ProviderError
+
+    body = {"model": meta_smoke.MODEL, "choices": [{"message": {"role": "assistant", "content": '{"summary": "trunc'},
+                                                   "finish_reason": "length"}]}
+    p = MetaProvider("k" * 12, opener=lambda *a, **k: _Reply(json.dumps(body).encode()))
+    with pytest.raises(ProviderError, match="cut off"):
+        p.chat([{"role": "user", "content": "x"}], [])
 
 
 class _Double:

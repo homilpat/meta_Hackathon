@@ -31,20 +31,48 @@ beforeEach(() => {
 })
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
-const nav = (label: string) => fireEvent.click(screen.getByRole('button', { name: new RegExp(label) }))
+const menu = () => within(screen.getByRole('navigation', { name: '주 메뉴' }))
+const nav = (label: string) => fireEvent.click(menu().getByRole('button', { name: new RegExp(`^${label}`) }))
+const tools = () => fireEvent.click(screen.getByRole('button', { name: /전문 도구/ }))
 
 describe('App shell', () => {
-  it('renders the dashboard for the assigned case with honest offline Meta status', async () => {
+  it('opens on the Agent screen with honest offline status and the manual fallback when the agent API is absent', async () => {
     render(<App/>)
-    expect(await screen.findByRole('heading', { name: '품질 운영 현황' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: '품질 조사 워크스페이스' })).toBeTruthy()
     await waitFor(() => expect(screen.getAllByText('C1').length).toBeGreaterThan(0))
     expect(screen.getByText('키 없음 · 호출 불가')).toBeTruthy()
-    expect(screen.getByText(/SYNTHETIC, SELF_GENERATED/)).toBeTruthy()
+    expect(screen.getByText('AI 오프라인 · 서버 규칙 플래너')).toBeTruthy()
+    expect(await screen.findByText('Agent 서비스에 연결할 수 없습니다')).toBeTruthy()
+    expect(screen.queryByText(/LIVE 검증됨/)).toBeNull()
+    expect(calls.some(c => c.path === '/agent/runs?case_id=C1' && c.user === 'alice')).toBe(true)
     expect(calls.some(c => c.path === '/me' && c.user === 'alice')).toBe(true)
+    // the fallback leads to the manual work queue
+    fireEvent.click(within(screen.getByText('Agent 서비스에 연결할 수 없습니다').closest('section')!).getByRole('button', { name: '내 할 일' }))
+    expect(await screen.findByRole('heading', { name: '내 할 일' })).toBeTruthy()
+  })
+
+  it('keeps the dashboard with the synthetic notice one click away', async () => {
+    render(<App/>)
+    await waitFor(() => expect(screen.getAllByText('C1').length).toBeGreaterThan(0))
+    nav('사건 · 개요')
+    expect(await screen.findByRole('heading', { name: '품질 운영 현황' })).toBeTruthy()
+    expect(screen.getByText(/SYNTHETIC, SELF_GENERATED/)).toBeTruthy()
+  })
+
+  it('every existing screen stays reachable under the specialist tools group', async () => {
+    render(<App/>)
+    await screen.findByRole('heading', { name: '품질 조사 워크스페이스' })
+    expect(screen.queryByRole('button', { name: '감사 · 보안' })).toBeNull()
+    tools()
+    expect(screen.getByRole('button', { name: /전문 도구/ }).getAttribute('aria-expanded')).toBe('true')
+    for (const label of ['D0~D8 진행', 'SPC 라인 모니터링', '제조 데이터 · 증거', '품질 예측 · XAI', 'AI 품질 조사', '과거 품질 사례', '문서 · 결재', '변경 영향 분석', '감사 · 보안'])
+      expect(menu().getByRole('button', { name: new RegExp(`^${label}`) })).toBeTruthy()
   })
 
   it('switching the demo user reloads as that user and hides author-only actions', async () => {
     render(<App/>)
+    await waitFor(() => expect(screen.getAllByText('C1').length).toBeGreaterThan(0))
+    nav('사건 · 개요')
     expect(await screen.findByRole('button', { name: /SMT 라인 사건/ })).toBeTruthy()
     const userSelect = screen.getByDisplayValue('작성자 Alice')
     await act(async () => { fireEvent.change(userSelect, { target: { value: 'bob' } }) })
@@ -60,6 +88,8 @@ describe('App shell', () => {
     process.on('unhandledRejection', e => escaped.push(e))
     try {
       render(<App/>)
+      await waitFor(() => expect(screen.getAllByText('C1').length).toBeGreaterThan(0))
+      nav('사건 · 개요')
       const button = await screen.findByRole('button', { name: '소형 픽스처 사건' })
       failPost = { status: 409, detail: 'case already exists' }
       await act(async () => { fireEvent.click(button) })
@@ -74,8 +104,8 @@ describe('App shell', () => {
 
   it('navigates to the audit screen and shows the verified hash chain', async () => {
     render(<App/>)
-    await screen.findByRole('heading', { name: '품질 운영 현황' })
     await waitFor(() => expect(screen.getAllByText('C1').length).toBeGreaterThan(0))
+    tools()
     nav('감사 · 보안')
     expect(await screen.findByRole('heading', { name: '감사 및 보안' })).toBeTruthy()
     expect(await screen.findByText('감사 해시 체인 무결')).toBeTruthy()
@@ -84,10 +114,23 @@ describe('App shell', () => {
   it('queue lists open work and "열기" opens the document screen for that case', async () => {
     render(<App/>)
     await waitFor(() => expect(screen.getAllByText('C1').length).toBeGreaterThan(0))
-    nav('할 일')
+    nav('내 할 일')
+    expect(await screen.findByRole('heading', { name: '내 할 일' })).toBeTruthy()
     const row = (await screen.findByText('review NCR v2')).closest('tr')!
     expect(within(row).getByText('결재 검토')).toBeTruthy()
+    expect(calls.some(c => c.path === '/queue?scope=mine')).toBe(true)
     fireEvent.click(within(row).getByRole('button', { name: '열기' }))
     expect(await screen.findByRole('heading', { name: '문서 및 결재' })).toBeTruthy()
+  })
+
+  it('department and approval menus read the same server queue', async () => {
+    render(<App/>)
+    await waitFor(() => expect(screen.getAllByText('C1').length).toBeGreaterThan(0))
+    nav('부서 할 일')
+    expect(await screen.findByRole('heading', { name: '부서 할 일' })).toBeTruthy()
+    nav('승인 대기')
+    expect(await screen.findByRole('heading', { name: '승인 대기' })).toBeTruthy()
+    expect(within((await screen.findByText('review NCR v2')).closest('tr')!).getByText('결재 검토')).toBeTruthy()
+    expect(calls.filter(c => c.path === '/queue?scope=department').length).toBeGreaterThan(0)
   })
 })

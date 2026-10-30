@@ -30,7 +30,8 @@ Status is what was actually executed; `NOT_RUN` / `NOT_IMPLEMENTED` are never co
 | ID | Scenario | Where it is checked | Status |
 |---|---|---|---|
 | AG0 | baseline before Agent-First changes (`d24c6b5`) | `docs/implementation/AG0_BASELINE.md`: pytest 261, ruff, fresh-DB alembic head + check, frontend typecheck / 14 tests / build, CI run 41006853191 | PASS (local + CI) |
-| AG1–AG5, AG-T01..T12 | Agent UI, tools, safe writes, documents, release | — | NOT_IMPLEMENTED |
+| AG1 | Agent-First shell: Agent default screen, 내 할 일 / 부서 할 일 / 승인 대기 menus on `/queue`, all 9 existing screens under "전문 도구", case context panel, honest planner label, manual fallback when the agent API is absent | `frontend/tests/App.test.tsx`, `frontend/tests/Agent.test.tsx`; `docs/implementation/AG1_AGENT_UI.md` | PASS (local): typecheck, 22 vitest, build, `scripts.integration_smoke` 24/24 |
+| AG2–AG5, AG-T01..T12 | server planner and tools, safe writes, documents, release | — | NOT_IMPLEMENTED (the `/agent/*` API does not exist yet; the UI shows the fallback) |
 
 ## Frontend tests (`frontend/tests`, vitest)
 
@@ -38,7 +39,8 @@ Status is what was actually executed; `NOT_RUN` / `NOT_IMPLEMENTED` are never co
 |---|---|
 | `api.test.ts` (4) | X-User header, no idempotency key on GET, fresh Idempotency-Key per mutation, JSON / text bodies, ApiError text for string and structured `detail` |
 | `DocEditor.test.tsx` (2) | manual edit sends only changed fields with the exact base hash; AI proposal shown, not applied until accepted |
-| `App.test.tsx` (5) | dashboard render with offline Meta status and synthetic notice; user switch reloads as that user and hides author-only actions; refused mutation shows the server error; navigation to the audit screen; queue row → document screen |
+| `App.test.tsx` (8) | Agent default screen with offline Meta status, honest planner label and fallback → 내 할 일; dashboard + synthetic notice one click away; all existing screens reachable under 전문 도구; user switch reloads as that user and hides author-only actions; refused mutation shows the server error; audit screen; 내 할 일 row → document screen; 부서 할 일 / 승인 대기 read the same `/queue` |
+| `Agent.test.tsx` (5) | persisted run restored from `/agent/runs` (plan, recorded steps, DRAFT shown as not approval, denied tool shown as denied, audit ids); review request needs an explicit reviewer and sends the pending token once on a double click; goal sent for the current case with an Idempotency-Key; service down → fallback to manual paths; planner label never says LIVE without verification |
 
 ## Spec §9 acceptance cases (existing backend tests)
 

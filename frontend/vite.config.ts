@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 // Built into the FastAPI static dir (backend/src/app/static/web) and served at /app. In dev, API calls go to uvicorn on :8000.
-const api = ['/me', '/cases', '/models', '/provider', '/synthetic', '/health', '/audit', '/monitoring', '/reference-models', '/queue']
+const api = ['/me', '/cases', '/models', '/provider', '/synthetic', '/health', '/audit', '/monitoring', '/reference-models', '/queue', '/agent']
 export default defineConfig({
   base: '/app/',
   plugins: [react(), tailwindcss()],

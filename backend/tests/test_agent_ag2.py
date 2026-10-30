@@ -26,17 +26,16 @@ def count(c, model) -> int:
 
 def test_offline_server_plan_runs_read_tools_only_and_is_grounded(tmp_path):
     c = line_client(tmp_path)  # no provider: the Meta model is offline
-    r = run(c, GOAL)
+    r = run(c, "이번 LOT 불량 원인을 조사해 줘")  # drafting goals are AG3 (tests/test_agent_ag3.py)
     assert r.status_code == 201, r.text
     out = r.json()
     assert out["planner"] == "SERVER_RULES" and out["status"] == "COMPLETED"
-    assert {"INVESTIGATE", "DRAFT_DOC"} <= set(out["intents"])
+    assert out["intents"] == ["INVESTIGATE"]
     tools = [s["tool"] for s in out["steps"]]
-    assert tools[0] == "case_summary" and {"spc", "evidence_gaps", "experience", "documents", "queue"} <= set(tools)
-    assert {s["kind"] for s in out["steps"]} == {"READ"}  # AG2 has no write tool
+    assert tools[0] == "case_summary" and {"spc", "evidence_gaps", "experience", "history", "queue"} <= set(tools)
+    assert {s["kind"] for s in out["steps"]} == {"READ"}
     assert all(s["status"] == "OK" for s in out["steps"] if s["tool"] != "predictions"), out["steps"]
-    assert count(c, DocumentVersion) == 0  # asking for a draft did not create one
-    assert "허용 목록에 없습니다" in out["reply"][0]["text"]
+    assert count(c, DocumentVersion) == 0
     # every reply line points at a recorded step; every cited evidence id exists in this case
     seqs = {s["seq"] for s in out["steps"]}
     assert all(set(line["steps"]) <= seqs for line in out["reply"])

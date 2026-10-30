@@ -32,7 +32,8 @@ Status is what was actually executed; `NOT_RUN` / `NOT_IMPLEMENTED` are never co
 | AG0 | baseline before Agent-First changes (`d24c6b5`) | `docs/implementation/AG0_BASELINE.md`: pytest 261, ruff, fresh-DB alembic head + check, frontend typecheck / 14 tests / build, CI run 41006853191 | PASS (local + CI) |
 | AG1 | Agent-First shell: Agent default screen, 내 할 일 / 부서 할 일 / 승인 대기 menus on `/queue`, all 9 existing screens under "전문 도구", case context panel, honest planner label, manual fallback when the agent API is absent | `frontend/tests/App.test.tsx`, `frontend/tests/Agent.test.tsx`; `docs/implementation/AG1_AGENT_UI.md` | PASS (local): typecheck, 22 vitest, build, `scripts.integration_smoke` 24/24 |
 | AG2 | server planner + read-only tools; AG-T01 scope ask-back, AG-T06 forbidden tool denied, AG-T07 offline / model failure, AG-T08 restore, AG-T09 run idempotency, AG-T12 user isolation | `backend/tests/test_agent_ag2.py` (8); `scripts/integration_smoke.py` agent checks; `docs/implementation/AG2_READ_TOOLS.md` | PASS (local) |
-| AG3–AG5, AG-T02/T03/T04/T05/T10/T11, §22.10 (1)–(7) | safe writes and human gates, documents/export, release | — | NOT_IMPLEMENTED |
+| AG3 | allowlisted draft/validate, human-confirmed review request with server candidates, await/resume, restart; AG-T02 no agent approval, AG-T05 stale refused, AG-T09 no duplicate review/draft, AG-T10 agent draft = manual draft; §22.10 (1)–(6) | `backend/tests/test_agent_ag3.py` (10); `docs/implementation/AG3_SAFE_WRITES.md` | PASS (local): pytest 279, smoke 27/27, e2e_http 2/2 |
+| AG4–AG5, AG-T03/T04/T11, §22.10 (7) | documents/export end to end, release | — | NOT_IMPLEMENTED |
 
 ## Frontend tests (`frontend/tests`, vitest)
 

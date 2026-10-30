@@ -334,3 +334,11 @@
 - Fix: `app/fields.py` (`FreeText`, `OptionalText`) used by every reason/comment/note field; branch checks are non-blank; REJECT / REQUEST_INFO need a comment; UI cards each have their own reason input, buttons disabled until written, canned text removed (legacy `/ui` precedent-link note too). Specification content keeps its 10-character minimum, now trimmed. Three tests that asserted "too short → 422" now assert "blank → 422" per the decision.
 - Guards: `tests/test_reasons.py` (inspects every request model), `frontend/tests/ExperienceCard.test.tsx`.
 - Local: pytest 261 passed, ruff 0, smoke 24/24, HTTP E2E 2/2, vitest 14, tsc 0, vite build 0.
+
+
+## 2026-10-30 — tracked AI execution prompt cleanup (documentation-only)
+
+- Removed from the current Git tree: `prompts/QualityOps_AI_CODEX_MASTER_R0_G10_FINAL.md` and `docs/archive/QualityOps_AI_CODEX_EXECUTION_PROMPTS_v5_5_FINAL.md`; the newly added Figma Make execution prompt was also removed from this feature branch.
+- The original lines above are historical records of files that existed when their phases were run, **not** current file references. Past Git commits still retain the historical contents; no history rewrite was performed.
+- The root requirements specification (including new Agent-First §22) remains the source of truth. README, requirement traceability and architecture audit links were corrected. Runtime system prompts in backend investigation code remain because they implement product behavior, not developer-tool instructions.
+- This cleanup changes documentation only. No code/test/CI or Meta LIVE success claim is implied.

@@ -365,3 +365,4 @@
 - **AG5**: real-browser check (headless Chrome against uvicorn and a real agent run) found the data-integrity card unrendered; fixed.
   - Fresh-DB smoke and E2E run twice; interaction counts recorded in `docs/implementation/AG5_RELEASE_VERIFICATION.md`.
   - Meta LIVE: BLOCKED_NO_CREDENTIALS.
+- CI (GitHub Actions, backend → frontend → integration): green on `5512bc7` (AG3), `c27e47e` (AG4) and `302cf6f` (AG5).

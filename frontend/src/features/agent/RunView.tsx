@@ -65,6 +65,9 @@ function StepBody({ s, ctx }: { s: J; ctx: Ctx }) {
       {!r.mine.length && <p className="muted">{r.user}의 이 사건 할 일 없음 · 부서({r.role}) {r.department.length}건</p>}</>
     case 'create_draft': case 'request_review': return <p><Badge tone="teal">{r.doc_type} v{r.version}</Badge> <Badge tone={STATUS_TONE[r.status]}>{r.status}</Badge>{r.status === 'DRAFT' && <> <Badge tone="slate">승인 아님</Badge></>} 주장 {r.claims.length}개
       {r.reviews?.length > 0 && ` · 검토자 ${r.reviews.map((x: J) => `${x.reviewer_id}(${x.state})`).join(', ')}`} <button className="citation" onClick={() => ctx.open(ctx.cid, `${s.args.kind}:${r.version}`)}>문서 열기</button></p>
+    case 'plan': return <><p>의도 {r.intents.length ? r.intents.map((i: string) => <Badge key={i} tone="violet">{i}</Badge>) : <Badge tone="amber">분류 불가 → 되묻기</Badge>}</p>
+      <p className="muted">도구는 의도별로 서버가 고정합니다 · {s.args.model} · 프롬프트 {s.args.prompt_version}</p></>
+    case 'summarize': return <p className="muted">{s.args.model} · 추론 강도 {s.args.reasoning_effort} · 프롬프트 {s.args.prompt_version} · 요약은 위 답변에 PROPOSAL로 표시</p>
     case 'fill_triage': return <TriageForm r={r} ctx={ctx}/>
     case 'validate_document': return <><p><Badge tone={r.result === 'BLOCK' ? 'red' : r.result === 'WARN' ? 'amber' : 'green'}>검증 {r.result}</Badge> 이슈 {r.issues.length}건{r.stale && <> <Badge tone="red">STALE</Badge></>}</p>
       {r.issues.slice(0, 6).map((i: J, n: number) => <p key={n} className="muted wrap"><Badge tone={i.severity === 'BLOCK' ? 'red' : 'amber'}>{i.code}</Badge> {i.claim_id ?? '문서'}: {i.message}</p>)}</>
@@ -73,7 +76,7 @@ function StepBody({ s, ctx }: { s: J; ctx: Ctx }) {
 }
 
 const TOOL_TITLE: Record<string, string> = {
-  create_draft: '문서 초안 저장', validate_document: '문서 검증', request_review: '검토 요청', fill_triage: 'D0 판정 양식 (제출 전)',
+  create_draft: '문서 초안 저장', validate_document: '문서 검증', request_review: '검토 요청', fill_triage: 'D0 판정 양식 (제출 전)', plan: '모델: 의도 분류', summarize: '모델: 요약',
 }
 export type Resume = (confirm: boolean, reviewer?: string, answer?: string) => void
 

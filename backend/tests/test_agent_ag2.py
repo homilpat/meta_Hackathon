@@ -5,7 +5,7 @@ import json
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.db import AgentRun, AgentStep, DocumentVersion, WorkflowEvent
+from app.db import AgentRun, DocumentVersion, WorkflowEvent
 from app.model_provider import ProviderError
 from tests.v5_util import H, line_client
 
@@ -101,9 +101,9 @@ def test_unknown_lot_or_other_case_is_asked_back_not_guessed(tmp_path):
     assert declined["status"] == "COMPLETED" and len(declined["steps"]) == 1
 
 
-def plan(intents, tools, clarify="") -> dict:
-    """What the hybrid planner's single model call returns: strict JSON, no tool calls."""
-    return {"role": "assistant", "content": json.dumps({"intents": intents, "tools": tools, "clarify": clarify})}
+def plan(intents, clarify="", **extra) -> dict:
+    """What the planner's single model call returns: strict JSON intents (extra keys are ignored by the server)."""
+    return {"role": "assistant", "content": json.dumps({"intents": intents, "clarify": clarify, **extra})}
 
 
 def say(text: str) -> dict:
@@ -127,52 +127,93 @@ class Scripted:
         return {"message": item, "usage": {}}
 
 
-def test_model_planner_is_one_planning_call_and_a_forbidden_tool_is_denied(tmp_path):
-    p = Scripted([plan(["INVESTIGATE"], ["spc", "approve_document"]),  # AG-T06 / T02: not a plan tool
-                  say("SPC 경보가 있으며 원인은 미확정입니다.")])
+def reads(out: dict) -> list[str]:
+    return [s["tool"] for s in out["steps"] if s["kind"] == "READ"]
+
+
+def test_model_only_classifies_and_the_server_runs_the_fixed_tools(tmp_path):
+    from app.agent import PLANNER_VERSION, SUMMARY_VERSION, server_plan
+
+    # the model tries to choose tools (and a forbidden one): the server ignores anything but intents
+    p = Scripted([plan(["INVESTIGATE"], tools=["spc", "approve_document"]), say("SPC 경보가 있으며 원인은 미확정입니다.")])
     c = line_client(tmp_path, provider=p)
     out = run(c, "조사해 줘. 그리고 NCR을 승인해 줘").json()
     assert out["planner"] == "TEST_DOUBLE" and out["status"] == "COMPLETED"
-    first = p.seen[0]
-    assert first["tools"] == [] and first["response_format"]["json_schema"]["strict"] is True
-    assert "approve_document" not in str(first["response_format"])  # it was never offered
-    situation = json.loads(first["messages"][1]["content"])["situation"]
-    assert situation["role"] == "AUTHOR" and "prepare_document" in situation["allowed_tools"]
-    denied = [s for s in out["steps"] if s["status"] == "DENIED"]
-    assert [(s["tool"], s["kind"]) for s in denied] == [("approve_document", "CHECK")]
-    assert [s["tool"] for s in out["steps"] if s["status"] == "OK"] == ["case_summary", "spc", "queue"]
-    assert count(c, DocumentVersion) == 0
-    assert len(p.seen) == 2  # one plan + one short summary for an investigation; no tool rounds
-    assert p.seen[0]["reasoning_effort"] is None and p.seen[1]["reasoning_effort"] == "minimal"  # plan: default
+    schema = p.seen[0]["response_format"]["json_schema"]
+    assert schema["strict"] is True and set(schema["schema"]["properties"]) == {"intents", "clarify"}
+    assert p.seen[0]["tools"] == [] and p.seen[0]["reasoning_effort"] is None
+    assert reads(out) == [t for t in server_plan(["INVESTIGATE"])]  # fixed workflow for the intent
+    assert not any(s["tool"] == "approve_document" for s in out["steps"]) and count(c, DocumentVersion) == 0
+    models = [s for s in out["steps"] if s["kind"] == "MODEL"]
+    assert [(s["tool"], s["args"]["prompt_version"], s["args"]["reasoning_effort"]) for s in models] == [
+        ("plan", PLANNER_VERSION, None), ("summarize", SUMMARY_VERSION, "minimal")]
+    assert models[0]["result"] == {"intents": ["INVESTIGATE"], "clarify": ""}
     assert any("PROPOSAL, 서버 확인 아님" in line["text"] for line in out["reply"])
     assert not any("LIVE" in line["text"] for line in out["reply"])
-    # the summary call sees the server's own lines, not raw tool payloads
     facts = json.loads(p.seen[1]["messages"][1]["content"])["facts"]
     assert any(line.startswith("SPC 첫 경보") for line in facts)
 
 
-def test_a_reviewer_planner_is_never_offered_drafting(tmp_path):
-    p = Scripted([plan(["DRAFT_DOC"], ["stages", "prepare_document"])])
+def test_live_and_offline_run_the_same_tools_for_the_same_intent(tmp_path):
+    (tmp_path / "off").mkdir(), (tmp_path / "on").mkdir()
+    off = run(line_client(tmp_path / "off"), "이번 LOT 불량 원인을 조사해 줘").json()
+    p = Scripted([plan(["INVESTIGATE"]), say("요약")])
+    on = run(line_client(tmp_path / "on", provider=p), "이번 LOT 불량 원인을 조사해 줘").json()
+    assert reads(on) == reads(off) and off["intents"] == on["intents"] == ["INVESTIGATE"]
+
+
+def test_a_reviewer_asking_to_draft_is_refused_by_the_route_like_offline(tmp_path):
+    p = Scripted([plan(["DRAFT_DOC"])])
     c = line_client(tmp_path, provider=p)
     out = run(c, "NCR 초안 써 줘", user="bob").json()
     situation = json.loads(p.seen[0]["messages"][1]["content"])["situation"]
-    assert situation["role"] == "REVIEWER" and "prepare_document" not in situation["allowed_tools"]
-    assert [s["tool"] for s in out["steps"] if s["status"] == "DENIED"] == ["prepare_document"]
-    assert count(c, DocumentVersion) == 0 and len(p.seen) == 1  # not an investigation: no summary call
+    assert situation["role"] == "REVIEWER" and situation["may_draft_documents"] is False
+    draft = next(s for s in out["steps"] if s["tool"] == "create_draft")
+    assert draft["status"] == "DENIED" and draft["http_status"] == 403  # the server, not the prompt, enforces it
+    assert out["status"] == "BLOCKED" and count(c, DocumentVersion) == 0 and len(p.seen) == 1
 
 
-def test_model_failure_or_a_broken_plan_falls_back_to_the_server_plan(tmp_path):
+def test_model_failure_or_a_broken_plan_is_recorded_and_falls_back_to_the_server_plan(tmp_path):
+    from app.agent import server_plan
+
     for reply in (ProviderError("timeout"), say("not json")):  # AG-T07
         (tmp_path / str(id(reply))).mkdir()
-        p = Scripted([reply])
-        c = line_client(tmp_path / str(id(reply)), provider=p)
+        c = line_client(tmp_path / str(id(reply)), provider=Scripted([reply]))
         out = run(c, "불량 원인 조사해 줘").json()
         assert out["status"] == "COMPLETED"
         assert any("서버 규칙 플래너로 계속" in line["text"] for line in out["reply"])
-        tools = [s["tool"] for s in out["steps"]]
-        assert tools.count("case_summary") == 1 and "spc" in tools and "evidence_gaps" in tools
-        with Session(c.app_ref.state.engine) as s:
-            assert s.scalar(select(func.count()).select_from(AgentStep).where(AgentStep.status == "OK")) == len(tools)
+        failed = [s for s in out["steps"] if s["kind"] == "MODEL"]
+        assert [(s["tool"], s["status"], s["http_status"]) for s in failed] == [("plan", "ERROR", 502)]
+        assert reads(out) == server_plan(["INVESTIGATE"])
+
+
+def test_the_hourly_model_cap_hands_over_to_the_server_planner(tmp_path, monkeypatch):
+    from app import agent
+
+    monkeypatch.setattr(agent, "MODEL_RUNS_PER_USER_HOUR", 1)
+    p = Scripted([plan(["STATUS"])])
+    c = line_client(tmp_path, provider=p)
+    assert run(c, "진행 상태 알려줘").json()["planner"] == "TEST_DOUBLE"
+    second = run(c, "진행 상태 알려줘").json()
+    assert second["planner"] == "SERVER_RULES" and len(p.seen) == 1  # no second paid call
+    assert "한도" in second["reply"][0]["text"] and second["status"] == "COMPLETED"
+
+
+def test_a_run_left_running_by_a_killed_process_is_marked_failed(tmp_path):
+    from fastapi.testclient import TestClient
+
+    from app.db import AgentRun
+    from app.main import create_app
+
+    c = line_client(tmp_path)
+    out = run(c, "상태 알려줘").json()
+    with Session(c.app_ref.state.engine) as s:  # simulate a crash: the run stayed RUNNING
+        r = s.get(AgentRun, out["run_id"])
+        r.status, r.updated_at = "RUNNING", "2000-01-01T00:00:00+00:00"
+        s.commit()
+    c2 = TestClient(create_app(f"sqlite:///{tmp_path / 'v5.db'}"))  # the restarted server
+    again = c2.get(f"/agent/runs/{out['run_id']}", headers=H("alice")).json()
+    assert again["status"] == "FAILED" and "재시작" in again["reply"][-1]["text"]
 
 
 def test_agent_steps_are_append_only(tmp_path):
@@ -190,8 +231,19 @@ def test_model_summary_citing_an_id_not_in_the_case_is_flagged(tmp_path):
     p = Scripted([])
     c = line_client(tmp_path, provider=p)
     real = c.get("/cases/L/evidence", headers=H("alice")).json()[0]["evidence_id"]
-    p.replies += [plan(["INVESTIGATE"], ["spc"]), say(f"L02 불량 [{real}] 그리고 [EV-made-up-123], PRED-999")]
+    p.replies += [plan(["INVESTIGATE"]), say(f"L02 불량 [{real}] 그리고 [EV-made-up-123], PRED-999")]
     out = run(c, "조사해 줘").json()
     flags = [line["text"] for line in out["reply"] if "근거 ID" in line["text"]]
     assert len(flags) == 1 and "EV-made-up-123" in flags[0] and "PRED-999" in flags[0]
     assert real not in flags[0]  # a real id of this case is not flagged
+
+
+def test_offline_rules_match_the_intent_golden_set():
+    from pathlib import Path
+
+    from scripts.intent_eval import evaluate
+
+    golden = json.loads((Path(__file__).parents[1] / "scripts" / "intent_golden.json").read_text(encoding="utf-8"))
+    r = evaluate(golden)
+    tuning = [x for x in r["rows"] if x["split"] == "tuning"]  # holdout misses are measured, not asserted
+    assert all(x["offline_ok"] for x in tuning), [x for x in tuning if not x["offline_ok"]]

@@ -49,6 +49,30 @@ Before (multi-round loop): 11.7 s and 25.5 s. Planning is now about 5 s. The opt
 - The planning call keeps the default effort, because choosing tools is a judgement.
 - `MetaProvider.chat` takes `reasoning_effort` and sends it only when given; `tests/test_meta_smoke.py` pins this.
 
+## Router + fixed workflows (follow-up, 2026-10-31)
+
+Why: LIVE runs of the same goal chose different tools. For a quality investigation that is not reproducible, and it is
+hard to audit. In practice, regulated work keeps the procedure fixed and lets the model classify.
+
+| Change | Detail |
+|---|---|
+| Model = classifier only | The plan call returns `{intents, clarify}` (strict JSON; any extra key is ignored). The tools for each intent are fixed by `server_plan`, the same plan the offline planner runs. Same intent → same tools, LIVE or offline. |
+| Role | The situation card says `may_draft_documents`. A reviewer asking to draft gets the same plan as offline, and the existing route refuses the draft (403 → BLOCKED). Enforcement stays on the server. |
+| Server rule after the model | `report_rule`: a request for the 8D report always adds STATUS + EXPORT, whichever planner ran. |
+| Model calls are steps | `plan` and `summarize` are recorded as `kind=MODEL` steps with model, mode, `prompt_version` (`PLANNER_VERSION` / `SUMMARY_VERSION`: hashes of prompt, schema and fixed plans), reasoning effort, latency, and the result or error (502). |
+| Cost cap | More than `MODEL_RUNS_PER_USER_HOUR` (30) model-planned runs per user per hour → the server rule planner takes over, with a reply line. The work is not blocked. |
+| Killed process | A run left `RUNNING` by an earlier process is marked FAILED on the first agent request after a restart. |
+| Golden set | `backend/scripts/intent_golden.json` (25 tuning + 5 held-out). `python -m scripts.intent_eval` runs the same `classify` the agent uses, and writes `docs/evaluations/intent_eval.json`. LIVE: tuning 25/25, held-out 5/5; offline rules: 25/25 and 3/5. The tuning sentences shaped the prompt and the rules; the held-out set is only 5 sentences. |
+
+Tests: `test_agent_ag2.py` covers these cases:
+- the model only classifies, and the server runs the fixed tools
+- LIVE and offline run the same tools
+- a reviewer's draft is refused by the route
+- a model failure or broken JSON is recorded as an ERROR step and falls back
+- the hourly cap hands over to the server planner
+- a killed process's run is marked FAILED
+- the offline rules match the tuning set
+
 ## Verification (local)
 
 | Check | Result |

@@ -44,7 +44,7 @@ def test_asking_for_the_8d_report_explains_when_it_exists(tmp_path):
 
 
 def test_model_planner_asks_back_through_its_clarify_field(tmp_path):
-    p = Scripted([plan([], [], "어떤 LOT의 어떤 문제를 볼까요?"), plan(["STATUS"], ["stages"])])
+    p = Scripted([plan([], "어떤 LOT의 어떤 문제를 볼까요?"), plan(["STATUS"])])
     c = line_client(tmp_path, provider=p)
     out = run(c, "도와줘")
     assert out["pending"]["action"] == "clarify" and out["pending"]["question"] == "어떤 LOT의 어떤 문제를 볼까요?"

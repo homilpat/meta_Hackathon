@@ -372,3 +372,8 @@
   - LIVE: judgment goal 4.9 s (was 11.7–25.5 s with the tool loop); the optional investigation summary call is about 20 s.
   - Local: pytest 293, smoke 27/27, e2e 3/3, frontend 25. Record: `docs/implementation/AGENT_HYBRID_PLANNER.md`.
 - **Summary call at `reasoning_effort=minimal` (2026-10-31)**: a probe showed muse-spark over-reasoning on a summary of server facts (3,803 reasoning tokens). With `minimal`: 3.2 s instead of 13.4 s, same answer and citations. The LIVE investigation run went 24.6 s → 9.3 s. The planning call is unchanged (default effort). Older models 1.2/1.1 were slower than 1.3 at `minimal`.
+- **Router + fixed workflows (2026-10-31)**: the model now only classifies intents; the tools per intent are fixed by the server (same as offline).
+  - Model calls are recorded as steps with the prompt version.
+  - Added an hourly model cap (fallback to server rules) and a stale-RUNNING cleanup after a restart.
+  - Intent golden set: LIVE 30/30 (held-out 5/5), offline 28/30.
+  - The same goal twice on LIVE ran identical tools (8.7 s / 9.8 s).

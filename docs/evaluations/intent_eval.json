@@ -1,0 +1,610 @@
+{
+ "planner_version": "0fff6496e8c5",
+ "n": 30,
+ "offline_correct": 28,
+ "rows": [
+  {
+   "goal": "이번 LOT 불량 원인을 조사해 줘",
+   "split": "tuning",
+   "expected": [
+    "INVESTIGATE"
+   ],
+   "offline": [
+    "INVESTIGATE"
+   ],
+   "offline_ok": true,
+   "live": [
+    "INVESTIGATE"
+   ],
+   "model_raw": [
+    "INVESTIGATE"
+   ],
+   "clarify": "",
+   "live_ok": true,
+   "live_ms": 2844
+  },
+  {
+   "goal": "L02 SPC 경보 분석해 줘",
+   "split": "tuning",
+   "expected": [
+    "INVESTIGATE"
+   ],
+   "offline": [
+    "INVESTIGATE"
+   ],
+   "offline_ok": true,
+   "live": [
+    "INVESTIGATE"
+   ],
+   "model_raw": [
+    "INVESTIGATE"
+   ],
+   "clarify": "",
+   "live_ok": true,
+   "live_ms": 3072
+  },
+  {
+   "goal": "왜 AOI 불량이 늘었는지 봐 줘",
+   "split": "tuning",
+   "expected": [
+    "INVESTIGATE"
+   ],
+   "offline": [
+    "INVESTIGATE"
+   ],
+   "offline_ok": true,
+   "live": [
+    "INVESTIGATE"
+   ],
+   "model_raw": [
+    "INVESTIGATE"
+   ],
+   "clarify": "",
+   "live_ok": true,
+   "live_ms": 2669
+  },
+  {
+   "goal": "Summarize the defect cause for lot L02",
+   "split": "tuning",
+   "expected": [
+    "INVESTIGATE"
+   ],
+   "offline": [
+    "INVESTIGATE"
+   ],
+   "offline_ok": true,
+   "live": [
+    "INVESTIGATE"
+   ],
+   "model_raw": [
+    "INVESTIGATE"
+   ],
+   "clarify": "",
+   "live_ok": true,
+   "live_ms": 5303
+  },
+  {
+   "goal": "NCR 초안 써 줘",
+   "split": "tuning",
+   "expected": [
+    "DRAFT_DOC"
+   ],
+   "offline": [
+    "DRAFT_DOC"
+   ],
+   "offline_ok": true,
+   "live": [
+    "DRAFT_DOC"
+   ],
+   "model_raw": [
+    "DRAFT_DOC"
+   ],
+   "clarify": "",
+   "live_ok": true,
+   "live_ms": 2988
+  },
+  {
+   "goal": "임시조치 계획서 작성해 줘",
+   "split": "tuning",
+   "expected": [
+    "DRAFT_DOC"
+   ],
+   "offline": [
+    "DRAFT_DOC"
+   ],
+   "offline_ok": true,
+   "live": [
+    "DRAFT_DOC"
+   ],
+   "model_raw": [
+    "DRAFT_DOC"
+   ],
+   "clarify": "",
+   "live_ok": true,
+   "live_ms": 2250
+  },
+  {
+   "goal": "draft the NCR",
+   "split": "tuning",
+   "expected": [
+    "DRAFT_DOC"
+   ],
+   "offline": [
+    "DRAFT_DOC"
+   ],
+   "offline_ok": true,
+   "live": [
+    "DRAFT_DOC"
+   ],
+   "model_raw": [
+    "DRAFT_DOC"
+   ],
+   "clarify": "",
+   "live_ok": true,
+   "live_ms": 1997
+  },
+  {
+   "goal": "이번 LOT 불량을 조사하고 NCR 초안 써 줘",
+   "split": "tuning",
+   "expected": [
+    "DRAFT_DOC",
+    "INVESTIGATE"
+   ],
+   "offline": [
+    "DRAFT_DOC",
+    "INVESTIGATE"
+   ],
+   "offline_ok": true,
+   "live": [
+    "DRAFT_DOC",
+    "INVESTIGATE"
+   ],
+   "model_raw": [
+    "DRAFT_DOC",
+    "INVESTIGATE"
+   ],
+   "clarify": "",
+   "live_ok": true,
+   "live_ms": 2724
+  },
+  {
+   "goal": "AOI 결과랑 SPC 같이 분석하고 보고서 초안도 만들어 줘",
+   "split": "tuning",
+   "expected": [
+    "DRAFT_DOC",
+    "INVESTIGATE"
+   ],
+   "offline": [
+    "DRAFT_DOC",
+    "INVESTIGATE"
+   ],
+   "offline_ok": true,
+   "live": [
+    "DRAFT_DOC",
+    "INVESTIGATE"
+   ],
+   "model_raw": [
+    "DRAFT_DOC",
+    "INVESTIGATE"
+   ],
+   "clarify": "",
+   "live_ok": true,
+   "live_ms": 2856
+  },
+  {
+   "goal": "8D로 가야 할지 판정해 줘",
+   "split": "tuning",
+   "expected": [
+    "TRIAGE"
+   ],
+   "offline": [
+    "TRIAGE"
+   ],
+   "offline_ok": true,
+   "live": [
+    "TRIAGE"
+   ],
+   "model_raw": [
+    "TRIAGE"
+   ],
+   "clarify": "",
+   "live_ok": true,
+   "live_ms": 3062
+  },
+  {
+   "goal": "이거 단순 NCR로 끝내도 돼?",
+   "split": "tuning",
+   "expected": [
+    "TRIAGE"
+   ],
+   "offline": [
+    "TRIAGE"
+   ],
+   "offline_ok": true,
+   "live": [
+    "TRIAGE"
+   ],
+   "model_raw": [
+    "TRIAGE"
+   ],
+   "clarify": "",
+   "live_ok": true,
+   "live_ms": 2878
+  },
+  {
+   "goal": "D0 판정 도와줘",
+   "split": "tuning",
+   "expected": [
+    "TRIAGE"
+   ],
+   "offline": [
+    "TRIAGE"
+   ],
+   "offline_ok": true,
+   "live": [
+    "TRIAGE"
+   ],
+   "model_raw": [
+    "TRIAGE"
+   ],
+   "clarify": "",
+   "live_ok": true,
+   "live_ms": 2764
+  },
+  {
+   "goal": "내 할 일 알려줘",
+   "split": "tuning",
+   "expected": [
+    "TASKS"
+   ],
+   "offline": [
+    "TASKS"
+   ],
+   "offline_ok": true,
+   "live": [
+    "TASKS"
+   ],
+   "model_raw": [
+    "TASKS"
+   ],
+   "clarify": "",
+   "live_ok": true,
+   "live_ms": 2765
+  },
+  {
+   "goal": "승인 대기 중인 거 뭐 있어?",
+   "split": "tuning",
+   "expected": [
+    "TASKS"
+   ],
+   "offline": [
+    "TASKS"
+   ],
+   "offline_ok": true,
+   "live": [
+    "TASKS"
+   ],
+   "model_raw": [
+    "TASKS"
+   ],
+   "clarify": "",
+   "live_ok": true,
+   "live_ms": 2617
+  },
+  {
+   "goal": "부서 업무 보여줘",
+   "split": "tuning",
+   "expected": [
+    "TASKS"
+   ],
+   "offline": [
+    "TASKS"
+   ],
+   "offline_ok": true,
+   "live": [
+    "TASKS"
+   ],
+   "model_raw": [
+    "TASKS"
+   ],
+   "clarify": "",
+   "live_ok": true,
+   "live_ms": 3425
+  },
+  {
+   "goal": "8D 진행 상태 알려줘",
+   "split": "tuning",
+   "expected": [
+    "STATUS"
+   ],
+   "offline": [
+    "STATUS"
+   ],
+   "offline_ok": true,
+   "live": [
+    "STATUS"
+   ],
+   "model_raw": [
+    "STATUS"
+   ],
+   "clarify": "",
+   "live_ok": true,
+   "live_ms": 2692
+  },
+  {
+   "goal": "지금 몇 단계야?",
+   "split": "tuning",
+   "expected": [
+    "STATUS"
+   ],
+   "offline": [
+    "STATUS"
+   ],
+   "offline_ok": true,
+   "live": [
+    "STATUS"
+   ],
+   "model_raw": [
+    "STATUS"
+   ],
+   "clarify": "",
+   "live_ok": true,
+   "live_ms": 2634
+  },
+  {
+   "goal": "종료할 수 있어?",
+   "split": "tuning",
+   "expected": [
+    "STATUS"
+   ],
+   "offline": [
+    "STATUS"
+   ],
+   "offline_ok": true,
+   "live": [
+    "STATUS"
+   ],
+   "model_raw": [
+    "STATUS"
+   ],
+   "clarify": "",
+   "live_ok": true,
+   "live_ms": 2869
+  },
+  {
+   "goal": "불량 원인 조사하고 진행 상태도 알려줘",
+   "split": "tuning",
+   "expected": [
+    "INVESTIGATE",
+    "STATUS"
+   ],
+   "offline": [
+    "INVESTIGATE",
+    "STATUS"
+   ],
+   "offline_ok": true,
+   "live": [
+    "INVESTIGATE",
+    "STATUS"
+   ],
+   "model_raw": [
+    "INVESTIGATE",
+    "STATUS"
+   ],
+   "clarify": "",
+   "live_ok": true,
+   "live_ms": 2148
+  },
+  {
+   "goal": "승인본 PDF로 내보내 줘",
+   "split": "tuning",
+   "expected": [
+    "EXPORT"
+   ],
+   "offline": [
+    "EXPORT"
+   ],
+   "offline_ok": true,
+   "live": [
+    "EXPORT"
+   ],
+   "model_raw": [
+    "EXPORT"
+   ],
+   "clarify": "",
+   "live_ok": true,
+   "live_ms": 2546
+  },
+  {
+   "goal": "NCR 승인본 다운로드",
+   "split": "tuning",
+   "expected": [
+    "EXPORT"
+   ],
+   "offline": [
+    "EXPORT"
+   ],
+   "offline_ok": true,
+   "live": [
+    "EXPORT"
+   ],
+   "model_raw": [
+    "EXPORT"
+   ],
+   "clarify": "",
+   "live_ok": true,
+   "live_ms": 3598
+  },
+  {
+   "goal": "8D 리포트 보여줘",
+   "split": "tuning",
+   "expected": [
+    "EXPORT",
+    "STATUS"
+   ],
+   "offline": [
+    "EXPORT",
+    "STATUS"
+   ],
+   "offline_ok": true,
+   "live": [
+    "EXPORT",
+    "STATUS"
+   ],
+   "model_raw": [
+    "STATUS"
+   ],
+   "clarify": "",
+   "live_ok": true,
+   "live_ms": 3994
+  },
+  {
+   "goal": "이거 좀 처리해 줘",
+   "split": "tuning",
+   "expected": [],
+   "offline": [],
+   "offline_ok": true,
+   "live": [],
+   "model_raw": [],
+   "clarify": "구체적으로 무엇을 해드릴까요?",
+   "live_ok": true,
+   "live_ms": 2867
+  },
+  {
+   "goal": "도와줘",
+   "split": "tuning",
+   "expected": [],
+   "offline": [],
+   "offline_ok": true,
+   "live": [],
+   "model_raw": [],
+   "clarify": "무엇을 도와드릴까요?",
+   "live_ok": true,
+   "live_ms": 2822
+  },
+  {
+   "goal": "NCR을 승인해 줘",
+   "split": "tuning",
+   "expected": [],
+   "offline": [],
+   "offline_ok": true,
+   "live": [],
+   "model_raw": [],
+   "clarify": "어떤 NCR 관련 작업을 확인해 드릴까요?",
+   "live_ok": true,
+   "live_ms": 5474
+  },
+  {
+   "goal": "검토 요청 들어온 거 있어?",
+   "split": "holdout",
+   "expected": [
+    "TASKS"
+   ],
+   "offline": [],
+   "offline_ok": false,
+   "live": [
+    "TASKS"
+   ],
+   "model_raw": [
+    "TASKS"
+   ],
+   "clarify": "",
+   "live_ok": true,
+   "live_ms": 2611
+  },
+  {
+   "goal": "이 사건 D3까지 됐어?",
+   "split": "holdout",
+   "expected": [
+    "STATUS"
+   ],
+   "offline": [],
+   "offline_ok": false,
+   "live": [
+    "STATUS"
+   ],
+   "model_raw": [
+    "STATUS"
+   ],
+   "clarify": "",
+   "live_ok": true,
+   "live_ms": 2258
+  },
+  {
+   "goal": "불량 패널이 왜 생겼는지 근거 찾아줘",
+   "split": "holdout",
+   "expected": [
+    "INVESTIGATE"
+   ],
+   "offline": [
+    "INVESTIGATE"
+   ],
+   "offline_ok": true,
+   "live": [
+    "INVESTIGATE"
+   ],
+   "model_raw": [
+    "INVESTIGATE"
+   ],
+   "clarify": "",
+   "live_ok": true,
+   "live_ms": 2603
+  },
+  {
+   "goal": "최종 보고서 PDF 받을래",
+   "split": "holdout",
+   "expected": [
+    "EXPORT"
+   ],
+   "offline": [
+    "EXPORT"
+   ],
+   "offline_ok": true,
+   "live": [
+    "EXPORT"
+   ],
+   "model_raw": [
+    "EXPORT"
+   ],
+   "clarify": "",
+   "live_ok": true,
+   "live_ms": 4200
+  },
+  {
+   "goal": "NCR 문서 초안 좀 만들어 줄래",
+   "split": "holdout",
+   "expected": [
+    "DRAFT_DOC"
+   ],
+   "offline": [
+    "DRAFT_DOC"
+   ],
+   "offline_ok": true,
+   "live": [
+    "DRAFT_DOC"
+   ],
+   "model_raw": [
+    "DRAFT_DOC"
+   ],
+   "clarify": "",
+   "live_ok": true,
+   "live_ms": 3278
+  }
+ ],
+ "by_split": {
+  "tuning": {
+   "n": 25,
+   "offline": 25,
+   "live": 25
+  },
+  "holdout": {
+   "n": 5,
+   "offline": 3,
+   "live": 5
+  }
+ },
+ "model": "muse-spark-1.3",
+ "live_correct": 30,
+ "live_ms_median": 2844,
+ "live_ms_max": 5474
+}

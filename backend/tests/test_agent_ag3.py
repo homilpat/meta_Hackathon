@@ -151,11 +151,11 @@ def test_a_pending_decision_survives_a_server_restart(tmp_path):
 
 
 def test_model_planner_can_prepare_but_never_send_or_approve(tmp_path):
-    p = Scripted([plan(["DRAFT_DOC"], ["stages", "request_review", "prepare_document"])])
+    p = Scripted([plan(["DRAFT_DOC"], tools=["request_review"])])  # extra keys are ignored
     c = line_client(tmp_path, provider=p)
     out = run(c).json()
-    assert "request_review" not in str(p.seen[0]["response_format"])  # never a plan tool
-    assert [s["tool"] for s in out["steps"] if s["status"] == "DENIED"] == ["request_review"]
+    assert "request_review" not in str(p.seen[0]["response_format"])  # the model cannot even name tools
+    assert not any(s["tool"] == "request_review" for s in out["steps"])
     assert out["status"] == "NEEDS_HUMAN" and out["pending"]["action"] == "request_review"
     assert count(c, Review) == 0 and count(c, ApprovalEvent) == 0
 

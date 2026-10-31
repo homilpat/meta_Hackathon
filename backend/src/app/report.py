@@ -107,6 +107,8 @@ def validate_report(session: Session, case_id: str, report: InvestigationReport,
     errors += _text_errors("summary", report.summary, records)
     for n, c in enumerate(report.next_evidence_requests, 1):
         tag = f"next check {n}"
+        if not c.evidence_ids:  # a recommendation rests on this case's data; precedents alone only support it
+            errors.append(f"{tag}: needs evidence_ids from this case")
         if missing := sorted(set(c.evidence_ids) - set(records)):
             errors.append(f"{tag}: unknown evidence_id {missing}")
         texts = f"{c.check} {c.reason}"

@@ -281,9 +281,12 @@ def test_hybrid_investigation_uses_read_only_tools_and_server_tasks_never_call_t
               "findings": [{"classification": "UNKNOWN", "text": "Stencil wear is not yet tested on this line."}],
               "next_evidence_requests": [{"check": "Inspect stencil STN-2 apertures",
                                           "reason": "closes the missing-experiment gap for the stencil hypothesis"}]}
-    p = Scripted(tools_msg(("get_evidence_gaps", {}), ("search_experience", {"q": "low paste volume"}),
-                           ("approve_document", {})), final(report))
+    p = Scripted()
     c = line_client(tmp_path, provider=p)
+    report["next_evidence_requests"][0]["evidence_ids"] = [
+        c.get("/cases/L/evidence", headers=H("alice")).json()[0]["evidence_id"]]  # a next check rests on case data
+    p.replies += [tools_msg(("get_evidence_gaps", {}), ("search_experience", {"q": "low paste volume"}),
+                           ("approve_document", {})), final(report)]
     Base.metadata.create_all(c.app_ref.state.engine)
     confirmed_cause(c)
     c.get("/cases/L/evidence-gaps", headers=H("alice"))

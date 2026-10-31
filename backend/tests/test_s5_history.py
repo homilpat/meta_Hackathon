@@ -118,6 +118,7 @@ def test_validator_precedent_rules(env):
     assert any("not retrieved as eligible" in e for e in check([{**ok, "precedent_ids": ["H99"]}]))
     assert any("failed before" in e for e in check([{**ok, "reason": "Adjust printer pressure like H02"}]))
     assert any("not retrieved" in e for e in check([ok], allowed=None))  # history OFF: nothing citable
+    assert any("needs evidence_ids" in e for e in check([{**ok, "evidence_ids": []}]))  # a precedent alone is not enough
     bad = check([], findings=[{"classification": "OBSERVED", "text": "Same as H01.", "evidence_ids": [ev]}])
     assert any("not evidence about this case" in e for e in bad)
 
@@ -137,11 +138,13 @@ def test_history_off_hides_tools_and_records_flag(env):
 
 def test_history_on_tool_flow_and_egress(env):
     c, _, provider = env
+    ev = c.get("/cases/C1/evidence", headers=A).json()[0]["evidence_id"]  # a next check rests on case data
     provider.replies[:] = [tools_msg(("retrieve_historical_cases", {}), ("get_historical_case_outcome",
                                                                          {"historical_case_id": "H11"})),
                            final({"summary": "s", "findings": [{"classification": "UNKNOWN", "text": "t"}],
                                   "next_evidence_requests": [{"check": "Rerun AOI on P01/B02",
-                                                              "reason": "no AOI record", "precedent_ids": []}]})]
+                                                              "reason": "no AOI record", "evidence_ids": [ev],
+                                                              "precedent_ids": []}]})]
     run = c.post("/cases/C1/investigations", json={"use_history": True},
                  headers={**A, "Idempotency-Key": uuid.uuid4().hex}).json()
     assert run["history"] == "ON" and run["status"] == "VALIDATED", run["validation_errors"]

@@ -50,6 +50,7 @@ function StepBody({ s, ctx }: { s: J; ctx: Ctx }) {
       {r.next_checks.map((c: J, i: number) => <p key={`c${i}`} className="muted wrap"><Badge tone="teal">다음 확인</Badge> {typeof c === 'string' ? c : c.check ?? JSON.stringify(c)}</p>)}</>
     case 'experience': return <><p><Badge tone={r.mode === 'KNOWN' ? 'green' : r.mode === 'ANALOGICAL' ? 'amber' : 'slate'}>{r.mode}</Badge> 추천 {r.recommendations.length}건 · 실패 사례 {r.negative_precedents.length}건</p><Note>{r.note}</Note></>
     case 'history': return <p className="muted wrap">{r.precedents.map((p: J) => p.historical_case_id).join(', ') || '적격 과거 사례 없음'} · 유사도는 인과 근거가 아닙니다.</p>
+    case 'references': return <>{r.results.map((d: J) => <p key={d.ref} className="muted wrap"><Badge tone="slate">{d.kind}</Badge> {d.doc_number} rev {d.revision} · {d.title} <Cite ids={[d.ref]}/></p>)}</>
     case 'stages': return <><div className="row-gap">{r.stages.map((x: J) => <Badge key={x.kind} tone={STATUS_TONE[x.status] ?? 'slate'}>{x.step} {x.doc_type} {x.status ?? '미작성'}{!x.approval_open && ' · 잠금'}</Badge>)}</div>
       {r.closure && <p className="muted wrap">D8 종료 {r.closure.ready ? <Badge tone="green">조건 충족</Badge> : <Badge tone="amber">미충족</Badge>} {(r.closure.blocks ?? []).slice(0, 4).join(' · ')}</p>}
       <button className="citation" onClick={() => ctx.open(ctx.cid, '', 'eightd')}>D0~D8 화면 열기</button></>
@@ -142,7 +143,7 @@ export function RunView({ run, ctx, busy, onResume }: { run: J; ctx: Ctx; busy: 
   const titles: Record<string, string> = Object.fromEntries((run.plan ?? []).map((p: J) => [p.tool, p.title]))
   return <div className="message agent-message"><div className="avatar muse"><Icon name="spark" size={17}/></div><div className="message-body">
     <div className="agent-label"><b>QualityOps Agent</b><Badge tone={RUN_TONE[run.status]}>{RUN_LABEL[run.status] ?? run.status}</Badge><span className="muted">run #{run.run_id} · {run.updated_at?.slice(0, 19)}</span></div>
-    {(run.reply ?? []).map((l: J, i: number) => <p key={i} className="wrap">{l.text}{l.steps?.length > 0 && <span className="muted"> (step {l.steps.join(', ')})</span>}{l.evidence?.length > 0 && <> <span className="muted">근거</span> <Cite ids={l.evidence}/></>}</p>)}
+    {(run.reply ?? []).map((l: J, i: number) => <p key={i} className="wrap">{l.text}{l.steps?.length > 0 && <span className="muted"> (step {l.steps.join(', ')})</span>}{l.evidence?.length > 0 && <> <span className="muted">근거</span> <Cite ids={l.evidence}/></>}{l.sources?.length > 0 && <> <span className="muted">참고</span> <Cite ids={l.sources}/></>}</p>)}
     <PlanCard run={run}/>
     <PendingCard key={run.pending?.token ?? 'none'} run={run} busy={busy} onResume={onResume}/>
     <div className="tool-grid">{(run.steps ?? []).map((s: J) => <StepCard key={s.seq} s={s} title={titles[s.tool] ?? TOOL_TITLE[s.tool] ?? s.tool} ctx={ctx}/>)}</div>

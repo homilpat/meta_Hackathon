@@ -110,9 +110,11 @@ def say(text: str) -> dict:
     return {"role": "assistant", "content": text}
 
 
-def polish(*lines) -> dict:
-    """The rewrite call's strict JSON: (text, [fact numbers]) per line."""
-    return say(json.dumps({"lines": [{"text": t, "facts": f} for t, f in lines]}, ensure_ascii=False))
+def polish(*lines, recs=()) -> dict:
+    """The rewrite call's strict JSON: (text, [fact numbers]) per line, (text, [facts], [source keys]) per recommendation."""
+    return say(json.dumps({"lines": [{"text": t, "facts": f} for t, f in lines],
+                           "recommendations": [{"text": t, "facts": f, "sources": k} for t, f, k in recs]},
+                          ensure_ascii=False))
 
 
 class Scripted:
@@ -264,6 +266,39 @@ def test_a_shown_rewrite_carries_the_evidence_of_the_facts_it_names(tmp_path):
     first = out["reply"][0]  # the case_summary fact line
     shown = next(line for line in out["reply"] if line.get("facts") == [1])
     assert first["evidence"] and shown["evidence"] == first["evidence"] and shown["steps"] == first["steps"]
+
+
+def test_recommendations_must_rest_on_case_facts_and_retrieved_sources(tmp_path):
+    from app.agent import server_plan
+
+    spc = server_plan(["INVESTIGATE"]).index("spc") + 1  # fact numbers follow the fixed read order
+    queue = server_plan(["INVESTIGATE"]).index("queue") + 1
+    p = Scripted([plan(["INVESTIGATE"]), polish(("범위를 확인했습니다.", [1]), recs=[
+        ("스텐실 개구부 점검을 권합니다.", [spc], ["H01", "DOC:FMEA-SMT-001:5"]),
+        ("프린터 압력을 조정하십시오.", [spc], ["EXP:X02"]),        # a response that failed before
+        ("담당자 배정을 확인하십시오.", [queue], [])])])             # a fact with no case evidence
+    out = run(line_client(tmp_path, provider=p), "조사해 줘").json()
+    assert "references" in reads(out)
+    sources = {x["key"]: x for x in json.loads(p.seen[1]["messages"][1]["content"])["sources"]}
+    assert sources["EXP:X02"]["negative"] and not sources["H01"]["negative"] and "DOC:FMEA-SMT-001:5" in sources
+    shown = [line for line in out["reply"] if line.get("sources")]
+    assert [line["text"] for line in shown] == ["스텐실 개구부 점검을 권합니다."]
+    assert shown[0]["evidence"] and shown[0]["sources"] == ["H01", "DOC:FMEA-SMT-001:5"]
+    rejected = next(line["text"] for line in out["reply"] if "추천 2건 제외" in line["text"])
+    assert "실패 사례 EXP:X02" in rejected and "이 사건 데이터 근거가 없습니다" in rejected
+
+
+def test_check_recommendations_refuses_unretrieved_sources_and_numbers_in_no_basis():
+    from app.agent import check_recommendations
+
+    facts = [{"text": "L02 솔더 체적 평균 0.104 mm³", "evidence": ["EV-1"]}]
+    sources = [{"key": "H01", "kind": "과거 사례", "negative": False, "text": "insufficient-solder rate 0.021 → 0.004"}]
+    kept, issues = check_recommendations([
+        {"text": "H01처럼 불량률이 0.021에서 0.004로 줄었으니 스텐실 세척을 권합니다.", "facts": [1], "sources": ["H01"]},
+        {"text": "스텐실을 교체하십시오.", "facts": [1], "sources": ["H99"]},
+        {"text": "체적이 50% 낮으니 점검하십시오.", "facts": [1], "sources": []}], facts, sources)
+    assert len(kept) == 1 and kept[0]["sources"] == ["H01"]  # a source's own numbers may be quoted
+    assert "H99" in issues[0] and "50" in issues[1]
 
 
 def test_offline_rules_match_the_intent_golden_set():

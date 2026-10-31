@@ -43,7 +43,7 @@ INTENTS = {  # keyword rules of the offline planner; the model planner returns i
 }
 REPORT_8D = r"8d\s*(보고서|리포트|report)"
 READ_PLAN = {
-    "INVESTIGATE": ["data_integrity", "spc", "predictions", "evidence_gaps", "experience", "history"],
+    "INVESTIGATE": ["data_integrity", "spc", "predictions", "evidence_gaps", "experience", "history", "references"],
     "DRAFT_DOC": ["stages"],
     "TASKS": ["queue"],
     "STATUS": ["stages"],
@@ -53,7 +53,8 @@ READ_PLAN = {
 TITLES = {
     "case_summary": "사건 범위와 증거 버전 확인", "data_integrity": "데이터 무결성 점검", "spc": "SPI SPC 관리도 분석",
     "predictions": "ML 위험 예측 · SHAP 확인", "evidence_gaps": "근거 공백과 다음 확인 항목",
-    "experience": "Experience Memory 유사 사례", "history": "과거 사례 · 실패 이력", "stages": "8D 단계 · 게이트 상태",
+    "experience": "Experience Memory 유사 사례", "history": "과거 사례 · 실패 이력",
+    "references": "사내 관리 문서 (FMEA · 관리계획서 · SOP)", "stages": "8D 단계 · 게이트 상태",
     "documents": "D2~D4 문서 버전 · 검증 상태", "prepare_document": "다음 8D 문서 초안 · 검증",
     "request_review": "검토 요청 (사람 확인 필요)", "queue": "내 할 일 · 담당자 확인",
     "exports": "승인본 DOCX/PDF 내보내기 링크", "propose_triage": "D0 판정 권장안 (채울지 확인)",
@@ -87,16 +88,26 @@ PLAN_SCHEMA = {"type": "json_schema", "json_schema": {"name": "agent_intents", "
     "properties": {"intents": {"type": "array", "items": {"type": "string", "enum": list(INTENTS)}},
                    "clarify": {"type": "string"}}}}}
 # Facts are server sentences; the model only rewrites them into natural Korean, and check_polish() rejects any line
-# whose numbers are not in the facts it names. Evidence ids are attached by the server, never written by the model.
-SUMMARY_PROMPT = """Rewrite the numbered server facts as natural Korean sentences for a quality engineer, at most 5
-lines. For each line list the fact numbers it is based on. Keep every number exactly as written in those facts and
-add no number, cause, judgement or advice the facts do not state. Do not write evidence ids: the server attaches
-them. A statistical signal or a model score is not a confirmed cause."""
+# whose numbers are not in the facts it names. Recommendations are the model's own inference, but each must rest on
+# this case's facts and may cite only the past cases / documents the server retrieved (check_recommendations).
+# Evidence ids are attached by the server, never written by the model.
+SUMMARY_PROMPT = """You write for a quality engineer, in polite Korean.
+1. lines: rewrite the numbered server facts as natural sentences, at most 5. For each line list the fact numbers it is
+   based on. Keep every number exactly as written there; add no number, cause or judgement the facts do not state.
+2. recommendations: at most 3 next checks or actions. Each must be based on at least one fact (list its numbers) and
+   may cite past cases / documents from `sources` by key when they support it. Never base a recommendation on a
+   source marked negative: that response failed before. A recommendation is a proposal, never a decision.
+Do not write evidence ids in text: the server attaches them. A statistical signal or a model score is not a confirmed
+cause."""
+_LINE = {"type": "object", "additionalProperties": False, "required": ["text", "facts"],
+         "properties": {"text": {"type": "string"}, "facts": {"type": "array", "items": {"type": "integer"}}}}
 SUMMARY_SCHEMA = {"type": "json_schema", "json_schema": {"name": "agent_polish", "strict": True, "schema": {
-    "type": "object", "additionalProperties": False, "required": ["lines"],
-    "properties": {"lines": {"type": "array", "items": {
-        "type": "object", "additionalProperties": False, "required": ["text", "facts"],
-        "properties": {"text": {"type": "string"}, "facts": {"type": "array", "items": {"type": "integer"}}}}}}}}}
+    "type": "object", "additionalProperties": False, "required": ["lines", "recommendations"],
+    "properties": {"lines": {"type": "array", "items": _LINE},
+                   "recommendations": {"type": "array", "items": {
+                       **_LINE, "required": ["text", "facts", "sources"],
+                       "properties": {**_LINE["properties"],
+                                      "sources": {"type": "array", "items": {"type": "string"}}}}}}}}}
 SUMMARY_EFFORT = "minimal"  # LIVE probe: 13.4 s -> 3.2 s on the real summary payload, same answer and citations
 NUMBER = re.compile(r"(?<![A-Za-z0-9_./-])\d+(?:\.\d+)?(?![\d.])")  # not the digits of L02, P03/B01, EV-...
 CASE_ID = re.compile(r"\b(?:EV|PRED|XAI|ACT|EFF|H)-[A-Za-z0-9-]+")
@@ -172,6 +183,56 @@ def check_polish(lines: Any, facts: list[str]) -> list[str]:
     return out
 
 
+def check_recommendations(recs: Any, facts: list[dict], sources: list[dict]) -> tuple[list[dict], list[str]]:
+    """(recommendations that may be shown, why the others may not). Deterministic: a recommendation names at least
+    one fact backed by this case's evidence, cites only retrieved sources, none of them negative, and uses only
+    numbers from what it names. Whether the basis really supports it is the human's call."""
+    if not isinstance(recs, list):
+        return [], ["추천 형식 오류"]
+    by_key = {s["key"]: s for s in sources}
+    kept, issues = [], []
+    for n, rec in enumerate(recs[:3], 1):
+        refs = [f for f in rec.get("facts") or [] if isinstance(f, int) and 1 <= f <= len(facts)]
+        cited, text = [str(k) for k in rec.get("sources") or []], str(rec.get("text") or "")
+        why = []
+        if not any(facts[f - 1].get("evidence") for f in refs):
+            why.append("이 사건 데이터 근거가 없습니다")
+        if unknown := [k for k in cited if k not in by_key]:
+            why.append(f"조회되지 않은 출처 {', '.join(unknown)}")
+        if failed := [k for k in cited if k in by_key and by_key[k]["negative"]]:
+            why.append(f"실패 사례 {', '.join(failed)}를 근거로 추천")
+        basis = " ".join([facts[f - 1]["text"] for f in refs] + [by_key[k]["text"] for k in cited if k in by_key])
+        if extra := sorted(set(NUMBER.findall(text)) - set(NUMBER.findall(basis)), key=float):
+            why.append(f"근거에 없는 숫자 {', '.join(extra)}")
+        if CASE_ID.search(text):
+            why.append("근거 ID는 서버가 붙입니다")
+        if why or not text:
+            issues.append(f"추천 {n}: {'; '.join(why) or '빈 문장'}")
+        else:
+            kept.append({"text": text, "facts": list(dict.fromkeys(refs)), "sources": list(dict.fromkeys(cited))})
+    return kept, issues
+
+
+def sources_of(results: dict) -> list[dict]:
+    """Past cases, Experience Memory entries and controlled documents the server retrieved for this run, with the
+    negative ones (failed before) marked. The only things a recommendation may cite."""
+    out = []
+    for p in (results.get("history") or {}).get("precedents", []):
+        done = "; ".join(f"{o['check']}: {o['check_result']} → {o['action']} {o['outcome_status']} "
+                         f"({o['metric']} {o['before']} → {o['after']})" for o in p.get("outcomes", []))
+        out.append({"key": p["historical_case_id"], "kind": "과거 사례", "negative": bool(p["negative_precedent"]),
+                    "text": f"{p['summary']} {done}".strip()})
+    exp = results.get("experience") or {}
+    for e, neg in [*((e, False) for e in exp.get("recommendations", [])),
+                   *((e, True) for e in exp.get("negative_precedents", []))]:
+        out.append({"key": e["entry_key"], "kind": "Experience", "negative": neg,
+                    "text": f"{e['symptom']} / cause: {e['cause']} ({e['cause_status']}) / action: {e['action']}"})
+    for d in (results.get("references") or {}).get("results", []):
+        out.append({"key": d["ref"], "kind": "관리 문서", "negative": False,
+                    "text": f"{d['kind']} {d['doc_number']} rev {d['revision']}: {d['title']}"})
+    return out
+
+
 def evidence_of(tool: str, r: Any) -> list[str]:
     """The evidence ids behind one server fact line, shown next to it (and next to any rewrite of it)."""
     if not isinstance(r, dict):
@@ -181,7 +242,8 @@ def evidence_of(tool: str, r: Any) -> list[str]:
            "spc": lambda: (r.get("first_alarm") or {}).get("ev", []),
            "predictions": lambda: [p["evidence_id"] for p in r["predictions"] if p["above_threshold"]]
            + ([r["top_explanation"]["evidence_id"]] if r.get("top_explanation") else []),
-           "history": lambda: [p["historical_case_id"] for p in r["precedents"]]}.get(tool, list)()
+           "history": lambda: [p["historical_case_id"] for p in r["precedents"]],
+           "references": lambda: [d["ref"] for d in r["results"]]}.get(tool, list)()
     return list(dict.fromkeys(ids))[:6]
 
 
@@ -205,6 +267,7 @@ class Executor:
 
     def __init__(self, app: FastAPI, sessions: sessionmaker, actor: Actor, run_id: int, case_id: str, goal: str):
         self.app, self.sessions, self.actor, self.run_id, self.cid, self.goal = app, sessions, actor, run_id, case_id, goal
+        self.results: dict[str, Any] = {}  # successful read results of this run, by tool (sources for recommendations)
 
     def endpoint(self, method: str, path: str) -> APIRoute:
         def walk(routes):  # FastAPI keeps included routers nested (as tests/test_s6_followups.py walks them)
@@ -286,6 +349,10 @@ class Executor:
             "evidence_gaps": lambda _: self.route("GET", "/cases/{case_id}/evidence-gaps", case_id=c),
             "experience": lambda _: self.tools(lambda t: t.search_experience(self.goal[:300])),
             "history": lambda _: self.tools(lambda t: t.retrieve_historical_cases()),
+            # shortcut: the query adds this case type's fixed SPI/AOI terms to the goal; derive it from the case's
+            # signals once there is more than one case type
+            "references": lambda _: self.tools(lambda t: t.search_documents(
+                f"{self.goal[:200]} SPI solder paste volume stencil print AOI")),
             "stages": lambda _: self._stages(),
             "queue": lambda _: self._queue(),
             "documents": lambda _: self._documents(),
@@ -512,6 +579,9 @@ def summarize(tool: str, r: Any) -> str:
         return f"Experience Memory: {r['mode']} · 추천 {len(r['recommendations'])}건 · 실패 사례 {len(r['negative_precedents'])}건"
     if tool == "history":
         return f"과거 사례 {len(r['precedents'])}건 (유사도는 인과 근거 아님)"
+    if tool == "references":
+        docs = ", ".join(f"{d['doc_number']} rev {d['revision']} ({d['title']})" for d in r["results"])
+        return f"사내 관리 문서 {len(r['results'])}건: {docs}" if docs else "관련 사내 관리 문서 없음"
     if tool == "stages":
         line = " · ".join(f"{s['step']} {s['doc_type']} {s['status'] or '없음'}" for s in r["stages"])
         route = {"NCR_ONLY": "단순 처리(NCR, D0~D3)", "FULL_8D": "8D 전체", "EMERGENCY_FULL_8D": "긴급 8D"}.get(
@@ -628,6 +698,8 @@ def make_agent_router(app: FastAPI, sessions: sessionmaker, current_user: Callab
             return "NEEDS_HUMAN", {"action": "offer_fill", "form": "triage", "question": q}, {"note": q}
         s = ex.read(tool)
         ok = s["status"] == "OK"
+        if ok:
+            ex.results[tool] = s["result"]
         line = summarize(tool, s["result"]) if ok else f"{TITLES[tool]} 실패 ({s['http_status']}): {s['error']}"
         mark(plan, tool, "DONE" if ok else s["status"], line)
         reply.append({"text": line, "steps": [s["seq"]], "evidence": evidence_of(tool, s["result"]) if ok else []})
@@ -698,33 +770,51 @@ def make_agent_router(app: FastAPI, sessions: sessionmaker, current_user: Callab
         line passes check_polish; each shown line carries the evidence and steps of the facts it names."""
         def run() -> None:
             facts = [line for line in reply if line["steps"]]  # lines written from a recorded tool step
-            texts = [f["text"] for f in facts]
+            texts, sources = [f["text"] for f in facts], sources_of(ex.results)
 
             def call() -> dict:
                 msg = provider.chat([{"role": "system", "content": SUMMARY_PROMPT},
                                      {"role": "user", "content": json.dumps(
-                                         {"goal": ex.goal, "facts": [{"n": i, "text": t} for i, t in enumerate(texts, 1)]},
-                                         ensure_ascii=False)}],
+                                         {"goal": ex.goal, "facts": [{"n": i, "text": t} for i, t in enumerate(texts, 1)],
+                                          "sources": sources}, ensure_ascii=False)}],
                                     [], response_format=SUMMARY_SCHEMA, reasoning_effort=SUMMARY_EFFORT)["message"]
                 try:
-                    lines = json.loads(msg.get("content") or "")["lines"]
+                    out = json.loads(msg.get("content") or "")
+                    lines, recs = out["lines"], out["recommendations"]
                 except (ValueError, KeyError, TypeError) as exc:
                     raise ProviderError(f"rewrite is not valid JSON ({type(exc).__name__})") from None
-                return {"lines": lines, "issues": check_polish(lines, texts)}  # the check is recorded with the call
+                kept, rejected = check_recommendations(recs, facts, sources)
+                # the checks are recorded with the call, so a hidden line or recommendation can be audited later
+                return {"lines": lines, "issues": check_polish(lines, texts), "recommendations": kept,
+                        "rejected": rejected}
 
             s = model_step(ex, "summarize", SUMMARY_VERSION, SUMMARY_EFFORT, call)
-            why = s["error"] if s["status"] != "OK" else "; ".join(s["result"]["issues"])
-            if why:
-                reply.append({"text": f"모델 문장 다듬기 생략 ({why}). 위 내용은 모두 서버 확인 결과입니다.",
+            if s["status"] != "OK":
+                reply.append({"text": f"모델 문장 다듬기 생략 ({s['error']}). 위 내용은 모두 서버 확인 결과입니다.",
                               "steps": [s["seq"]]})
                 return
-            reply.append({"text": f"[{provider.mode} 모델이 위 서버 사실을 문장으로 다듬음 · 숫자 대조 통과, 판단 아님]",
-                          "steps": [s["seq"]]})
-            for line in s["result"]["lines"]:
-                used = [facts[f - 1] for f in dict.fromkeys(line["facts"])]
-                reply.append({"text": line["text"], "facts": list(dict.fromkeys(line["facts"])),
-                              "steps": sorted({n for f in used for n in f["steps"]}),
-                              "evidence": list(dict.fromkeys(e for f in used for e in f.get("evidence", [])))})
+            out = s["result"]
+
+            def shown(item: dict) -> dict:
+                used = [facts[f - 1] for f in item["facts"]]
+                return {"text": item["text"], "facts": item["facts"], "sources": item.get("sources", []),
+                        "steps": sorted({n for f in used for n in f["steps"]}),
+                        "evidence": list(dict.fromkeys(e for f in used for e in f.get("evidence", [])))}
+
+            if out["issues"]:
+                reply.append({"text": f"모델 문장 다듬기 생략 ({'; '.join(out['issues'])}). 위 내용은 모두 서버 확인 "
+                                      "결과입니다.", "steps": [s["seq"]]})
+            else:
+                reply.append({"text": f"[{provider.mode} 모델이 위 서버 사실을 문장으로 다듬음 · 숫자 대조 통과, 판단 아님]",
+                              "steps": [s["seq"]]})
+                reply.extend(shown({**line, "facts": list(dict.fromkeys(line["facts"]))}) for line in out["lines"])
+            if out["recommendations"]:
+                reply.append({"text": f"[{provider.mode} 모델 추천 · 이 사건 근거와 조회된 과거 사례·문서에 기반한 제안, "
+                                      "결정은 사람]", "steps": [s["seq"]]})
+                reply.extend(shown(rec) for rec in out["recommendations"])
+            if out["rejected"]:
+                reply.append({"text": f"근거 규칙을 통과하지 못한 추천 {len(out['rejected'])}건 제외: "
+                                      f"{' / '.join(out['rejected'])}", "steps": [s["seq"]]})
         return run
 
     def over_quota(ex: Executor) -> bool:

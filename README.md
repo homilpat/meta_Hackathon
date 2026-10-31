@@ -3,19 +3,23 @@
 Built from 2026-10-27 KST for the Meta Global AI Developer Hackathon. All manufacturing data in this repository is
 **fictional and generated** (SYNTHETIC, `SELF_GENERATED` licence). There are no measured quality or business results.
 
-What it does, by stage (each stage's checks are in the [work log](HACKATHON_WORK_LOG.md)):
+## What it does
 
-| Stage | Built |
+QualityOps AI is an **evidence-governed, human-controlled manufacturing quality investigation** demo for a synthetic PCB/SMT line. A statistical alarm is not treated as a confirmed defect, a hypothesis is not a confirmed cause, and an AI proposal is not a human approval. Project work and test evidence are tracked in the [work log](HACKATHON_WORK_LOG.md).
+
+| Capability | Implemented behavior |
 |---|---|
-| S1 | Versioned multi-source PCB records (SPI, AOI, human verification, repair, revisions), evidence ids, data-quality issues |
-| S2 | NCR drafts from a deterministic template; every OBSERVED/CALCULATED claim cites evidence; review/approval bound to the content hash; audit timeline |
-| S3 | Meta `muse-spark-1.3` tool-calling investigator over read-only evidence tools; server-side ClaimValidator recomputes numbers and rejects causal certainty |
-| S4 | SPI-only risk model (LightGBM, synthetic label) with TreeSHAP; predictions are citable evidence, not inspection results |
-| S5 | Synthetic precedent bank with eligibility filter; next-evidence planner that warns about fixes that failed before |
-| S6 | 8D order: D2 NCR (facts only) → D3 Containment **plan** (QA/Production) → D4 RCA **hypothesis** with model scores/SHAP (Process Engineer); drafts may be written ahead, approval only in order; evidence dependency graph; a corrected source row reopens only the dependent documents and flags downstream plans `BASIS_CHANGED`; append-only audit tables; egress gateway |
+| Data and SPC | Versioned SPI/AOI/verification and repair data; source-row provenance and data-quality checks; X-bar/R, Western Electric rules and Cpk on a synthetic SMT line |
+| D0–D3 | Human triage (NCR_ONLY / FULL_8D / EMERGENCY_FULL_8D), team assignment, evidence-linked 5W2H/IS–IS NOT, urgent containment and independently verified action events |
+| D4 | 6M/fishbone, 5-Why, hypotheses, controlled experiments and independent human cause decisions; SHAP or precedent alone cannot confirm a cause |
+| D5–D6 | Cause-linked action selection, execution lifecycle, pre-registered effectiveness criteria and server-computed effectiveness; failure reopens cause investigation |
+| D7–D8 | Controlled SOP/FMEA revision and training gates, current-evidence closure checks, human acknowledgements, archived closure snapshots and reopen history |
+| Docs and reports | G9 versioned human editing, difference review, claim revalidation, hash-bound approvals; G10 approved DOCX/PDF exports with read-back checks |
+| Experience Memory | Scope/permission-filtered precedent search: KNOWN / ANALOGICAL / NO_RELEVANT_HISTORY. Failed, recurrent, stale or condition-mismatched precedents are not blindly prescribed |
+| AI and Agent-First | Meta-backed read-only investigation and a hybrid agent planner over allowlisted tools; persisted runs, ask-back, D0 form proposals, draft preparation and explicit human hand-off; deterministic offline fallback |
+| Audit and verification | ClaimValidator, policy-driven approval, least-privilege tools, immutable evidence/document references, audit checks and backend/frontend/integration CI |
 
-Containment items are proposals (`NOT_EXECUTED`) and the RCA stays `UNCONFIRMED`; the system never records an action
-as executed or a cause as confirmed. SHAP explains model scores, not physical causes.
+**Boundaries:** All production-style records and operational outcomes here are SYNTHETIC/SIMULATED; a logged “executed” action represents a simulated workflow event, not a physical factory operation. The demo uses role switching via an `X-User` header, not production authentication. A final 8D report requires the appropriate closed case; the NCR_ONLY route can produce its own closure report. Model predictions, explanations and prior cases are evidence for investigation, not independent proof of causation.
 
 ## Repository layout
 
@@ -27,7 +31,7 @@ as executed or a cause as confirmed. SHAP explains model scores, not physical ca
 
 ## Run locally
 
-Python 3.12+, from `backend/` (paths no longer depend on the working directory):
+Python 3.12+, from `backend/` (package/resources are configured for the monorepo layout):
 
 ```sh
 cd backend
@@ -51,28 +55,24 @@ to the API; every value shown comes from the API). The built files are committed
 not needed to run it. To change the UI: `cd frontend && npm ci && npm run dev` (proxies the API to :8000), `npm test`
 (vitest), then `npm run build` to update `backend/src/app/static/web/` (CI fails if the committed bundle is stale). The older single-file UI at `/ui` is kept as a fallback.
 
-The app opens on the **AI Agent** (Agent-First, spec §22). Type a goal such as "이번 LOT 불량을 조사하고 8D 보고서 초안을
-준비해 줘."
-- **What the server does:** it plans and runs allowlisted tools as the current user (`backend/src/app/agent.py`, routes `/agent/*`). It can save and validate the next 8D draft, then stops until you pick a reviewer and confirm.
+The app opens on the **AI Agent** (Agent-First, spec §22). For example: "이번 LOT 불량을 조사하고 8D 보고서 초안을 준비해 줘."
+- **What the server does:** it uses a server situation card and (when LIVE is available) one strict-JSON model plan to run allowlisted tools as the current user (`backend/src/app/agent.py`, routes `/agent/*`). It can save and validate the next 8D draft, then stops until you pick a reviewer and confirm.
 - **What it never does:** approve, confirm a cause, execute an action, close a case, or download a file for you.
 - **Without a Meta key:** a server rule planner runs instead.
 - **Manual path:** 내 할 일, 부서 할 일 and 승인 대기 read the same `/queue`, and every earlier screen is under **전문 도구**.
 - Records: `docs/implementation/AG0_BASELINE.md` … `AG5_RELEASE_VERIFICATION.md`.
 
-## Demo walk-through (`/ui` labels; `/app` has the same steps)
+## Demo: Agent-first and manual 8D
 
-1. As alice: **New synthetic PCB case**, then **Assign bob, erin, frank as reviewers**.
-2. **Score boards with SPI model** (optional) — click a `PRED-n`/`XAI-n` id for the SHAP view.
-3. **Lessons from past cases** shows next checks with history OFF vs ON and why a past fix is not adopted.
-4. **Create NCR draft** → request review → switch to bob → APPROVE.
-5. As alice **Create Containment plan draft** → erin approves; **Create RCA hypothesis draft** → frank approves.
-6. **Import SPI correction** re-measures one SPI row (v3). The *Source corrections and impact* table shows
-   before/after: the NCR and RCA that cite that row become `REVALIDATION_REQUIRED`; the Containment plan cites no
-   SPI row, so it keeps its content but is flagged `BASIS_CHANGED`. After NCR v2 is approved, erin records
-   *no scope impact* (or *revise*) on `/app`; only then can the new RCA be approved. Approval records are unchanged.
-7. **Run investigation (LIVE Meta model)** needs a key (below); without one the API returns 503 — there is no mock.
+Open `/app/` and select a synthetic case and demo role. In the **AI Agent** screen, try:
 
-The same flow by API is covered by `backend/tests/test_s6_followups.py`.
+- “이번 SPC 경보, 8D로 가야 할지 판정해 줘” — inspect evidence, then offer a human-reviewed D0 form; **nothing is automatically submitted**.
+- “이번 LOT 불량 원인을 조사해 줘” — evidence and prior-case lookups, with a proposed summary rather than a causal determination.
+- “이번 LOT 불량을 조사하고 8D 보고서 초안을 준비해 줘” — status checks plus the next eligible document draft and validation, stopping before any human review request or approval.
+
+For the full controlled path, use **전문 도구 → D0~D8 진행** and **문서 · 결재**. D0 triage → D1 team → D2 NCR → D3 containment/verification → D4 experiment and confirmed cause → D5/D6 action and measured effectiveness → D7 controlled prevention → D8 closure. Edit and revalidate documents in G9; download the final report or an approved document only when its export gate passes. An NCR_ONLY case closes through its shorter permitted route and exports an “NCR closure report”.
+
+The older `/ui` is maintained as a fallback interface, not the primary demo. A repeatable end-to-end scenario is available via `python -m scripts.e2e_http` from `backend/`.
 
 **Collaboration:** *할 일* shows "내 할 일" (items you own: reviews assigned to you, basis checks on plans you
 approved, redrafts and comment answers on your documents) and "부서 할 일" (everything open for your role).
@@ -120,22 +120,26 @@ PDF (default: a new temp directory). The failure scenario records D6 NOT_EFFECTI
 
 [SECURITY.md](SECURITY.md) lists each enforced control with the test that proves it (egress allowlist, least-privilege tools, output validation, prompt-injection test, separation of duties, hash-chained append-only audit with `GET /audit/verify`, investigation quota) and what a real deployment still needs (SSO, self-hosted model or provider contract for real data, encryption, external anchoring of the audit chain).
 
-## Meta LIVE
+## Meta LIVE and offline behavior
 
-Put `MODEL_API_KEY=...` in the git-ignored `.env` (working directory first, then the repo root) (see `.env.example`). **Calls may incur API charges.**
+Set `MODEL_API_KEY=...` in a git-ignored `.env` or the environment (see `.env.example`). **Real model calls may incur charges.** The backend tests isolate the real key so running pytest does not intentionally invoke paid LIVE calls.
 
-- `python -m scripts.meta_smoke` — one fixed synthetic prompt. Exit 0 LIVE ok, 1 LIVE failure, 2 no key (no call).
-- `python -m scripts.meta_investigate_smoke` — one tool-calling investigation on a synthetic case.
+From `backend/`:
 
-Only SYNTHETIC + APPROVED_FOR_EXTERNAL rows can reach the model: tools fail closed on anything else, and the
-provider blocks any outbound payload carrying another origin/sensitivity, the word CONFIDENTIAL, or secret-like
-text before the network call. **LIVE Meta has not been run in this repository yet.**
+- `python -m scripts.meta_smoke` — minimal structured-response check.
+- `python -m scripts.meta_investigate_smoke` — synthetic-case, read-only investigation and report validation.
+
+**As of 2026-10-31, real Meta `muse-spark-1.3` calls have succeeded**, including the structured smoke, an Agent-First draft/validation hand-off and the hybrid planner. See the [LIVE run log](docs/evaluations/META_LIVE_LOG.md), which also records failed calls. The standalone investigation sometimes produces a final report that fails its strict schema; the server refuses it instead of accepting unsupported content. Do not interpret LIVE connectivity as a 100% report success rate.
+
+The hybrid planner uses one strict-JSON model plan over a server-generated situation card, server-executed role-allowed tools, and an optional investigation summary call. When the goal is ambiguous it asks a clarifying question; if no key is available it uses a deterministic server planner. The agent does not approve documents, execute plant actions, confirm causes or close a case.
+
+Only SYNTHETIC and APPROVED_FOR_EXTERNAL content is eligible for outbound model calls. Egress filtering and role/case-scope checks enforce the demo's data-handling rules. Never use real factory or personal data without a separate production security and governance design.
 
 ## Evaluation (scripts run from `backend/`)
 
 - `python -m scripts.eval_s7` → [docs/evaluations/EVAL_RESULTS.md](docs/evaluations/EVAL_RESULTS.md): deterministic checks on 30 held-out
   synthetic cases (revision impact precision/recall, unsupported template claims, validator recall on seeded bad
-  claims, egress gate). The A/B/C/D model comparison (incl. History OFF/ON) is **NOT RUN** until LIVE access exists.
+  claims, egress gate). The A/B/C/D model comparison (including History OFF/ON) is **not established by these deterministic checks**; do not present unrun comparisons as measured results.
 - `python -m scripts.train_model` → [docs/evaluations/MODEL_CARD.md](docs/evaluations/MODEL_CARD.md).
 - `python -m scripts.history_compare` → [docs/evaluations/HISTORY_COMPARISON.md](docs/evaluations/HISTORY_COMPARISON.md) (deterministic
   planner log, not an LLM result).

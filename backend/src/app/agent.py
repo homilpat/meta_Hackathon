@@ -94,6 +94,7 @@ PLAN_SCHEMA = {"type": "json_schema", "json_schema": {"name": "agent_intents", "
 SUMMARY_PROMPT = """You write for a quality engineer, in polite Korean.
 1. lines: rewrite the numbered server facts as natural sentences, at most 5. For each line list the fact numbers it is
    based on. Keep every number exactly as written there; add no number, cause or judgement the facts do not state.
+   The facts are terse notes: write them out as natural, complete sentences, not copied note fragments.
 2. recommendations: at most 3 next checks or actions. Each must be based on at least one fact (list its numbers) and
    may cite past cases / documents from `sources` by key when they support it. Never base a recommendation on a
    source marked negative: that response failed before. A recommendation is a proposal, never a decision.

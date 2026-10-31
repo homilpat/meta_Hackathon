@@ -371,3 +371,4 @@
   - Added: ask-back on vague goals, an 8D-report note, D0 "채울까요?" (a proposal filled by server rules that only the D0 role submits), and NCR_ONLY early closure with an "NCR closure report".
   - LIVE: judgment goal 4.9 s (was 11.7–25.5 s with the tool loop); the optional investigation summary call is about 20 s.
   - Local: pytest 293, smoke 27/27, e2e 3/3, frontend 25. Record: `docs/implementation/AGENT_HYBRID_PLANNER.md`.
+- **Summary call at `reasoning_effort=minimal` (2026-10-31)**: a probe showed muse-spark over-reasoning on a summary of server facts (3,803 reasoning tokens). With `minimal`: 3.2 s instead of 13.4 s, same answer and citations. The LIVE investigation run went 24.6 s → 9.3 s. The planning call is unchanged (default effort). Older models 1.2/1.1 were slower than 1.3 at `minimal`.

@@ -22,6 +22,8 @@ Each row is a command actually run on this machine. No secret is ever recorded.
 | 2026-10-31 | same, "이번 LOT 불량 원인을 조사해 줘" | muse-spark-1.3 | **COMPLETED**: 6 reads + summary (cited ids all exist in the case; none flagged) | 24.6 s wall (plan ≈ 4–5 s, summary call ≈ 20 s) |
 | 2026-10-31 | same, "이번 LOT 불량을 조사하고 8D 보고서 초안을 준비해 줘." | muse-spark-1.3 | **NEEDS_HUMAN** `request_review`: 8D-report note → 7 reads → NCR v1 DRAFT (201) + validation WARN (201) → summary | 28.0 s wall |
 
+| 2026-10-31 | Probe: model list and `reasoning_effort` on the agent's real summary payload (seeded synthetic case) | muse-spark-1.3 / 1.2 / 1.1 | Models available to the key: muse-spark-1.3, 1.2, 1.1, -contributor variants, muse-voice/image, sam-3.1. Same summary task: 1.3 default 13.4 s (reasoning 3,803); **1.3 `reasoning_effort=minimal` 3.2 s (reasoning 140)**; 1.2 7.1 s; 1.1 8.2 s. Answer length and citation validity were the same in all four. | see outcome |
+| 2026-10-31 | Agent hybrid planner with the summary call at `reasoning_effort=minimal` (plan call unchanged, default effort): "이번 LOT 불량 원인을 조사해 줘" | muse-spark-1.3 | **COMPLETED**: 6 reads + summary; cited ids exist in the case | **9.3 s** wall (was 24.6 s) |
 Status (2026-10-31): **LIVE Meta works.** The structured smoke passed, and Agent-First LIVE tool calling went from goal to tools, a
 server-checked draft, and a stop for the human. The LIVE investigation *report* validated in 1 of the 2 runs made after the token fix. The
 other run's report did not fit the schema and was refused, as designed. So report-format reliability is the open item; the

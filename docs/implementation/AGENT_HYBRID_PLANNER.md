@@ -41,7 +41,13 @@ cheap: the first round used 13–78 reasoning tokens, against 800–2,700 in lat
 | "불량 원인 조사해 줘" | 2 | 24.6 s (summary ≈ 20 s) |
 | "조사 + 8D 보고서 초안" | 2 | 28.0 s |
 
-Before (multi-round loop): 11.7 s and 25.5 s. Planning is now about 5 s. The optional summary call dominates what remains.
+Before (multi-round loop): 11.7 s and 25.5 s. Planning is now about 5 s. The optional summary call dominated what remained.
+
+**Follow-up: the summary call runs at `reasoning_effort=minimal`.**
+- A probe on the real summary payload gave 13.4 s → 3.2 s, with reasoning tokens 3,803 → 140 and the same answer and citations.
+- The investigation run measured LIVE in 9.3 s (was 24.6 s).
+- The planning call keeps the default effort, because choosing tools is a judgement.
+- `MetaProvider.chat` takes `reasoning_effort` and sends it only when given; `tests/test_meta_smoke.py` pins this.
 
 ## Verification (local)
 

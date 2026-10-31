@@ -631,7 +631,7 @@ def make_agent_router(app: FastAPI, sessions: sessionmaker, current_user: Callab
                 msg = provider.chat([{"role": "system", "content": SUMMARY_PROMPT},
                                      {"role": "user", "content": json.dumps({"goal": ex.goal, "facts": facts,
                                                                              "evidence_ids": ids}, ensure_ascii=False)}],
-                                    [])["message"]
+                                    [], reasoning_effort="minimal")["message"]  # LIVE: 13.4 s -> 3.2 s, same answer
             except ProviderError as exc:
                 reply.append({"text": f"모델 요약 생략 ({exc}); 위 내용은 모두 서버 확인 결과입니다.", "steps": []})
                 return

@@ -116,6 +116,23 @@ def test_provider_treats_a_cut_off_partial_answer_as_a_failure() -> None:
         p.chat([{"role": "user", "content": "x"}], [])
 
 
+def test_provider_sends_reasoning_effort_only_when_asked() -> None:
+    from app.model_provider import MetaProvider
+
+    sent = []
+    ok_body = {"model": meta_smoke.MODEL, "choices": [{"message": {"role": "assistant", "content": "ok"},
+                                                      "finish_reason": "stop"}]}
+
+    def opener(req, timeout):
+        sent.append(json.loads(req.data))
+        return _Reply(json.dumps(ok_body).encode())
+
+    p = MetaProvider("k" * 12, opener=opener)
+    p.chat([{"role": "user", "content": "x"}], [])
+    p.chat([{"role": "user", "content": "x"}], [], reasoning_effort="minimal")
+    assert "reasoning_effort" not in sent[0] and sent[1]["reasoning_effort"] == "minimal"
+
+
 class _Double:
     mode, model = "TEST_DOUBLE", "double"
 

@@ -131,7 +131,7 @@ From `backend/`:
 
 **As of 2026-10-31, real Meta `muse-spark-1.3` calls have succeeded**, including the structured smoke, an Agent-First draft/validation hand-off and the hybrid planner. See the [LIVE run log](docs/evaluations/META_LIVE_LOG.md), which also records failed calls. The standalone investigation sometimes produces a final report that fails its strict schema; the server refuses it instead of accepting unsupported content. Do not interpret LIVE connectivity as a 100% report success rate.
 
-The hybrid planner uses one strict-JSON model plan over a server-generated situation card, server-executed role-allowed tools, and an optional investigation summary call. When the goal is ambiguous it asks a clarifying question; if no key is available it uses a deterministic server planner. The agent does not approve documents, execute plant actions, confirm causes or close a case.
+The hybrid planner uses one strict-JSON model plan over a server-generated situation card, server-executed role-allowed tools, and an optional investigation summary call sent at `reasoning_effort=minimal` (LIVE: about 9 s for an investigation instead of about 25 s). When the goal is ambiguous it asks a clarifying question; if no key is available it uses a deterministic server planner. The agent does not approve documents, execute plant actions, confirm causes or close a case.
 
 Only SYNTHETIC and APPROVED_FOR_EXTERNAL content is eligible for outbound model calls. Egress filtering and role/case-scope checks enforce the demo's data-handling rules. Never use real factory or personal data without a separate production security and governance design.
 

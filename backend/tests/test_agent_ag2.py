@@ -118,9 +118,9 @@ class Scripted:
     def __init__(self, replies):
         self.replies, self.seen = list(replies), []
 
-    def chat(self, messages, tools, response_format=None):
+    def chat(self, messages, tools, response_format=None, reasoning_effort=None):
         self.seen.append({"messages": [dict(m) for m in messages], "tools": [t["function"]["name"] for t in tools],
-                          "response_format": response_format})
+                          "response_format": response_format, "reasoning_effort": reasoning_effort})
         item = self.replies.pop(0)
         if isinstance(item, Exception):
             raise item
@@ -143,6 +143,7 @@ def test_model_planner_is_one_planning_call_and_a_forbidden_tool_is_denied(tmp_p
     assert [s["tool"] for s in out["steps"] if s["status"] == "OK"] == ["case_summary", "spc", "queue"]
     assert count(c, DocumentVersion) == 0
     assert len(p.seen) == 2  # one plan + one short summary for an investigation; no tool rounds
+    assert p.seen[0]["reasoning_effort"] is None and p.seen[1]["reasoning_effort"] == "minimal"  # plan: default
     assert any("PROPOSAL, 서버 확인 아님" in line["text"] for line in out["reply"])
     assert not any("LIVE" in line["text"] for line in out["reply"])
     # the summary call sees the server's own lines, not raw tool payloads

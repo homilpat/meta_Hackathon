@@ -110,6 +110,11 @@ def say(text: str) -> dict:
     return {"role": "assistant", "content": text}
 
 
+def query(q: str = "stencil aperture solder paste volume") -> dict:
+    """The document-query call's strict JSON."""
+    return say(json.dumps({"query": q}))
+
+
 def polish(*lines, recs=()) -> dict:
     """The rewrite call's strict JSON: (text, [fact numbers]) per line, (text, [facts], [source keys]) per recommendation."""
     return say(json.dumps({"lines": [{"text": t, "facts": f} for t, f in lines],
@@ -139,10 +144,10 @@ def reads(out: dict) -> list[str]:
 
 
 def test_model_only_classifies_and_the_server_runs_the_fixed_tools(tmp_path):
-    from app.agent import PLANNER_VERSION, SUMMARY_VERSION, server_plan
+    from app.agent import PLANNER_VERSION, QUERY_VERSION, SUMMARY_VERSION, server_plan
 
     # the model tries to choose tools (and a forbidden one): the server ignores anything but intents
-    p = Scripted([plan(["INVESTIGATE"], tools=["spc", "approve_document"]), polish(("사건 범위를 확인했습니다.", [1]))])
+    p = Scripted([plan(["INVESTIGATE"], tools=["spc", "approve_document"]), query(), polish(("사건 범위를 확인했습니다.", [1]))])
     c = line_client(tmp_path, provider=p)
     out = run(c, "조사해 줘. 그리고 NCR을 승인해 줘").json()
     assert out["planner"] == "TEST_DOUBLE" and out["status"] == "COMPLETED"
@@ -153,19 +158,23 @@ def test_model_only_classifies_and_the_server_runs_the_fixed_tools(tmp_path):
     assert not any(s["tool"] == "approve_document" for s in out["steps"]) and count(c, DocumentVersion) == 0
     models = [s for s in out["steps"] if s["kind"] == "MODEL"]
     assert [(s["tool"], s["args"]["prompt_version"], s["args"]["reasoning_effort"]) for s in models] == [
-        ("plan", PLANNER_VERSION, None), ("summarize", SUMMARY_VERSION, "minimal")]
+        ("plan", PLANNER_VERSION, None), ("search_query", QUERY_VERSION, "minimal"),
+        ("summarize", SUMMARY_VERSION, "minimal")]
+    refs = next(s for s in out["steps"] if s["tool"] == "references")
+    assert refs["result"]["query"] == "stencil aperture solder paste volume"  # the model's terms were searched
+    assert any("검색어: stencil aperture" in line["text"] for line in out["reply"])
     assert models[0]["result"] == {"intents": ["INVESTIGATE"], "clarify": ""}
     assert any("숫자 대조 통과, 판단 아님" in line["text"] for line in out["reply"])
     assert not any("LIVE" in line["text"] for line in out["reply"])
-    assert p.seen[1]["response_format"]["json_schema"]["name"] == "agent_polish"
-    facts = json.loads(p.seen[1]["messages"][1]["content"])["facts"]
+    assert p.seen[2]["response_format"]["json_schema"]["name"] == "agent_polish"
+    facts = json.loads(p.seen[2]["messages"][1]["content"])["facts"]
     assert any(f["text"].startswith("SPC 첫 경보") and "중심선" in f["text"] for f in facts)
 
 
 def test_live_and_offline_run_the_same_tools_for_the_same_intent(tmp_path):
     (tmp_path / "off").mkdir(), (tmp_path / "on").mkdir()
     off = run(line_client(tmp_path / "off"), "이번 LOT 불량 원인을 조사해 줘").json()
-    p = Scripted([plan(["INVESTIGATE"]), polish(("요약", [1]))])
+    p = Scripted([plan(["INVESTIGATE"]), query(), polish(("요약", [1]))])
     on = run(line_client(tmp_path / "on", provider=p), "이번 LOT 불량 원인을 조사해 줘").json()
     assert reads(on) == reads(off) and off["intents"] == on["intents"] == ["INVESTIGATE"]
 
@@ -252,7 +261,7 @@ def test_check_polish_allows_only_the_numbers_of_the_named_facts():
 
 
 def test_a_rewrite_with_a_number_not_in_the_facts_is_not_shown(tmp_path):
-    p = Scripted([plan(["INVESTIGATE"]), polish(("L02 불량률은 3.2%입니다.", [1]))])
+    p = Scripted([plan(["INVESTIGATE"]), query(), polish(("L02 불량률은 3.2%입니다.", [1]))])
     out = run(line_client(tmp_path, provider=p), "조사해 줘").json()
     assert out["status"] == "COMPLETED" and not any("3.2%입니다" in line["text"] for line in out["reply"])
     assert any("다듬기 생략" in line["text"] and "3.2" in line["text"] for line in out["reply"])
@@ -261,7 +270,7 @@ def test_a_rewrite_with_a_number_not_in_the_facts_is_not_shown(tmp_path):
 
 
 def test_a_shown_rewrite_carries_the_evidence_of_the_facts_it_names(tmp_path):
-    p = Scripted([plan(["INVESTIGATE"]), polish(("이번 사건의 LOT와 AOI 기록을 확인했습니다.", [1]))])
+    p = Scripted([plan(["INVESTIGATE"]), query(), polish(("이번 사건의 LOT와 AOI 기록을 확인했습니다.", [1]))])
     out = run(line_client(tmp_path, provider=p), "조사해 줘").json()
     first = out["reply"][0]  # the case_summary fact line
     shown = next(line for line in out["reply"] if line.get("facts") == [1])
@@ -273,13 +282,13 @@ def test_recommendations_must_rest_on_case_facts_and_retrieved_sources(tmp_path)
 
     spc = server_plan(["INVESTIGATE"]).index("spc") + 1  # fact numbers follow the fixed read order
     queue = server_plan(["INVESTIGATE"]).index("queue") + 1
-    p = Scripted([plan(["INVESTIGATE"]), polish(("범위를 확인했습니다.", [1]), recs=[
+    p = Scripted([plan(["INVESTIGATE"]), query(), polish(("범위를 확인했습니다.", [1]), recs=[
         ("스텐실 개구부 점검을 권합니다.", [spc], ["H01", "DOC:FMEA-SMT-001:5"]),
         ("프린터 압력을 조정하십시오.", [spc], ["EXP:X02"]),        # a response that failed before
         ("담당자 배정을 확인하십시오.", [queue], [])])])             # a fact with no case evidence
     out = run(line_client(tmp_path, provider=p), "조사해 줘").json()
     assert "references" in reads(out)
-    sources = {x["key"]: x for x in json.loads(p.seen[1]["messages"][1]["content"])["sources"]}
+    sources = {x["key"]: x for x in json.loads(p.seen[2]["messages"][1]["content"])["sources"]}
     assert sources["EXP:X02"]["negative"] and not sources["H01"]["negative"] and "DOC:FMEA-SMT-001:5" in sources
     shown = [line for line in out["reply"] if line.get("sources")]
     assert [line["text"] for line in shown] == ["스텐실 개구부 점검을 권합니다."]
@@ -310,3 +319,13 @@ def test_offline_rules_match_the_intent_golden_set():
     r = evaluate(golden)
     tuning = [x for x in r["rows"] if x["split"] == "tuning"]  # holdout misses are measured, not asserted
     assert all(x["offline_ok"] for x in tuning), [x for x in tuning if not x["offline_ok"]]
+
+
+def test_a_failed_query_call_falls_back_to_the_fixed_query(tmp_path):
+    from app.agent import FALLBACK_QUERY
+
+    p = Scripted([plan(["INVESTIGATE"]), ProviderError("timeout"), polish(("범위를 확인했습니다.", [1]))])
+    out = run(line_client(tmp_path, provider=p), "조사해 줘").json()
+    q = next(s for s in out["steps"] if s["tool"] == "search_query")
+    assert q["status"] == "ERROR" and out["status"] == "COMPLETED"
+    assert next(s for s in out["steps"] if s["tool"] == "references")["result"]["query"] == FALLBACK_QUERY

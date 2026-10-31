@@ -109,6 +109,15 @@ SUMMARY_SCHEMA = {"type": "json_schema", "json_schema": {"name": "agent_polish",
                        "properties": {**_LINE["properties"],
                                       "sources": {"type": "array", "items": {"type": "string"}}}}}}}}}
 SUMMARY_EFFORT = "minimal"  # LIVE probe: 13.4 s -> 3.2 s on the real summary payload, same answer and citations
+# The model picks the controlled-document search terms from what the reads found. Retrieval is read-only and
+# pre-filtered by the server (ACL, site, in effect), and a recommendation may cite only what was retrieved.
+QUERY_PROMPT = """From the user's goal and the server facts of one PCB quality case, write one search query (at most
+12 keywords) to find the controlled documents (FMEA, control plan, SOP) relevant to this defect. The documents are
+written in English: use English process terms. Return ONLY the JSON."""
+QUERY_SCHEMA = {"type": "json_schema", "json_schema": {"name": "agent_query", "strict": True, "schema": {
+    "type": "object", "additionalProperties": False, "required": ["query"],
+    "properties": {"query": {"type": "string"}}}}}
+FALLBACK_QUERY = "SPI solder paste volume stencil print AOI"  # offline, or when the query call fails
 NUMBER = re.compile(r"(?<![A-Za-z0-9_./-])\d+(?:\.\d+)?(?![\d.])")  # not the digits of L02, P03/B01, EV-...
 CASE_ID = re.compile(r"\b(?:EV|PRED|XAI|ACT|EFF|H)-[A-Za-z0-9-]+")
 
@@ -119,6 +128,7 @@ def _version(*parts: Any) -> str:
 
 PLANNER_VERSION = _version(PLANNER_PROMPT, PLAN_SCHEMA, READ_PLAN)  # recorded on every model step
 SUMMARY_VERSION = _version(SUMMARY_PROMPT, SUMMARY_SCHEMA, SUMMARY_EFFORT)
+QUERY_VERSION = _version(QUERY_PROMPT, QUERY_SCHEMA, SUMMARY_EFFORT)
 MODEL_RUNS_PER_USER_HOUR = 30  # cost cap on paid planner calls; over it the server rule planner takes over
 
 
@@ -268,6 +278,8 @@ class Executor:
     def __init__(self, app: FastAPI, sessions: sessionmaker, actor: Actor, run_id: int, case_id: str, goal: str):
         self.app, self.sessions, self.actor, self.run_id, self.cid, self.goal = app, sessions, actor, run_id, case_id, goal
         self.results: dict[str, Any] = {}  # successful read results of this run, by tool (sources for recommendations)
+        self.query_fn: Callable[[], str | None] | None = None  # model-chosen document query (LIVE planner only)
+        self.query = FALLBACK_QUERY
 
     def endpoint(self, method: str, path: str) -> APIRoute:
         def walk(routes):  # FastAPI keeps included routers nested (as tests/test_s6_followups.py walks them)
@@ -349,10 +361,7 @@ class Executor:
             "evidence_gaps": lambda _: self.route("GET", "/cases/{case_id}/evidence-gaps", case_id=c),
             "experience": lambda _: self.tools(lambda t: t.search_experience(self.goal[:300])),
             "history": lambda _: self.tools(lambda t: t.retrieve_historical_cases()),
-            # shortcut: the query adds this case type's fixed SPI/AOI terms to the goal; derive it from the case's
-            # signals once there is more than one case type
-            "references": lambda _: self.tools(lambda t: t.search_documents(
-                f"{self.goal[:200]} SPI solder paste volume stencil print AOI")),
+            "references": lambda _: self.tools(lambda t: t.search_documents(self.query)),
             "stages": lambda _: self._stages(),
             "queue": lambda _: self._queue(),
             "documents": lambda _: self._documents(),
@@ -581,7 +590,8 @@ def summarize(tool: str, r: Any) -> str:
         return f"과거 사례 {len(r['precedents'])}건 (유사도는 인과 근거 아님)"
     if tool == "references":
         docs = ", ".join(f"{d['doc_number']} rev {d['revision']} ({d['title']})" for d in r["results"])
-        return f"사내 관리 문서 {len(r['results'])}건: {docs}" if docs else "관련 사내 관리 문서 없음"
+        return (f"사내 관리 문서 {len(r['results'])}건: {docs}" if docs else "관련 사내 관리 문서 없음") + \
+            f" (검색어: {r['query']})"
     if tool == "stages":
         line = " · ".join(f"{s['step']} {s['doc_type']} {s['status'] or '없음'}" for s in r["stages"])
         route = {"NCR_ONLY": "단순 처리(NCR, D0~D3)", "FULL_8D": "8D 전체", "EMERGENCY_FULL_8D": "긴급 8D"}.get(
@@ -696,6 +706,8 @@ def make_agent_router(app: FastAPI, sessions: sessionmaker, current_user: Callab
             mark(plan, tool, "NEEDS_HUMAN", "채울지 사용자 확인 대기")
             reply.append({"text": q, "steps": []})
             return "NEEDS_HUMAN", {"action": "offer_fill", "form": "triage", "question": q}, {"note": q}
+        if tool == "references" and ex.query_fn:  # its own MODEL step, before the read that uses it
+            ex.query = ex.query_fn() or FALLBACK_QUERY
         s = ex.read(tool)
         ok = s["status"] == "OK"
         if ok:
@@ -817,6 +829,27 @@ def make_agent_router(app: FastAPI, sessions: sessionmaker, current_user: Callab
                                       f"{' / '.join(out['rejected'])}", "steps": [s["seq"]]})
         return run
 
+    def query_hook(ex: Executor) -> Callable[[], str | None]:
+        """The model picks the document search terms from the reads so far; None (fallback query) on failure."""
+        def run() -> str | None:
+            def call() -> dict:
+                facts = [summarize(t, r) for t, r in ex.results.items()]
+                msg = provider.chat([{"role": "system", "content": QUERY_PROMPT},
+                                     {"role": "user", "content": json.dumps({"goal": ex.goal, "facts": facts},
+                                                                            ensure_ascii=False)}],
+                                    [], response_format=QUERY_SCHEMA, reasoning_effort=SUMMARY_EFFORT)["message"]
+                try:
+                    q = str(json.loads(msg.get("content") or "")["query"]).strip()[:200]
+                except (ValueError, KeyError, TypeError) as exc:
+                    raise ProviderError(f"query is not valid JSON ({type(exc).__name__})") from None
+                if not q:
+                    raise ProviderError("empty query")
+                return {"query": q}
+
+            s = model_step(ex, "search_query", QUERY_VERSION, SUMMARY_EFFORT, call)
+            return s["result"]["query"] if s["status"] == "OK" else None
+        return run
+
     def over_quota(ex: Executor) -> bool:
         since = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
         with sessions() as s:
@@ -848,6 +881,7 @@ def make_agent_router(app: FastAPI, sessions: sessionmaker, current_user: Callab
         save(ex.run_id, intents=intents)
         if not intents:
             return ask_back(ex, [], reply, clarify or CLARIFY)
+        ex.query_fn = query_hook(ex)
         execute(ex, [_item(t) for t in server_plan(intents)], reply,
                 on_done=summary_hook(ex, reply) if "INVESTIGATE" in intents else None)
 

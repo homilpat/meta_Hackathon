@@ -245,7 +245,8 @@ def test_check_polish_allows_only_the_numbers_of_the_named_facts():
     assert check_polish([{"text": "불량 3건", "facts": [2]}], facts) == []
     assert "근거 사실 번호" in check_polish([{"text": "요약", "facts": [9]}], facts)[0]
     assert "ID" in check_polish([{"text": "근거 EV-abc", "facts": [2]}], facts)[0]
-    assert "해석" in check_polish([{"text": "AOI FAIL 3건" + "이며 리플로우가 원인" * 10, "facts": [2]}], facts)[0]
+    assert check_polish([{"text": "AOI에서 불합격 판정이 3건 나왔습니다. 자세한 내용은 아래 근거를 확인해 주십시오.",
+                          "facts": [2]}], facts) == []  # polite, longer wording is not a reason to hide
 
 
 def test_a_rewrite_with_a_number_not_in_the_facts_is_not_shown(tmp_path):

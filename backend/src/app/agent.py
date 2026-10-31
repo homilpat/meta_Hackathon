@@ -153,7 +153,8 @@ def intents_of(goal: str) -> list[str]:
 
 def check_polish(lines: Any, facts: list[str]) -> list[str]:
     """Why a model rewrite of the server facts may not be shown; [] means every line passed.
-    Deterministic: each line names facts, uses only their numbers, writes no ids and adds no long interpretation."""
+    Deterministic only: each line names facts, uses only their numbers and writes no ids. Wording is free; an added
+    interpretation is not judged here (the facts and their evidence stay shown above it, labelled "판단 아님")."""
     if not isinstance(lines, list) or not lines or len(lines) > 5:
         return ["1~5줄의 문장이 아닙니다"]
     out = []
@@ -168,8 +169,6 @@ def check_polish(lines: Any, facts: list[str]) -> list[str]:
             out.append(f"{n}번 문장: 사실에 없는 숫자 {', '.join(extra)}")
         if CASE_ID.search(text):
             out.append(f"{n}번 문장: 근거 ID는 서버가 붙입니다")
-        if len(text) > 1.5 * len(basis) + 40:
-            out.append(f"{n}번 문장: 사실보다 크게 길어 해석이 덧붙은 것으로 봅니다")
     return out
 
 

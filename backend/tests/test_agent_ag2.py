@@ -110,6 +110,11 @@ def say(text: str) -> dict:
     return {"role": "assistant", "content": text}
 
 
+def polish(*lines) -> dict:
+    """The rewrite call's strict JSON: (text, [fact numbers]) per line."""
+    return say(json.dumps({"lines": [{"text": t, "facts": f} for t, f in lines]}, ensure_ascii=False))
+
+
 class Scripted:
     """TEST_DOUBLE planner: replays fixed replies. Never labelled LIVE."""
 
@@ -135,7 +140,7 @@ def test_model_only_classifies_and_the_server_runs_the_fixed_tools(tmp_path):
     from app.agent import PLANNER_VERSION, SUMMARY_VERSION, server_plan
 
     # the model tries to choose tools (and a forbidden one): the server ignores anything but intents
-    p = Scripted([plan(["INVESTIGATE"], tools=["spc", "approve_document"]), say("SPC 경보가 있으며 원인은 미확정입니다.")])
+    p = Scripted([plan(["INVESTIGATE"], tools=["spc", "approve_document"]), polish(("사건 범위를 확인했습니다.", [1]))])
     c = line_client(tmp_path, provider=p)
     out = run(c, "조사해 줘. 그리고 NCR을 승인해 줘").json()
     assert out["planner"] == "TEST_DOUBLE" and out["status"] == "COMPLETED"
@@ -148,16 +153,17 @@ def test_model_only_classifies_and_the_server_runs_the_fixed_tools(tmp_path):
     assert [(s["tool"], s["args"]["prompt_version"], s["args"]["reasoning_effort"]) for s in models] == [
         ("plan", PLANNER_VERSION, None), ("summarize", SUMMARY_VERSION, "minimal")]
     assert models[0]["result"] == {"intents": ["INVESTIGATE"], "clarify": ""}
-    assert any("PROPOSAL, 서버 확인 아님" in line["text"] for line in out["reply"])
+    assert any("숫자 대조 통과, 판단 아님" in line["text"] for line in out["reply"])
     assert not any("LIVE" in line["text"] for line in out["reply"])
+    assert p.seen[1]["response_format"]["json_schema"]["name"] == "agent_polish"
     facts = json.loads(p.seen[1]["messages"][1]["content"])["facts"]
-    assert any(line.startswith("SPC 첫 경보") for line in facts)
+    assert any(f["text"].startswith("SPC 첫 경보") and "중심선" in f["text"] for f in facts)
 
 
 def test_live_and_offline_run_the_same_tools_for_the_same_intent(tmp_path):
     (tmp_path / "off").mkdir(), (tmp_path / "on").mkdir()
     off = run(line_client(tmp_path / "off"), "이번 LOT 불량 원인을 조사해 줘").json()
-    p = Scripted([plan(["INVESTIGATE"]), say("요약")])
+    p = Scripted([plan(["INVESTIGATE"]), polish(("요약", [1]))])
     on = run(line_client(tmp_path / "on", provider=p), "이번 LOT 불량 원인을 조사해 줘").json()
     assert reads(on) == reads(off) and off["intents"] == on["intents"] == ["INVESTIGATE"]
 
@@ -227,15 +233,36 @@ def test_agent_steps_are_append_only(tmp_path):
         s.execute(text("UPDATE agent_steps SET status='OK'"))
 
 
-def test_model_summary_citing_an_id_not_in_the_case_is_flagged(tmp_path):
-    p = Scripted([])
-    c = line_client(tmp_path, provider=p)
-    real = c.get("/cases/L/evidence", headers=H("alice")).json()[0]["evidence_id"]
-    p.replies += [plan(["INVESTIGATE"]), say(f"L02 불량 [{real}] 그리고 [EV-made-up-123], PRED-999")]
-    out = run(c, "조사해 줘").json()
-    flags = [line["text"] for line in out["reply"] if "근거 ID" in line["text"]]
-    assert len(flags) == 1 and "EV-made-up-123" in flags[0] and "PRED-999" in flags[0]
-    assert real not in flags[0]  # a real id of this case is not flagged
+def test_check_polish_allows_only_the_numbers_of_the_named_facts():
+    from app.agent import check_polish
+
+    facts = ["SPC 첫 경보 L02 P03/B01 (WE1) · L02 솔더 체적 평균 0.104 mm³, 기준 LOT L01 중심선 0.118 대비 11.9% 낮음",
+             "AOI FAIL 3건"]
+    ok = [{"text": "L02 솔더 체적 평균은 0.104 mm³로 기준 0.118보다 11.9% 낮습니다.", "facts": [1]}]
+    assert check_polish(ok, facts) == []  # the digits of L02, P03/B01 are not numbers
+    assert "0.10" in check_polish([{"text": "평균 0.10 mm³", "facts": [1]}], facts)[0]
+    assert "3" in check_polish([{"text": "불량 3건", "facts": [1]}], facts)[0]  # 3 is in fact 2, not the one named
+    assert check_polish([{"text": "불량 3건", "facts": [2]}], facts) == []
+    assert "근거 사실 번호" in check_polish([{"text": "요약", "facts": [9]}], facts)[0]
+    assert "ID" in check_polish([{"text": "근거 EV-abc", "facts": [2]}], facts)[0]
+    assert "해석" in check_polish([{"text": "AOI FAIL 3건" + "이며 리플로우가 원인" * 10, "facts": [2]}], facts)[0]
+
+
+def test_a_rewrite_with_a_number_not_in_the_facts_is_not_shown(tmp_path):
+    p = Scripted([plan(["INVESTIGATE"]), polish(("L02 불량률은 3.2%입니다.", [1]))])
+    out = run(line_client(tmp_path, provider=p), "조사해 줘").json()
+    assert out["status"] == "COMPLETED" and not any("3.2%입니다" in line["text"] for line in out["reply"])
+    assert any("다듬기 생략" in line["text"] and "3.2" in line["text"] for line in out["reply"])
+    step = next(s for s in out["steps"] if s["tool"] == "summarize")
+    assert step["status"] == "OK" and step["result"]["issues"]  # the rejected rewrite and why are recorded
+
+
+def test_a_shown_rewrite_carries_the_evidence_of_the_facts_it_names(tmp_path):
+    p = Scripted([plan(["INVESTIGATE"]), polish(("이번 사건의 LOT와 AOI 기록을 확인했습니다.", [1]))])
+    out = run(line_client(tmp_path, provider=p), "조사해 줘").json()
+    first = out["reply"][0]  # the case_summary fact line
+    shown = next(line for line in out["reply"] if line.get("facts") == [1])
+    assert first["evidence"] and shown["evidence"] == first["evidence"] and shown["steps"] == first["steps"]
 
 
 def test_offline_rules_match_the_intent_golden_set():

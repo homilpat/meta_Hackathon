@@ -142,7 +142,7 @@ export function RunView({ run, ctx, busy, onResume }: { run: J; ctx: Ctx; busy: 
   const titles: Record<string, string> = Object.fromEntries((run.plan ?? []).map((p: J) => [p.tool, p.title]))
   return <div className="message agent-message"><div className="avatar muse"><Icon name="spark" size={17}/></div><div className="message-body">
     <div className="agent-label"><b>QualityOps Agent</b><Badge tone={RUN_TONE[run.status]}>{RUN_LABEL[run.status] ?? run.status}</Badge><span className="muted">run #{run.run_id} · {run.updated_at?.slice(0, 19)}</span></div>
-    {(run.reply ?? []).map((l: J, i: number) => <p key={i} className="wrap">{l.text}{l.steps?.length > 0 && <span className="muted"> (step {l.steps.join(', ')})</span>}</p>)}
+    {(run.reply ?? []).map((l: J, i: number) => <p key={i} className="wrap">{l.text}{l.steps?.length > 0 && <span className="muted"> (step {l.steps.join(', ')})</span>}{l.evidence?.length > 0 && <> <span className="muted">근거</span> <Cite ids={l.evidence}/></>}</p>)}
     <PlanCard run={run}/>
     <PendingCard key={run.pending?.token ?? 'none'} run={run} busy={busy} onResume={onResume}/>
     <div className="tool-grid">{(run.steps ?? []).map((s: J) => <StepCard key={s.seq} s={s} title={titles[s.tool] ?? TOOL_TITLE[s.tool] ?? s.tool} ctx={ctx}/>)}</div>

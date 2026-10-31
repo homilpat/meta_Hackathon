@@ -20,7 +20,8 @@ export function Investigation({ ctx, provider }: { ctx: Ctx; provider: J }) {
       <div className="stack"><Card><SectionTitle title="실행 정보"/>{[['실행', `Run ${r.run_id}`], ['모드', r.mode === 'LIVE' ? 'LIVE Meta 호출' : 'TEST DOUBLE (Meta 아님)'], ['모델', r.model], ['History', r.history], ['라운드', r.rounds], ['토큰', `${r.prompt_tokens}/${r.completion_tokens}`]].map(x =>
         <div className="detail-row" key={x[0]}><span>{x[0]}</span><b>{x[1]}</b></div>)}<div className="divider"/><Badge tone={STATUS_TONE[r.status] ?? 'slate'}>{r.status}</Badge>{r.error && <p className="muted">{r.error}</p>}</Card></div>
       <div className="stack center-col">
-        <Card className="ai-summary"><div className="ai-head"><div className="hero-icon"><Icon name="spark"/></div><div><b>조사 요약</b><span>{r.started_at.slice(0, 19)} · 도구 호출 {r.tool_calls.length}회</span></div></div><p>{r.report?.summary ?? '보고서 없음'}</p></Card>
+        <Card className="ai-summary"><div className="ai-head"><div className="hero-icon"><Icon name="spark"/></div><div><b>조사 요약</b><span>{r.started_at.slice(0, 19)} · 도구 호출 {r.tool_calls.length}회</span></div></div>{!r.report ? <p>보고서 없음</p> : r.status === 'VALIDATED' ? <p>{r.report.summary}</p>
+          : <><Badge tone="red">검증 실패 · 사용 불가</Badge><p className="muted">{r.report.summary}</p></>}</Card>
         <Card><SectionTitle title="도구 실행 타임라인" sub="결과 본문 대신 해시만 기록"/><div className="tool-timeline">{r.tool_calls.map((c: J, i: number) =>
           <div className="tool-item" key={i}><i className={c.ok ? 'green' : 'amber'}>{c.ok && <Icon name="check" size={12}/>}</i><time>R{c.round}</time><div><b>{c.tool_name}</b><span>{c.ok ? `sha256 ${c.result_sha256?.slice(0, 12)}…` : c.error}</span></div></div>)}</div></Card>
         {r.report?.next_evidence_requests?.length > 0 && <Card className="recommend"><SectionTitle title="다음 증거 요청" sub="조치 권고가 아닌 확인 요청"/>{r.report.next_evidence_requests.map((n: J, i: number) =>

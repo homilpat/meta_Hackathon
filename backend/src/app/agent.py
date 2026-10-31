@@ -26,11 +26,8 @@ from app.db import (
     AgentRun,
     AgentStep,
     Assignment,
-    Evidence,
-    Prediction,
     QualityCase,
     WorkflowEvent,
-    XaiArtifact,
 )
 from app.model_provider import ModelProvider, ProviderError
 from app.tools import EvidenceTools, ToolDenied, ToolError
@@ -89,10 +86,20 @@ PLAN_SCHEMA = {"type": "json_schema", "json_schema": {"name": "agent_intents", "
     "type": "object", "additionalProperties": False, "required": ["intents", "clarify"],
     "properties": {"intents": {"type": "array", "items": {"type": "string", "enum": list(INTENTS)}},
                    "clarify": {"type": "string"}}}}}
-SUMMARY_PROMPT = """Summarise for the user in Korean, at most 4 short lines, using ONLY the server facts given.
-Cite evidence ids exactly as given in [brackets]. A statistical signal or model score is not a confirmed cause.
-Do not say anything was approved, confirmed, executed or closed unless a fact says so."""
+# Facts are server sentences; the model only rewrites them into natural Korean, and check_polish() rejects any line
+# whose numbers are not in the facts it names. Evidence ids are attached by the server, never written by the model.
+SUMMARY_PROMPT = """Rewrite the numbered server facts as natural Korean sentences for a quality engineer, at most 5
+lines. For each line list the fact numbers it is based on. Keep every number exactly as written in those facts and
+add no number, cause, judgement or advice the facts do not state. Do not write evidence ids: the server attaches
+them. A statistical signal or a model score is not a confirmed cause."""
+SUMMARY_SCHEMA = {"type": "json_schema", "json_schema": {"name": "agent_polish", "strict": True, "schema": {
+    "type": "object", "additionalProperties": False, "required": ["lines"],
+    "properties": {"lines": {"type": "array", "items": {
+        "type": "object", "additionalProperties": False, "required": ["text", "facts"],
+        "properties": {"text": {"type": "string"}, "facts": {"type": "array", "items": {"type": "integer"}}}}}}}}}
 SUMMARY_EFFORT = "minimal"  # LIVE probe: 13.4 s -> 3.2 s on the real summary payload, same answer and citations
+NUMBER = re.compile(r"(?<![A-Za-z0-9_./-])\d+(?:\.\d+)?(?![\d.])")  # not the digits of L02, P03/B01, EV-...
+CASE_ID = re.compile(r"\b(?:EV|PRED|XAI|ACT|EFF|H)-[A-Za-z0-9-]+")
 
 
 def _version(*parts: Any) -> str:
@@ -100,7 +107,7 @@ def _version(*parts: Any) -> str:
 
 
 PLANNER_VERSION = _version(PLANNER_PROMPT, PLAN_SCHEMA, READ_PLAN)  # recorded on every model step
-SUMMARY_VERSION = _version(SUMMARY_PROMPT, SUMMARY_EFFORT)
+SUMMARY_VERSION = _version(SUMMARY_PROMPT, SUMMARY_SCHEMA, SUMMARY_EFFORT)
 MODEL_RUNS_PER_USER_HOUR = 30  # cost cap on paid planner calls; over it the server rule planner takes over
 
 
@@ -142,6 +149,41 @@ def report_rule(goal: str, intents: list[str]) -> list[str]:
 def intents_of(goal: str) -> list[str]:
     """Keyword intents; [] means the goal is too vague and the agent asks back instead of guessing."""
     return report_rule(goal, [k for k, rx in INTENTS.items() if re.search(rx, goal, re.IGNORECASE)])
+
+
+def check_polish(lines: Any, facts: list[str]) -> list[str]:
+    """Why a model rewrite of the server facts may not be shown; [] means every line passed.
+    Deterministic: each line names facts, uses only their numbers, writes no ids and adds no long interpretation."""
+    if not isinstance(lines, list) or not lines or len(lines) > 5:
+        return ["1~5줄의 문장이 아닙니다"]
+    out = []
+    for n, line in enumerate(lines, 1):
+        refs = [f for f in line.get("facts") or [] if isinstance(f, int) and 1 <= f <= len(facts)]
+        text = str(line.get("text") or "")
+        if not refs or not text:
+            out.append(f"{n}번 문장: 근거 사실 번호가 없습니다")
+            continue
+        basis = " ".join(facts[f - 1] for f in refs)
+        if extra := sorted({x for x in NUMBER.findall(text)} - set(NUMBER.findall(basis)), key=float):
+            out.append(f"{n}번 문장: 사실에 없는 숫자 {', '.join(extra)}")
+        if CASE_ID.search(text):
+            out.append(f"{n}번 문장: 근거 ID는 서버가 붙입니다")
+        if len(text) > 1.5 * len(basis) + 40:
+            out.append(f"{n}번 문장: 사실보다 크게 길어 해석이 덧붙은 것으로 봅니다")
+    return out
+
+
+def evidence_of(tool: str, r: Any) -> list[str]:
+    """The evidence ids behind one server fact line, shown next to it (and next to any rewrite of it)."""
+    if not isinstance(r, dict):
+        return []
+    ids = {"case_summary": lambda: [x["lot_ev"] for x in r["lots"]] + [f["aoi"][1] for f in r["aoi_fail"]],
+           "data_integrity": lambda: [i["evidence_id"] for i in r["issues"]],
+           "spc": lambda: (r.get("first_alarm") or {}).get("ev", []),
+           "predictions": lambda: [p["evidence_id"] for p in r["predictions"] if p["above_threshold"]]
+           + ([r["top_explanation"]["evidence_id"]] if r.get("top_explanation") else []),
+           "history": lambda: [p["historical_case_id"] for p in r["precedents"]]}.get(tool, list)()
+    return list(dict.fromkeys(ids))[:6]
 
 
 def server_plan(intents: list[str]) -> list[str]:
@@ -303,18 +345,6 @@ class Executor:
         return 200, {"documents": out}
 
 
-    def unknown_citations(self, text: str) -> list[str]:
-        """Evidence-style ids a model wrote that do not exist in this case (EV-/PRED-/XAI-)."""
-        cited = set(re.findall(r"\b(?:EV|PRED|XAI)-[A-Za-z0-9-]+", text))
-        if not cited:
-            return []
-        with self.sessions() as s:
-            known = set(s.scalars(select(Evidence.evidence_id).where(Evidence.case_id == self.cid)))
-            known |= {f"PRED-{i}" for i in s.scalars(select(Prediction.id).where(Prediction.case_id == self.cid))}
-            known |= {f"XAI-{i}" for i in s.scalars(select(XaiArtifact.id).join(
-                Prediction, XaiArtifact.prediction_id == Prediction.id).where(Prediction.case_id == self.cid))}
-        return sorted(cited - known)
-
     def situation(self) -> dict:
         """What the server already knows, handed to the planner so it does not spend rounds finding it out."""
         _, st = self._stages()
@@ -467,8 +497,12 @@ def summarize(tool: str, r: Any) -> str:
         return f"데이터 품질 이슈 {sum(r['issue_counts'].values())}건 {r['issue_counts'] or ''}".strip()
     if tool == "spc":
         a = r.get("first_alarm")
-        return (f"SPC 첫 경보 {a['lot']} {a['panel']}/{a['board']} ({', '.join(a['rules'])}) - 통계 신호이며 원인 확정 아님"
-                if a else "SPC 경보 없음")
+        if not a:
+            return "SPC 경보 없음"
+        cl, m = r["limits"]["cl"], r["lots"][a["lot"]]["mean"]  # reference = phase I lot of the chart
+        vs = f"{a['lot']} 솔더 체적 평균 {m} mm³, 기준 LOT {r['reference_lot']} 중심선 {cl} 대비 " \
+             f"{abs(m - cl) / cl * 100:.1f}% {'낮음' if m < cl else '높음'}"
+        return f"SPC 첫 경보 {a['lot']} {a['panel']}/{a['board']} ({', '.join(a['rules'])}) · {vs} - 통계 신호이며 원인 확정 아님"
     if tool == "predictions":
         n = sum(p["above_threshold"] for p in r["predictions"])
         return f"ML 예측 {len(r['predictions'])}건 중 임계 초과 {n}건 (모델 출력, 검사 결과 아님)" if r["predictions"] else \
@@ -597,7 +631,7 @@ def make_agent_router(app: FastAPI, sessions: sessionmaker, current_user: Callab
         ok = s["status"] == "OK"
         line = summarize(tool, s["result"]) if ok else f"{TITLES[tool]} 실패 ({s['http_status']}): {s['error']}"
         mark(plan, tool, "DONE" if ok else s["status"], line)
-        reply.append({"text": line, "steps": [s["seq"]]})
+        reply.append({"text": line, "steps": [s["seq"]], "evidence": evidence_of(tool, s["result"]) if ok else []})
         return "", None, s["result"] if ok else {"error": s["error"]}
 
     def scope_check(ex: Executor, goal: str, summary: dict | None) -> str | None:
@@ -661,30 +695,37 @@ def make_agent_router(app: FastAPI, sessions: sessionmaker, current_user: Callab
                                        "reasoning_effort": effort}, run)
 
     def summary_hook(ex: Executor, reply: list[dict]) -> Callable[[], None]:
-        """Optional second model call: a short narrative from the server's own lines, labelled as a proposal."""
+        """Optional second model call: the server's fact lines rewritten as natural sentences. Shown only if every
+        line passes check_polish; each shown line carries the evidence and steps of the facts it names."""
         def run() -> None:
-            facts = [line["text"] for line in reply if not line["text"].startswith("[")]
-            code, summary = ex.tools(lambda t: t.get_case_summary())
-            ids = [] if code >= 400 else (
-                [lot["lot_ev"] for lot in summary["lots"]] + [f["aoi"][1] for f in summary["aoi_fail"][:10]])
+            facts = [line for line in reply if line["steps"]]  # lines written from a recorded tool step
+            texts = [f["text"] for f in facts]
 
             def call() -> dict:
                 msg = provider.chat([{"role": "system", "content": SUMMARY_PROMPT},
-                                     {"role": "user", "content": json.dumps({"goal": ex.goal, "facts": facts,
-                                                                             "evidence_ids": ids}, ensure_ascii=False)}],
-                                    [], reasoning_effort=SUMMARY_EFFORT)["message"]
-                return {"text": (msg.get("content") or "").strip()[:1500]}
+                                     {"role": "user", "content": json.dumps(
+                                         {"goal": ex.goal, "facts": [{"n": i, "text": t} for i, t in enumerate(texts, 1)]},
+                                         ensure_ascii=False)}],
+                                    [], response_format=SUMMARY_SCHEMA, reasoning_effort=SUMMARY_EFFORT)["message"]
+                try:
+                    lines = json.loads(msg.get("content") or "")["lines"]
+                except (ValueError, KeyError, TypeError) as exc:
+                    raise ProviderError(f"rewrite is not valid JSON ({type(exc).__name__})") from None
+                return {"lines": lines, "issues": check_polish(lines, texts)}  # the check is recorded with the call
 
             s = model_step(ex, "summarize", SUMMARY_VERSION, SUMMARY_EFFORT, call)
-            if s["status"] != "OK":
-                reply.append({"text": f"모델 요약 생략 ({s['error']}); 위 내용은 모두 서버 확인 결과입니다.",
+            why = s["error"] if s["status"] != "OK" else "; ".join(s["result"]["issues"])
+            if why:
+                reply.append({"text": f"모델 문장 다듬기 생략 ({why}). 위 내용은 모두 서버 확인 결과입니다.",
                               "steps": [s["seq"]]})
                 return
-            if text := s["result"]["text"]:
-                reply.append({"text": f"[{provider.mode} 모델 요약 · PROPOSAL, 서버 확인 아님] {text}", "steps": [s["seq"]]})
-                if unknown := ex.unknown_citations(text):
-                    reply.append({"text": f"모델 요약이 이 사건에 없는 근거 ID를 인용했습니다: {', '.join(unknown)}. "
-                                          "해당 문장은 근거 없는 주장으로 보십시오.", "steps": [s["seq"]]})
+            reply.append({"text": f"[{provider.mode} 모델이 위 서버 사실을 문장으로 다듬음 · 숫자 대조 통과, 판단 아님]",
+                          "steps": [s["seq"]]})
+            for line in s["result"]["lines"]:
+                used = [facts[f - 1] for f in dict.fromkeys(line["facts"])]
+                reply.append({"text": line["text"], "facts": list(dict.fromkeys(line["facts"])),
+                              "steps": sorted({n for f in used for n in f["steps"]}),
+                              "evidence": list(dict.fromkeys(e for f in used for e in f.get("evidence", [])))})
         return run
 
     def over_quota(ex: Executor) -> bool:

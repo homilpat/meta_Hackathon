@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app import docparse
+from app import docparse, egress
 from app.db import IntakeCaseLink, IntakeFile, IntakeParse, VisionRequest
 from app.intake import require_intake
 from app.workflow import Actor, now, require_case, run_idempotent
@@ -126,7 +126,7 @@ def make_vision_router(sessions: sessionmaker, current_user) -> APIRouter:
             f, el, blob = target(session, body, actor)
             adapter, result, state = ADAPTERS.get(body.analysis_type), None, "NOT_CONFIGURED"
             if adapter is not None:  # P2: egress follows the file's origin, exactly as for the language model
-                if f.data_origin != "SYNTHETIC":
+                if egress.tier_of(session, f) != "RAW":
                     raise HTTPException(403, "file not approved for external processing")
                 out = VisionResult.model_validate(adapter(blob, body.model_dump()))
                 if out.input_sha256 != el["sha256"]:

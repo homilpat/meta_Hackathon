@@ -63,7 +63,7 @@ function NewRequest({ ctx, busy, act }: { ctx: Ctx; busy: boolean; act: Act }) {
   return <Card><SectionTitle title="요청 카드 만들기" sub="항목: 한 줄에 '요구사항 | 필요 증거 | 판정 기준'. 담당자·검토자는 사건에 배정된 서로 다른 사람"/>
     <div className="row-gap"><select aria-label="요청 종류" value={f.kind} onChange={set('kind')}>{Object.entries(KIND).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
       <input aria-label="요청 제목" placeholder="제목" value={f.title} onChange={set('title')}/><input aria-label="담당자" placeholder="담당자 id" value={f.owner_id} onChange={set('owner_id')}/>
-      <input aria-label="검토자" placeholder="검토자 id" value={f.reviewer_id} onChange={set('reviewer_id')}/><input aria-label="기한" placeholder="2026-11-10T18:00:00+09:00" value={f.due_at} onChange={set('due_at')}/>
+      <input aria-label="검토자" placeholder="검토자 id" value={f.reviewer_id} onChange={set('reviewer_id')}/><input aria-label="기한" placeholder="2026-11-10 18:00" value={f.due_at} onChange={set('due_at')}/>
       <input aria-label="시간대" value={f.due_tz} onChange={set('due_tz')}/></div>
     <Field label="요구 항목"><textarea aria-label="요구 항목" rows={3} value={f.items} onChange={set('items')}/></Field>
     <button className="button secondary" disabled={busy || !f.title || !f.items} onClick={() => act(() => ctx.api(`/cases/${ctx.cid}/requests`, 'POST', {
@@ -110,7 +110,7 @@ function RequestCard({ ctx, r, busy, act }: { ctx: Ctx; r: J; busy: boolean; act
       {r.status === 'DRAFT' && [r.created_by, r.owner_id].includes(me) && <button className="button primary" disabled={busy} onClick={() => post('/open')}>요청 등록</button>}
       {['OPEN', 'NEEDS_REVISION', 'SUBMITTED', 'IN_REVIEW'].includes(r.status) && r.owner_id === me && <>
         <input aria-label="외부 제출 조직" placeholder="제출 조직" value={org} onChange={e => setOrg(e.target.value)}/>
-        <label className="button secondary">회신 업로드<input type="file" hidden multiple accept=".pdf,.docx" aria-label="회신 파일" disabled={busy || !org} onChange={e => upload(e.target.files)}/></label></>}
+        <label className="button secondary">회신 업로드<input type="file" hidden multiple accept=".pdf,.docx,.xlsx,.csv" aria-label="회신 파일" disabled={busy || !org} onChange={e => upload(e.target.files)}/></label></>}
       {r.status === 'SUBMITTED' && r.reviewer_id === me && <button className="button primary" disabled={busy} onClick={() => post('/review-start')}>검토 시작</button>}
       {cur && [r.owner_id, r.reviewer_id].includes(me) && <button className="button secondary" disabled={busy} onClick={() => post('/ai-review')}>AI 항목 검토 요청</button>}
       {r.status === 'IN_REVIEW' && r.reviewer_id === me && cur && <>
@@ -118,7 +118,7 @@ function RequestCard({ ctx, r, busy, act }: { ctx: Ctx; r: J; busy: boolean; act
         <input aria-label="결정 사유" placeholder="사유 (필수)" value={reason} onChange={e => setReason(e.target.value)}/>
         <button className="button primary" disabled={busy || !reason.trim()} onClick={() => post('/decisions', { submission_version: cur.version, files_sha256: cur.files_sha256, decision, reason })}>v{cur.version} 결정</button></>}
       {['DRAFT', 'OPEN', 'SUBMITTED', 'IN_REVIEW', 'NEEDS_REVISION'].includes(r.status) && [r.created_by, r.owner_id, r.reviewer_id].includes(me) && <>
-        <input aria-label="새 기한" placeholder="새 기한 (+09:00 포함)" value={due} onChange={e => setDue(e.target.value)}/>
+        <input aria-label="새 기한" placeholder="새 기한 (예: 2026-11-10 18:00)" value={due} onChange={e => setDue(e.target.value)}/>
         <button className="button secondary" disabled={busy || !due || !reason.trim()} onClick={() => post('/due', { due_at: due, reason })}>기한 변경</button></>}
     </div>
     {['DRAFT', 'OPEN', 'SUBMITTED', 'IN_REVIEW', 'NEEDS_REVISION'].includes(r.status) && <Handover ctx={ctx} busy={busy} act={act} path={`/requests/${r.request_id}`} pending={r.pending_owner_id} canPropose={[r.owner_id, r.created_by].includes(me)}/>}

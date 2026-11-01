@@ -16,7 +16,7 @@ from typing import Any
 
 from lxml import etree
 
-PARSER_VERSION = "docparse-1"
+PARSER_VERSION = "docparse-2"  # 2: PDF table cells rebuilt from text positions
 MAX_RENDER_PAGES = 10
 RENDER_SCALE = 1.0  # 72 dpi: enough to see a layout, bounded memory per page
 RENDER_ERRORS = (RuntimeError, OSError, ValueError, MemoryError)  # pypdfium2.PdfiumError is a RuntimeError
@@ -35,22 +35,158 @@ def sha(b: bytes) -> str:
 
 def parse(media_type: str, data: bytes) -> tuple[list[dict], dict, dict[str, bytes]]:
     """(elements, coverage, image bytes by element id)."""
-    return parse_pdf(data) if media_type == "application/pdf" else parse_docx(data)
+    if media_type == "application/pdf":
+        return parse_pdf(data)
+    if media_type.endswith("spreadsheetml.sheet"):
+        return parse_xlsx(data)
+    if media_type == "text/csv":
+        return parse_csv(data)
+    return parse_docx(data)
+
+
+# --- spreadsheets ------------------------------------------------------------------------------------------
+MAX_CELLS = 20000  # per workbook: enough for an inspection sheet, bounded memory
+MAX_CSV_ROWS = 20000
+
+
+def cell_text(v) -> str:
+    return v.isoformat() if hasattr(v, "isoformat") else str(v)
+
+
+def sheet_cells(ws, t: int, prefix: str, budget: list[int]) -> list[dict]:
+    """Non-empty cells of one sheet with their merged span; cached values only (formulas are never evaluated)."""
+    spans = {(r.min_row, r.min_col): (r.max_col - r.min_col + 1, r.max_row - r.min_row + 1)
+             for r in ws.merged_cells.ranges}
+    out = []
+    for row in ws.iter_rows():
+        for c in row:
+            if c.value is None or budget[0] <= 0:
+                continue
+            budget[0] -= 1
+            span, rows = spans.get((c.row, c.column), (1, 1))
+            out.append({"id": f"{prefix}{c.coordinate}", "kind": "cell", "table": t, "sheet": ws.title, "row": c.row,
+                        "col": c.column, "span": span, "row_span": rows, "text": cell_text(c.value)})
+    return out
+
+
+def parse_xlsx(data: bytes) -> tuple[list[dict], dict, dict[str, bytes]]:
+    import openpyxl
+
+    wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True, keep_links=False)
+    budget, elements, hidden = [MAX_CELLS], [], []
+    for t, ws in enumerate(wb.worksheets, 1):
+        if ws.sheet_state != "visible":
+            hidden.append(ws.title)
+        elements += sheet_cells(ws, t, f"xlsx:{ws.title}!", budget)
+    return elements, {"text": "NONE", "tables": "OK" if elements else "NONE", "images": "NONE",
+                      "charts": "NOT_PARSED" if any(ws._charts for ws in wb.worksheets) else "NONE",
+                      "scan": "NONE", "render": "NOT_SUPPORTED", "sheets": [ws.title for ws in wb.worksheets],
+                      "hidden_sheets": hidden, "truncated": budget[0] <= 0,
+                      "tables_note": "수식은 계산하지 않고 파일에 저장된 값을 씁니다 (저장된 값이 없는 수식 칸은 비어 있음)"
+                      + (f"; 숨김 시트 {', '.join(hidden)} 포함" if hidden else "")}, {}
+
+
+def decode_text(data: bytes) -> tuple[str, str] | None:
+    if b"\0" in data[:4096]:
+        return None
+    for enc in ("utf-8-sig", "cp949"):
+        try:
+            return data.decode(enc), enc
+        except UnicodeDecodeError:
+            continue
+    return None
+
+
+def sniff_csv(data: bytes) -> dict | None:
+    """A delimited text table, or None. CSV has no signature: it must decode and split consistently."""
+    import csv
+
+    decoded = decode_text(data)
+    if decoded is None:
+        return None
+    text, enc = decoded
+    try:
+        dialect = csv.Sniffer().sniff(text[:4096], delimiters=",;\t")
+    except csv.Error:
+        return None
+    rows = list(csv.reader(io.StringIO(text), dialect))
+    if len(rows) < 2 or max(len(r) for r in rows) < 2:
+        return None
+    return {"rows": len(rows), "encoding": enc, "delimiter": dialect.delimiter}
+
+
+def parse_csv(data: bytes) -> tuple[list[dict], dict, dict[str, bytes]]:
+    import csv
+
+    text, enc = decode_text(data)
+    dialect = csv.Sniffer().sniff(text[:4096], delimiters=",;\t")
+    elements = [{"id": f"csv:r{r}:c{c}", "kind": "cell", "table": 1, "row": r, "col": c, "span": 1,
+                 "text": v.strip()}
+                for r, row in enumerate(csv.reader(io.StringIO(text), dialect), 1) if r <= MAX_CSV_ROWS
+                for c, v in enumerate(row, 1) if v.strip()]
+    return elements, {"text": "NONE", "tables": "OK" if elements else "NONE", "images": "NONE", "charts": "NONE",
+                      "scan": "NONE", "render": "NOT_SUPPORTED", "encoding": enc}, {}
 
 
 # --- PDF ---------------------------------------------------------------------------------------------------
+ROW_TOL, COL_TOL = 2.0, 4.0  # points: same row if baselines differ less; same column if left edges do
+
+
+def chunks(page) -> list[tuple[float, float, str]]:
+    """(x, y, text) of each text run on a page, in page coordinates."""
+    out: list[tuple[float, float, str]] = []
+
+    def visit(text, cm, tm, _font, _size):
+        if text.strip():
+            out.append((tm[4] * cm[0] + cm[4], tm[5] * cm[3] + cm[5], text.strip()))
+    page.extract_text(visitor_text=visit)
+    return out
+
+
+def tables_of(runs: list[tuple[float, float, str]]) -> list[list[list[tuple[float, str]]]]:
+    """Tables rebuilt from positions: consecutive rows of two or more runs whose left edges fall on the same
+    columns. A borderless or merged-cell table may still be missed or split; it then stays as text lines."""
+    rows: list[list[tuple[float, float, str]]] = []
+    for x, y, t in sorted(runs, key=lambda r: (-r[1], r[0])):
+        if rows and abs(rows[-1][0][1] - y) < ROW_TOL:
+            rows[-1].append((x, y, t))
+        else:
+            rows.append([(x, y, t)])
+    found: list[list[list[tuple[float, str]]]] = []
+    cur: list[list[tuple[float, str]]] = []
+    cols: list[float] = []
+    for row in rows:
+        cells = sorted((x, t) for x, _, t in row)
+        xs = [x for x, _ in cells]
+        if len(cells) >= 2 and cur and all(any(abs(x - c) < COL_TOL for c in cols) for x in xs):
+            cur.append(cells)
+            continue
+        if len(cur) >= 2:
+            found.append(cur)
+        cur, cols = ([cells], xs) if len(cells) >= 2 else ([], [])
+    if len(cur) >= 2:
+        found.append(cur)
+    return found
 def parse_pdf(data: bytes) -> tuple[list[dict], dict, dict[str, bytes]]:
     from pypdf import PdfReader
 
     reader = PdfReader(io.BytesIO(data))
     elements: list[dict] = []
     blobs: dict[str, bytes] = {}
-    scans = 0
+    scans = tables = 0
     for n, page in enumerate(reader.pages, 1):
         lines = [x.strip() for x in (page.extract_text() or "").splitlines() if x.strip()]
         for i, line in enumerate(lines, 1):
             elements.append({"id": f"pdf:p{n}:l{i}", "kind": "text", "page": n, "text": line})
         captions = [f"pdf:p{n}:l{i}" for i, line in enumerate(lines, 1) if CAPTION.match(line)]
+        for t, table in enumerate(tables_of(chunks(page)), 1):
+            tables += 1
+            cols = sorted({x for row in table for x, _ in row})
+            for r, row in enumerate(table, 1):
+                for x, text in row:
+                    c = min(range(len(cols)), key=lambda k: abs(cols[k] - x)) + 1
+                    elements.append({"id": f"pdf:p{n}:t{t}:r{r}:c{c}", "kind": "cell", "page": n, "table": t,
+                                     "row": r, "col": c, "span": 1, "text": text, "rebuilt": True})
         images = list(page.images)
         if not lines and images:  # no text layer: a scan, readable only through a vision path
             scans += 1
@@ -67,8 +203,10 @@ def parse_pdf(data: bytes) -> tuple[list[dict], dict, dict[str, bytes]]:
                              "caption_candidates": captions if not (len(images) == 1 and len(captions) == 1) else []})
     mark_duplicates(elements)
     coverage = {"text": "OK" if any(e["kind"] == "text" for e in elements) else "NONE",
-                "tables": "PARTIAL" if any(e["kind"] == "text" for e in elements) else "NONE",
-                "tables_note": "PDF 표는 텍스트 줄로만 추출되며 셀 구조는 보존되지 않습니다",
+                "tables": "RECONSTRUCTED" if tables else "PARTIAL" if any(e["kind"] == "text" for e in elements)
+                else "NONE",
+                "tables_note": "PDF 표는 글자 좌표로 행·열을 재구성했습니다 (선 없는 표·병합 셀은 원문과 대조 필요)"
+                if tables else "PDF에서 표 구조를 찾지 못해 텍스트 줄로만 추출했습니다",
                 "images": "OK" if blobs else "NONE",
                 "charts": "IMAGE_ONLY" if blobs else "NONE",
                 "charts_note": "PDF 안의 차트는 그림이라 원본 수치가 없습니다 (그림 수치는 공식 통계에 쓰지 않음)",
@@ -142,10 +280,37 @@ def chart_data(z: zipfile.ZipFile, part: str) -> dict:
             values = []
         series.append({"name": name[0] if name else "", "categories": pts(s.find("c:cat", NS)), "values": values,
                        "total": round(sum(values), 6), "max": max(values) if values else None})
-    has_workbook = any(t.endswith((".xlsx", ".bin")) for t in rels_of(z, part).values())
+    refs = [s.find("c:val/c:numRef/c:f", NS) for s in root.iter(w("c:ser"))]
+    workbook = next((t for t in rels_of(z, part).values() if t.endswith(".xlsx")), None)
+    compare = compare_workbook(z, part, workbook, series, [r.text if r is not None else None for r in refs]) \
+        if workbook else "NO_WORKBOOK"
     return {"title": "".join(t.text or "" for t in root.iter(w("a:t"))) or None, "series": series,
-            "source": "CHART_CACHE",  # values cached in the chart part; an embedded workbook is not opened
-            "workbook_present": has_workbook}
+            "source": "CHART_CACHE", "workbook_present": workbook is not None, "workbook_compare": compare}
+
+
+def compare_workbook(z: zipfile.ZipFile, part: str, target: str, series: list[dict], refs: list[str | None]) -> str:
+    """Read each series' range from the embedded workbook (stored values, nothing evaluated) and compare it with
+    the chart's cached values. MISMATCH is shown, never resolved: a person decides which one is right."""
+    import posixpath
+
+    import openpyxl
+
+    path = posixpath.normpath(posixpath.join(posixpath.dirname(part), target))
+    if path not in z.namelist():
+        return "NOT_COMPARABLE"
+    wb = openpyxl.load_workbook(io.BytesIO(z.read(path)), data_only=True)
+    result = "MATCH"
+    for s, ref in zip(series, refs, strict=False):
+        m = re.fullmatch(r"'?([^'!]+)'?!\$?([A-Z]+)\$?(\d+):\$?([A-Z]+)\$?(\d+)", ref or "")
+        if not m or m.group(1) not in wb.sheetnames:
+            s["workbook_values"], result = None, "NOT_COMPARABLE" if result == "MATCH" else result
+            continue
+        cells = wb[m.group(1)][f"{m.group(2)}{m.group(3)}:{m.group(4)}{m.group(5)}"]
+        vals = [c.value for row in cells for c in row]
+        s["workbook_values"] = vals
+        if [float(v) if isinstance(v, int | float) else None for v in vals] != s["values"]:
+            result = "MISMATCH"
+    return result
 
 
 def parse_docx(data: bytes) -> tuple[list[dict], dict, dict[str, bytes]]:
@@ -204,10 +369,13 @@ def parse_docx(data: bytes) -> tuple[list[dict], dict, dict[str, bytes]]:
         el["caption_id"] = None
     mark_duplicates(elements)
     charts = [e for e in elements if e["kind"] == "chart"]
+    mismatch = [c["id"] for c in charts if c["workbook_compare"] == "MISMATCH"]
     coverage = {"text": "OK" if any(e["kind"] == "text" for e in elements) else "NONE",
                 "tables": "OK" if counts["t"] else "NONE", "images": "OK" if counts["img"] else "NONE",
-                "charts": ("OK" if all(s["values"] for c in charts for s in c["series"]) else "PARTIAL")
-                if charts else "NONE", "scan": "NONE",
+                "charts": ("MISMATCH" if mismatch else "OK" if all(s["values"] for c in charts for s in c["series"])
+                           else "PARTIAL") if charts else "NONE", "scan": "NONE",
+                **({"charts_note": f"{', '.join(mismatch)}: 차트에 표시된 값과 내장 워크북 값이 다릅니다 "
+                                   "(둘 다 표시하며 어느 쪽이 맞는지는 사람이 판단)"} if mismatch else {}),
                 "render": "NOT_SUPPORTED", "render_note": "DOCX는 렌더링하지 않으며 문단·표·셀 위치로 원문을 가리킵니다"}
     return elements, coverage, blobs
 

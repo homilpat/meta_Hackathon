@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app import docparse, intake_extract
+from app import docparse, egress, intake_extract
 from app.db import IntakeExtraction, IntakeFile, IntakeParse, IntakeRecord
 from app.fields import FreeText
 from app.model_provider import ModelProvider, ProviderError
@@ -33,7 +33,9 @@ MAX_FILES = 5  # per request
 MAX_PDF_PAGES = 50
 MAX_ZIP_ENTRIES = 2000
 MAX_UNZIPPED = 50 * 1024 * 1024  # zip-bomb guard for DOCX
+MASKED_EGRESS = True  # protected files go masked to the external model; False withholds them entirely
 PDF, DOCX = "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+XLSX, CSV = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "text/csv"
 RETRY = "PDF 또는 DOCX를 다시 저장해 올리거나, 내용을 직접 입력해 접수할 수 있습니다."
 
 
@@ -67,15 +69,26 @@ def inspect(data: bytes) -> tuple[str, dict]:
             raise refuse(413, f"PDF가 {MAX_PDF_PAGES}쪽을 넘습니다 ({pages}쪽).")
         active = sorted({m.decode() for m in re.findall(rb"/(JavaScript|JS|OpenAction|Launch|EmbeddedFile)\b", data)})
         return PDF, {"pages": pages, "active_content": active}
+    if data.startswith(b"\xd0\xcf\x11\xe0"):  # OLE container: encrypted OOXML or legacy .doc/.xls
+        raise refuse(422, "암호화되었거나 구형 Office 형식(.doc/.xls)입니다.")
     if data.startswith(b"PK"):
         try:
             z = zipfile.ZipFile(io.BytesIO(data))
             infos = z.infolist()
         except zipfile.BadZipFile:
-            raise refuse(422, "손상된 DOCX입니다.") from None
+            raise refuse(422, "손상된 Office 파일입니다.") from None
         names = {i.filename for i in infos}
+        if "xl/workbook.xml" in names:
+            if any(i.flag_bits & 0x1 for i in infos):
+                raise refuse(422, "암호화된 XLSX는 열 수 없습니다.")
+            if len(infos) > MAX_ZIP_ENTRIES or sum(i.file_size for i in infos) > MAX_UNZIPPED:
+                raise refuse(413, "압축을 풀면 허용 크기를 넘는 XLSX입니다.")
+            if "xl/vbaProject.bin" in names:
+                raise refuse(415, "매크로가 포함된 통합 문서는 접수하지 않습니다.")
+            return XLSX, {"external_links": sum(n.startswith("xl/externalLinks/") for n in names),
+                          "charts": sum(n.startswith("xl/charts/chart") for n in names)}
         if "word/document.xml" not in names:
-            raise refuse(415, "PDF·DOCX만 접수합니다 (DOCX 본문이 없는 압축 파일).")
+            raise refuse(415, "PDF·DOCX·XLSX·CSV만 접수합니다 (본문이 없는 압축 파일).")
         if any(i.flag_bits & 0x1 for i in infos):
             raise refuse(422, "암호화된 DOCX는 열 수 없습니다.")
         if len(infos) > MAX_ZIP_ENTRIES or sum(i.file_size for i in infos) > MAX_UNZIPPED:
@@ -86,7 +99,11 @@ def inspect(data: bytes) -> tuple[str, dict]:
             if "word/_rels/document.xml.rels" in names else ""
         return DOCX, {"external_links": len(re.findall(r'TargetMode="External"', rels)),
                       "embedded_objects": sum(n.startswith("word/embeddings/") for n in names)}
-    raise refuse(415, "PDF·DOCX만 접수합니다 (확장자가 아닌 파일 내용으로 판단합니다).")
+    if (csv_checks := docparse.sniff_csv(data)) is not None:
+        if csv_checks["rows"] > docparse.MAX_CSV_ROWS:
+            raise refuse(413, f"CSV가 {docparse.MAX_CSV_ROWS}행을 넘습니다.")
+        return CSV, csv_checks
+    raise refuse(415, "PDF·DOCX·XLSX·CSV만 접수합니다 (확장자가 아닌 파일 내용으로 판단합니다).")
 
 
 class FileIn(BaseModel):
@@ -181,7 +198,8 @@ def draft_out(session: Session, r: IntakeRecord) -> dict:
     for f in files:
         pp = session.scalar(select(IntakeParse).where(IntakeParse.file_id == f.id,
                                                       IntakeParse.parser_version == docparse.PARSER_VERSION))
-        out.append({**file_out(f), **({"elements": pp.elements, "coverage": pp.coverage} if pp else {})})
+        out.append({**file_out(f), "egress": egress.egress_view(session, f),
+                    **({"elements": pp.elements, "coverage": pp.coverage} if pp else {})})
     x = latest(session, r.id)
     return {"intake_id": r.id, "files": out, "draft": None if x is None else {
         "version": x.version, "kind": x.kind, "mode": x.mode, "status": x.status, "model": x.model,
@@ -197,22 +215,29 @@ def own_file(session: Session, intake_id: int, file_id: int, actor: Actor) -> In
     return f
 
 
-def analysis(provider: ModelProvider | None, inputs: list[dict]) -> tuple[str, str, dict | None, list, str | None]:
-    """(mode, status, raw model output, withheld files, error). Never raises for model problems."""
-    withheld = [{"file_id": i["file_id"], "name": i["name"], "reason": "외부 전송 승인 안 됨 (UNKNOWN)"}
-                for i in inputs if i["data_origin"] != "SYNTHETIC"]
-    if provider is None:
-        return "OFFLINE", "OFFLINE", None, withheld, "Meta 미연결: 원문을 보고 직접 입력하세요."
-    if len(withheld) == len(inputs):
-        return "OFFLINE", "OFFLINE", None, withheld, "외부 전송이 승인된 파일이 없어 모델을 호출하지 않았습니다."
+def route(provider: ModelProvider | None, local: ModelProvider | None, inputs: list[dict]):
+    """Which model reads, and how protected files go: everything to an in-house model when one is configured and a
+    file is protected (nothing leaves); otherwise the external model with protected files masked."""
+    if local is not None and any(i["tier"] != "RAW" for i in inputs):
+        return local, "RAW"
+    return provider, "MASK" if MASKED_EGRESS else "WITHHOLD"
+
+
+def analysis(provider: ModelProvider | None, inputs: list[dict], local: ModelProvider | None = None):
+    """(mode, status, model output, withheld files, error, egress info). Never raises for model problems."""
+    model, protected = route(provider, local, inputs)
+    if model is None:
+        return "OFFLINE", "OFFLINE", None, [], "Meta 미연결: 원문을 보고 직접 입력하세요.", None
     try:
-        raw, withheld = intake_extract.extract(provider, inputs)
-        return provider.mode, "PARTIAL" if withheld else "OK", raw, withheld, None
+        raw, withheld, info = intake_extract.extract(model, inputs, protected)
+        return model.mode, "PARTIAL" if withheld or any(s["sent"] == "MASKED" for s in info["files"]) else "OK", \
+            raw, withheld, None, info
     except ProviderError as exc:
-        return provider.mode, "FAILED", None, withheld, f"모델 추출 실패 ({exc}). 원문을 보고 직접 입력하세요."
+        return model.mode, "FAILED", None, [], f"모델 추출 실패 ({exc}). 원문을 보고 직접 입력하세요.", None
 
 
-def add_draft_routes(router: APIRouter, sessions: sessionmaker, Who, IdemKey, provider: ModelProvider | None) -> None:
+def add_draft_routes(router: APIRouter, sessions: sessionmaker, Who, IdemKey, provider: ModelProvider | None,
+                     local: ModelProvider | None = None) -> None:
     @router.post("/intakes/{intake_id}/analyze", status_code=201)
     def analyze(intake_id: int, key: IdemKey, actor: Who):
         """Parse every file (server), then one Muse extraction over the files cleared for egress, checked by the
@@ -222,11 +247,11 @@ def add_draft_routes(router: APIRouter, sessions: sessionmaker, Who, IdemKey, pr
             inputs = []
             for f in session.scalars(select(IntakeFile).where(IntakeFile.intake_id == r.id).order_by(IntakeFile.id)):
                 pp = parsed(session, f)
-                blobs = docparse.parse(f.media_type, f.content)[2] if f.data_origin == "SYNTHETIC" else {}
                 inputs.append({"file_id": f.id, "name": f.name, "data_origin": f.data_origin,
-                               "elements": pp.elements, "images": blobs})
-        mode, status, raw, withheld, error = analysis(provider, inputs)  # outside any DB transaction
-        checked = intake_extract.draft(raw, inputs)
+                               "tier": egress.tier_of(session, f), "elements": pp.elements,
+                               "images": docparse.parse(f.media_type, f.content)[2]})
+        mode, status, raw, withheld, error, info = analysis(provider, inputs, local)  # outside any transaction
+        checked = {**intake_extract.draft(raw, inputs), "egress": info}
 
         def run(session: Session) -> tuple[int, dict]:
             r = require_intake(session, intake_id, actor)
@@ -234,7 +259,7 @@ def add_draft_routes(router: APIRouter, sessions: sessionmaker, Who, IdemKey, pr
                                 .where(IntakeExtraction.intake_id == r.id)) or 0) + 1
             session.add(IntakeExtraction(
                 intake_id=r.id, version=v, kind="EXTRACTION", mode=mode, status=status,
-                model=provider.model if provider and mode != "OFFLINE" else None,
+                model=(local if mode == "LOCAL" else provider).model if mode != "OFFLINE" else None,
                 prompt_version=PROMPT_VERSION if mode != "OFFLINE" else None, parser_version=docparse.PARSER_VERSION,
                 draft=checked, raw=raw, withheld=withheld, changes=[], error=error, created_by=actor.id,
                 created_at=now()))
@@ -295,7 +320,8 @@ def add_draft_routes(router: APIRouter, sessions: sessionmaker, Who, IdemKey, pr
                         headers={"Content-Disposition": "attachment", "X-Content-Type-Options": "nosniff"})
 
 
-def make_intake_router(sessions: sessionmaker, current_user, provider: ModelProvider | None = None) -> APIRouter:
+def make_intake_router(sessions: sessionmaker, current_user, provider: ModelProvider | None = None,
+                       local: ModelProvider | None = None) -> APIRouter:
     router = APIRouter()
     Who = Annotated[Actor, Depends(current_user)]
     IdemKey = Annotated[str, Header(alias="Idempotency-Key", min_length=8, max_length=80)]
@@ -346,5 +372,5 @@ def make_intake_router(sessions: sessionmaker, current_user, provider: ModelProv
                 "Content-Disposition": f'attachment; filename="intake-{intake_id}-{file_id}"',
                 "X-Content-Type-Options": "nosniff"})
 
-    add_draft_routes(router, sessions, Who, IdemKey, provider)
+    add_draft_routes(router, sessions, Who, IdemKey, provider, local)
     return router

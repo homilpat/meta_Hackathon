@@ -7,6 +7,7 @@ with what the fixtures actually say. Writes docs/evaluations/intake_live.json. R
 single  one complaint PDF (text, table as lines, photo with an instruction in its caption, blurred chart)
 multi   that PDF + a DOCX supplement with a conflicting LOT and the inspected quantity + a scanned shipping note
 review  a supplier reply against two request items (one documented, one only claimed)
+masked  the single PDF treated as an unapproved file: only form words leave, values are tokens, no images
 """
 
 import json
@@ -42,9 +43,11 @@ def value_ok(d: dict, field: str, want: str) -> dict:
             "locator": [s["element_id"] for s in got["sources"]]}
 
 
-def single(provider) -> dict:
+def single(provider, protected: bool = False) -> dict:
     files = files_of(PDF)
-    raw, _ = intake_extract.extract(provider, files)
+    if protected:
+        files[0]["tier"] = "PROTECTED"
+    raw, _, info = intake_extract.extract(provider, files, "MASK")
     d = intake_extract.draft(raw, files)
     rows = [value_ok(d, k, v) for k, v in {"customer_ref": "DS-QN-2026-0099", "lot": "L05", "defective_qty": "7",
                                            "part_number": "PCB-BMS-310 rev A", "delivery_date": "2026-10-20",
@@ -58,12 +61,21 @@ def single(provider) -> dict:
               "no_rate_note": any("불량률" in n for n in d["notes"]),
               "injection_flagged": bool(d["flags"]), "image_linked": any("img" in lk["element_id"] for lk in d["links"]),
               "rejected_values": sum(len(v["rejected"]) for v in d["fields"].values())}
+    if protected:
+        sent = info["masked_payload"]["text"]
+        checks["values_left_masked"] = not any(v in sent for v in ("DS-QN-2026-0099", "L05", "PCB-BMS-310",
+                                                                    "solder", "Hanbit"))
+        checks["sent"] = [f["sent"] for f in info["files"]]
     return {"rows": rows, "checks": checks, "documents": d["documents"], "questions": d["questions"]}
+
+
+def masked(provider) -> dict:
+    return single(provider, protected=True)
 
 
 def multi(provider) -> dict:
     files = files_of(PDF, DOCX, SCAN)
-    raw, _ = intake_extract.extract(provider, files)
+    raw, *_ = intake_extract.extract(provider, files)
     d = intake_extract.draft(raw, files)
     lot = d["fields"]["lot"]
     rows = [{"field": "lot", "want": "CONFLICT L05/L06", "status": lot["status"],
@@ -87,7 +99,7 @@ def review(provider) -> dict:
               "criterion": "보류 기록이 존재"},
              {"item_id": "I2", "requirement": "근본 원인", "required_evidence": "원인 검증 실험 결과",
               "criterion": "재현 또는 검증 실험으로 확인"}]
-    parts, _ = intake_extract.model_input(files)
+    parts, *_ = intake_extract.model_input(files)
     msg = provider.chat([{"role": "system", "content": REVIEW_PROMPT},
                          {"role": "user", "content": [{"type": "text", "text": json.dumps({"items": items},
                                                                                           ensure_ascii=False)}, *parts]}],
@@ -103,7 +115,7 @@ def review(provider) -> dict:
     return {"rows": rows, "opinions": out}
 
 
-CHECKS = {"single": single, "multi": multi, "review": review}
+CHECKS = {"single": single, "multi": multi, "review": review, "masked": masked}
 
 
 def main() -> int:

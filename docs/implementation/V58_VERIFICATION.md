@@ -17,7 +17,7 @@ this MVP by the spec; **LIMIT** = implemented with a stated limitation. Nothing 
 | IN-FR-08 | automatic case creation by policy | — | — | P2 / NOT_IMPLEMENTED |
 | MM-FR-01 | server structure extraction vs Muse understanding; text/table/image/chart provenance | `docparse` locators, `intake_extract` (values only from text/cells/chart data) | `test_intake_in2.py::test_parser_locators…` | PASS |
 | MM-FR-02 | captions / surrounding text / product-LOT links to images; ambiguity shown | caption links, duplicates, Muse links as AI_OBSERVATION | `test_intake_in2.py`, LIVE (image linked) | PASS |
-| MM-FR-03 | chart source values vs picture reading; coverage; render failure; manual fallback | DOCX chart cache (server totals), PDF charts IMAGE_ONLY, `render_check`, page render 422 fallback | `test_vision_mm.py`, `test_intake_in2.py::test_render…` | PASS · LIMIT: embedded chart workbooks are not opened, so cache-vs-workbook differences are not compared |
+| MM-FR-03 | chart source values vs picture reading; coverage; render failure; manual fallback | DOCX chart cache (server totals), PDF charts IMAGE_ONLY, `render_check`, page render 422 fallback | `test_vision_mm.py`, `test_intake_in2.py::test_render…` | PASS (chart cache vs embedded workbook compared: MATCH / MISMATCH shown, `test_intake_sheets.py`) |
 | MM-FR-04 | vision adapter contract and NOT_CONFIGURED | `app/vision.py`, `vision_requests` | `test_vision_mm.py` | PASS |
 | MM-FR-05 | real vision model, evaluation, results as evidence | — | — | P2 / NOT_IMPLEMENTED |
 | RW-FR-01 | supplier / audit / internal origins with fields, existing D0 path | `quality_cases.origin/channel`, `case_profiles`, `/origin-cases` | `test_requests_rw.py`, e2e_http | PASS |
@@ -50,4 +50,4 @@ work. All in `test_intake_in1/2/3.py` and `test_vision_mm.py`.
 | headless Chrome on a scratch server: Agent with no case, intake card (OFFLINE draft, coverage, flags) | rendered |
 | `python -m scripts.intake_live_check` (Meta LIVE, separate fixture) | 8/8 fields, 8.4 s (META_LIVE_LOG) |
 
-Not LIVE-checked: request AI review, multi-file LIVE extraction with DOCX, scanned-page vision through Muse.
+LIVE-checked since (META_LIVE_LOG): request AI review 2/2, PDF+DOCX+scan in one call 3/3, masked (unapproved) extraction 7/8. Follow-ups (egress tiers, XLSX/CSV, PDF table cells, scans, time zones): `EGRESS_SHEETS_TABLES.md`. Remaining limits: DOCX is not rendered (structural locators only); X-User is a demo identity (login with role-based permissions is on the roadmap); the in-house model path is wired but no model is installed here.

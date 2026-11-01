@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from app import egress
 from app.db import (
     Assignment,
     Closure,
@@ -63,7 +64,7 @@ def register_evidence(session: Session, case_id: str, r: IntakeRecord, x: Intake
     files = {f.id: f for f in session.scalars(select(IntakeFile).where(IntakeFile.intake_id == r.id))}
     asset_of: dict[int, int] = {}
     for f in files.values():
-        approved = f.data_origin == "SYNTHETIC"
+        approved = egress.tier_of(session, f) == "RAW"
         a = SourceAsset(case_id=case_id, asset_id=f"intake:{r.id}:file:{f.id}", source_system=CUSTOMER_SYSTEM,
                         entity_type="CUSTOMER_DOCUMENT", source_version=1, supersedes_asset_id=None,
                         license_id="CUSTOMER_PROVIDED", data_origin=f.data_origin,
@@ -90,7 +91,7 @@ def register_evidence(session: Session, case_id: str, r: IntakeRecord, x: Intake
                          original_row_id=src.get("element_id") or "user", entity_type="CUSTOMER_REPORT",
                          entity_key=[name], event_time=f.uploaded_at, source_updated_at=None, ingested_at=now(),
                          data_origin=f.data_origin,
-                         sensitivity="APPROVED_FOR_EXTERNAL" if f.data_origin == "SYNTHETIC" else "UNKNOWN",
+                         sensitivity="APPROVED_FOR_EXTERNAL" if egress.tier_of(session, f) == "RAW" else "UNKNOWN",
                          validation_status="CUSTOMER_REPORTED", raw_json=raw)
         session.add(ev)
         session.flush()

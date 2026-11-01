@@ -43,10 +43,11 @@ export function IntakePanel({ ctx }: { ctx: Ctx }) {
     }
   }
   return <Card className="intake">
-    <SectionTitle title="고객 문서 접수 (PDF · DOCX)" sub="사건을 고르지 않아도 첨부할 수 있습니다. 업로드·분석만으로는 사건이 만들어지지 않습니다."
-      action={<label className="button secondary">{busy ? '처리 중…' : '문서 첨부'}<input ref={input} type="file" hidden multiple accept=".pdf,.docx"
+    <SectionTitle title="고객 문서 접수 (PDF · DOCX · XLSX · CSV)" sub="사건을 고르지 않아도 첨부할 수 있습니다. 업로드·분석만으로는 사건이 만들어지지 않습니다."
+      action={<label className="button secondary">{busy ? '처리 중…' : '문서 첨부'}<input ref={input} type="file" hidden multiple accept=".pdf,.docx,.xlsx,.csv"
         aria-label="고객 문서 첨부" disabled={!!busy} onChange={e => attach(e.target.files)}/></label>}/>
     {busy && <p className="muted">{busy}</p>}
+    {ctx.me?.role === 'QA_PRODUCTION' && <EgressQueue ctx={ctx}/>}
     {intakes.slice(0, 3).map(i => <IntakeCard key={i.intake_id} ctx={ctx} intake={i}/>)}
   </Card>
 }
@@ -84,14 +85,19 @@ export function IntakeCard({ ctx, intake }: { ctx: Ctx; intake: J }) {
   const open = Object.entries(d?.fields ?? {}).filter(([, v]: [string, J]) => ['CONFLICT', 'NEEDS_CONFIRMATION'].includes(v.status)).map(([k]) => FIELD[k] ?? k)
 
   return <div className="intake-card">
-    <div className="row-gap"><b>접수 #{id}</b>{(view?.files ?? intake.files ?? []).map((f: J) => <span key={f.file_id}><Badge tone={f.data_origin === 'SYNTHETIC' ? 'teal' : 'slate'}>{f.name} · {f.data_origin}</Badge></span>)}</div>
+    <div className="row-gap"><b>접수 #{id}</b>{(view?.files ?? intake.files ?? []).map((f: J) => <span key={f.file_id}><Badge tone={f.egress?.tier === 'RAW' ? 'teal' : 'amber'}>{f.name} · {f.egress?.tier === 'RAW' ? '외부 원문 처리 가능' : '외부에는 마스킹만'}</Badge>
+      {f.egress && f.egress.tier !== 'RAW' && f.egress.events?.slice(-1)[0]?.event !== 'REQUESTED' && <button className="citation" disabled={busy} onClick={() => run(async () => {
+        const reason = window.prompt('외부 AI 원문 처리가 필요한 이유 (품질 관리자가 승인)'); if (!reason) return
+        await ctx.api(`/intakes/${id}/files/${f.file_id}/egress-request`, 'POST', { reason }); ctx.refresh() })}>원문 처리 승인 요청</button>}
+      {f.egress?.events?.slice(-1)[0]?.event === 'REQUESTED' && <span className="muted"> 승인 대기</span>}</span>)}</div>
     {view?.files?.map((f: J) => f.coverage && <p key={f.file_id} className="muted wrap">{f.name}: 본문 {f.coverage.text} · 표 {f.coverage.tables} · 이미지 {f.coverage.images} · 차트 {f.coverage.charts} · 스캔 {f.coverage.scan} · 렌더 {f.coverage.render}
-      {f.coverage.tables_note && ` (${f.coverage.tables_note})`}{f.coverage.render_note && ` (${f.coverage.render_note})`}{f.checks?.active_content?.length > 0 && ` · 활성 콘텐츠 표시됨(실행 안 함)`}{f.checks?.external_links > 0 && ` · 외부 링크 ${f.checks.external_links}개(따라가지 않음)`}</p>)}
+      {f.coverage.tables_note && ` (${f.coverage.tables_note})`}{f.coverage.charts_note && ` (${f.coverage.charts_note})`}{f.coverage.render_note && ` (${f.coverage.render_note})`}{f.checks?.active_content?.length > 0 && ` · 활성 콘텐츠 표시됨(실행 안 함)`}{f.checks?.external_links > 0 && ` · 외부 링크 ${f.checks.external_links}개(따라가지 않음)`}</p>)}
     {!d ? <button className="button primary" disabled={busy} onClick={analyze}>{busy ? '분석 중…' : '문서 분석'}</button> : <>
       <p className="row-gap"><Badge tone={MODE[d.status] ?? 'slate'}>{d.status}</Badge><span className="muted">v{d.version} · {d.mode}{d.model ? ` · ${d.model}` : ''}{d.prompt_version ? ` · prompt ${d.prompt_version}` : ''}</span>
         {d.mode === 'TEST_DOUBLE' && <Badge tone="amber">TEST_DOUBLE (Meta 아님)</Badge>}</p>
       {d.error && <Note>{d.error}</Note>}
       {d.withheld?.length > 0 && <Note>외부 전송 승인 안 된 파일은 모델에 보내지 않았습니다: {d.withheld.map((w: J) => w.name).join(', ')}</Note>}
+      {d.egress?.files?.length > 0 && <p className="muted wrap">전송 방식: {d.egress.files.map((x: J) => `${x.name} ${x.sent === 'MASKED' ? '마스킹(값·이미지 제외)' : d.mode === 'LOCAL' ? '사내 모델' : '원문'}`).join(' · ')}{d.egress.masked_payload && ` · 전송 내용 sha256 ${d.egress.masked_payload.sha256.slice(0, 12)}…`}</p>}
       {d.documents?.length > 0 && <p className="muted">문서 분류: {d.documents.map((x: J) => `#${x.file_id} ${x.classes.join('+')}${x.needs_confirmation ? ' (확인 필요)' : ''}`).join(' · ')}</p>}
       <div className="table-wrap"><table><thead><tr><th>항목</th><th>상태</th><th>값</th><th>원문 위치 · 발췌</th><th>수정 (사유 필수)</th></tr></thead><tbody>
         {Object.entries(d.fields).map(([k, v]: [string, J]) => <tr key={k}><td>{FIELD[k] ?? k}{v.kind === 'HYPOTHESIS' && <> <Badge tone="violet">가설</Badge></>}</td>
@@ -116,4 +122,18 @@ export function IntakeCard({ ctx, intake }: { ctx: Ctx; intake: J }) {
           {target === 'NEW' && !known && <span className="muted">확인된 값이 없습니다: 원문을 보고 값을 입력하세요</span>}</div>}
     </>}
   </div>
+}
+
+// The quality manager's list of files waiting for an external-processing decision (who asked, why).
+function EgressQueue({ ctx }: { ctx: Ctx }) {
+  const [items, setItems] = useState<J[]>([])
+  const [reason, setReason] = useState('')
+  useEffect(() => { ctx.api('/egress-approvals').then((xs: J) => setItems(Array.isArray(xs) ? xs : [])).catch(() => setItems([])) }, [ctx.api, ctx.tick]) // eslint-disable-line react-hooks/exhaustive-deps
+  const decide = async (fid: number, decision: string) => { try { await ctx.api(`/egress-approvals/${fid}`, 'POST', { decision, reason }); ctx.refresh() } catch { /* error bar */ } }
+  if (!items.length) return null
+  return <div className="intake-card"><b>외부 AI 원문 처리 승인 대기</b>
+    <input aria-label="승인 사유" placeholder="판단 사유 (필수)" value={reason} onChange={e => setReason(e.target.value)}/>
+    {items.map(x => <p key={x.file_id} className="row-gap wrap">{x.name} · 요청 {x.requested_by}: {x.reason}
+      <button className="button primary" disabled={!reason.trim()} onClick={() => decide(x.file_id, 'APPROVED')}>승인</button>
+      <button className="button secondary" disabled={!reason.trim()} onClick={() => decide(x.file_id, 'REJECTED')}>거절</button></p>)}</div>
 }

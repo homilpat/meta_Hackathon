@@ -116,17 +116,15 @@ def test_a_complaint_without_an_inspected_quantity_gets_no_rate(tmp_path):
     assert not any("rate" in k for k in d["fields"])
 
 
-def test_unknown_files_never_reach_the_model(tmp_path):
+def test_unknown_files_never_reach_the_model_as_they_are(tmp_path):
     p = Scripted()
     c = client(tmp_path, p)
     body = upload(c, [("complaint.pdf", PDF_FIXTURE.read_bytes()), ("mine.pdf", own_pdf())]).json()
     p.replies.append(extraction(body["files"][0]["file_id"]))
     d = analyze(c, body["intake_id"]).json()["draft"]
-    assert d["status"] == "PARTIAL" and [w["name"] for w in d["withheld"]] == ["mine.pdf"]
+    assert d["status"] == "PARTIAL" and d["withheld"] == []  # the unapproved file went masked, not as is
+    assert [x["sent"] for x in d["egress"]["files"]] == ["RAW", "MASKED"]
     assert "not a shipped fixture" not in json.dumps(p.seen[0]["messages"], ensure_ascii=False)
-    only = upload(c, [("mine.pdf", own_pdf())]).json()
-    d = analyze(c, only["intake_id"]).json()["draft"]
-    assert d["mode"] == "OFFLINE" and len(p.seen) == 1  # nothing cleared for egress: no call at all
 
 
 def test_no_provider_or_a_model_failure_leaves_an_empty_draft_for_manual_entry(tmp_path):
@@ -176,7 +174,8 @@ def test_parser_locators_merged_cells_chart_data_duplicates_and_scans():
     by = {e["id"]: e for e in els}
     assert by["pdf:p1:img1"]["caption_id"] == "pdf:p1:l16" and by["pdf:p3:scan"]["status"] == "NEEDS_VISION"
     assert cov["charts"] == "IMAGE_ONLY" and cov["scan"] == "NEEDS_VISION" and cov["render"] == "OK"
-    assert cov["tables"] == "PARTIAL"  # PDF tables only as text lines: said, not hidden
+    assert cov["tables"] == "RECONSTRUCTED" and "대조" in cov["tables_note"]  # rebuilt, and said so
+    assert (by["pdf:p1:t1:r1:c3"]["text"], by["pdf:p1:t1:r2:c3"]["text"]) == ("Defective qty", "12")  # same column
 
 
 def docparse_type(path):

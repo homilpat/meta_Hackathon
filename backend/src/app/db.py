@@ -1081,6 +1081,20 @@ class ResponsibilityEvent(Base):
     created_at: Mapped[str] = mapped_column(String(40))
 
 
+class IntakeEgressEvent(Base):
+    """Asking for, approving or rejecting external processing of one original file (who, role, why, when)."""
+
+    __tablename__ = "intake_egress_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    file_id: Mapped[int] = mapped_column(ForeignKey("intake_files.id"), index=True)
+    event: Mapped[str] = mapped_column(String(12))  # REQUESTED | APPROVED | REJECTED
+    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    actor_role: Mapped[str] = mapped_column(String(30))
+    reason: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
 # Audit rows are append-only at the database level, not just by convention.
 APPEND_ONLY = ("approval_events", "workflow_events", "doc_comments", "audit_chain",
                "workflow_policies", "evidence_quality", "process_contexts", "affected_objects",
@@ -1092,7 +1106,7 @@ APPEND_ONLY = ("approval_events", "workflow_events", "doc_comments", "audit_chai
                "experience_entries", "experience_retrievals", "recommendation_decisions", "agent_steps",
                "intake_files", "intake_parses", "intake_extractions", "intake_case_links",
                "vision_requests", "case_profiles", "request_submissions", "request_reviews",
-               "responsibility_events")
+               "responsibility_events", "intake_egress_events")
 
 
 def append_only_ddl(table: str) -> list[str]:

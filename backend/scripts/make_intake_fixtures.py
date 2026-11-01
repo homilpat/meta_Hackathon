@@ -11,6 +11,7 @@ live complaint PDF: different values, used only for the Meta LIVE check (never b
 """
 
 import io
+import re
 import zipfile
 
 from docx import Document
@@ -112,7 +113,42 @@ CHART_INLINE = (
     '</a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>')
 
 
-def supplement_docx() -> bytes:
+def workbook(rows: list[list], merge: str | None = None, hidden: list[list] | None = None,
+             formula: str | None = None) -> bytes:
+    """An .xlsx with fixed document properties and timestamps (byte-identical on every run)."""
+    import datetime
+
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Sheet1"
+    for row in rows:
+        ws.append(row)
+    if merge:
+        ws.merge_cells(merge)
+    if formula:
+        ws[formula.split("=", 1)[0]] = "=" + formula.split("=", 1)[1]  # no cached value: never calculated here
+    if hidden:
+        h = wb.create_sheet("내부메모")
+        for row in hidden:
+            h.append(row)
+        h.sheet_state = "hidden"
+    fixed = datetime.datetime(2026, 1, 1)
+    wb.properties.created = wb.properties.modified = fixed
+    buf = io.BytesIO()
+    wb.save(buf)  # openpyxl stamps "modified" with the current time on save: pin it, then pin the zip times
+    raw = io.BytesIO()
+    with zipfile.ZipFile(buf) as src, zipfile.ZipFile(raw, "w", zipfile.ZIP_DEFLATED) as dst:
+        for i in src.infolist():
+            data = src.read(i.filename)
+            if i.filename == "docProps/core.xml":
+                data = re.sub(rb"(<dcterms:(?:created|modified)[^>]*>)[^<]*", rb"\g<1>2026-01-01T00:00:00Z", data)
+            dst.writestr(i.filename, data)
+    return fixed_zip(raw.getvalue())
+
+
+def supplement_docx(workbook_values: list[int] | None = None) -> bytes:
     doc = Document()
     doc.add_paragraph("SYNTHETIC TEST DOCUMENT - 고객 보완 자료")
     doc.add_paragraph("고객 참조번호: HM-CC-2026-0417 (보완 1차, 2026-10-30 발행)")
@@ -154,6 +190,13 @@ def supplement_docx() -> bytes:
                                     b'application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/></Types>')
             put(i.filename, data)
         put("word/charts/chart1.xml", chart)
+        if workbook_values is not None:  # the chart's own workbook, which may disagree with the chart cache
+            put("word/embeddings/Microsoft_Excel_Worksheet.xlsx", workbook(
+                [["주차", "미납 불량"], *[[w, v] for (w, _), v in zip(WEEKS, workbook_values, strict=True)]]))
+            put("word/charts/_rels/chart1.xml.rels", b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                b'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                b'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
+                b'package" Target="../embeddings/Microsoft_Excel_Worksheet.xlsx"/></Relationships>')
     return out.getvalue()
 
 
@@ -227,6 +270,13 @@ def main() -> None:
          "Corrective action: cleaning interval reduced to 2 hours; work instruction WI-ST-09 rev 4."],
         [["Stencil", "Hold record"], ["ST-14", "HB-221"]]))
     (FIXTURE_DIR / "audit_evidence_AF-2026-07.pdf").write_bytes(audit_pdf())
+    (FIXTURE_DIR / "chart_workbook_mismatch.docx").write_bytes(supplement_docx([2, 3, 8]))  # cache says 7
+    (FIXTURE_DIR / "inspection_results_HM-CC-2026-0417.xlsx").write_bytes(workbook(
+        [["입고 검사 결과 (보완 2차)", None, None, None], ["LOT", "검사 수량", "불량 수량", "단위"],
+         ["L02", 480, 12, "보드"], ["합계", None, None, None]],
+        merge="A1:D1", hidden=[["내부 메모", "재검사 예정"]], formula="B4=SUM(B3:B3)"))
+    (FIXTURE_DIR / "shipments_HM-CC-2026-0417.csv").write_bytes(
+        "출하일,LOT,수량,운송장\n2026-10-20,L02,60,SH-5521\n2026-10-21,L03,40,SH-5522\n".encode("utf-8-sig"))
     # LIVE-only set (never used by the automated tests): a supplement that conflicts, a scan, a supplier reply
     (FIXTURE_DIR / "live_supplement_DS-QN-2026-0099.docx").write_bytes(simple_docx(
         ["SYNTHETIC TEST DOCUMENT - 고객 보완 자료 (DS-QN-2026-0099)",

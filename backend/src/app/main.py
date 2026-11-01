@@ -31,6 +31,7 @@ from app.db import (
 )
 from app.docedit import make_docs_router
 from app.effect import make_d6_router
+from app.egress import make_egress_router
 from app.eightd import make_v5_router
 from app.experience import make_experience_router
 from app.export import make_export_router
@@ -38,7 +39,7 @@ from app.ingestion import SyntheticBundle, normalize
 from app.intake import make_intake_router
 from app.intake_case import make_intake_case_router
 from app.ml_api import make_ml_router
-from app.model_provider import MODEL, MetaProvider, ModelProvider
+from app.model_provider import MODEL, LocalProvider, MetaProvider, ModelProvider
 from app.synthetic import (
     LINE_VERSION,
     canonical,
@@ -140,7 +141,9 @@ def create_app(database_url: str | None = None,
     app.include_router(make_docs_router(sessions, current_user, app.state.provider))
     app.include_router(make_export_router(sessions, current_user))
     app.include_router(make_agent_router(app, sessions, current_user, app.state.provider))
-    app.include_router(make_intake_router(sessions, current_user, app.state.provider))
+    app.state.local_provider = LocalProvider.from_env()  # in-house model for protected files, if configured
+    app.include_router(make_intake_router(sessions, current_user, app.state.provider, app.state.local_provider))
+    app.include_router(make_egress_router(sessions, current_user))
     app.include_router(make_intake_case_router(sessions, current_user))
     app.include_router(make_vision_router(sessions, current_user))
     app.include_router(make_requests_router(sessions, current_user, app.state.provider))

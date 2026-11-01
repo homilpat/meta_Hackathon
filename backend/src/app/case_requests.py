@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app import intake_extract
+from app import egress, intake_extract
 from app.db import (
     Assignment,
     CaseProfile,
@@ -497,22 +497,25 @@ def make_requests_router(sessions: sessionmaker, current_user, provider: ModelPr
             for f in session.scalars(select(IntakeFile).where(IntakeFile.intake_id == sub.intake_id)):
                 pp = parsed(session, f)
                 inputs.append({"file_id": f.id, "name": f.name, "data_origin": f.data_origin,
-                               "elements": pp.elements, "images": {}})
+                               "tier": egress.tier_of(session, f), "elements": pp.elements, "images": {}})
             session.commit()
             items, version, sha = r.items, sub.version, sub.files_sha256
         elements = {e["id"]: {**e, "file_id": i["file_id"]} for i in inputs for e in i["elements"]}
-        parts, withheld = intake_extract.model_input(inputs)
+        masker = egress.Masker()  # the request's own items are ours; only reply files are protected
+        parts, withheld, sent = intake_extract.model_input(inputs, "MASK", masker)
+        masked = any(s["sent"] == "MASKED" for s in sent)
         mode, model, opinion, error = "OFFLINE", None, [], None
         if provider is None or not parts:
             error = "Meta 미연결" if provider is None else "외부 전송이 승인된 회신 파일이 없습니다"
         else:
             mode, model = provider.mode, provider.model
             try:
-                msg = provider.chat([{"role": "system", "content": REVIEW_PROMPT},
+                msg = provider.chat([{"role": "system", "content": REVIEW_PROMPT + ("\n" + egress.MASK_NOTE
+                                                                                    if masked else "")},
                                      {"role": "user", "content": [{"type": "text", "text": json.dumps(
                                          {"items": items}, ensure_ascii=False)}, *parts]}],
                                     [], response_format=REVIEW_SCHEMA, reasoning_effort="minimal")["message"]
-                opinion = check_review(json.loads(msg.get("content") or ""), r, elements)
+                opinion = check_review(masker.unmask_obj(json.loads(msg.get("content") or "")), r, elements)
             except (ProviderError, ValueError, TypeError) as exc:
                 error = f"AI 검토 실패 ({type(exc).__name__}): 사람이 직접 검토하세요"
         if error:
@@ -526,7 +529,7 @@ def make_requests_router(sessions: sessionmaker, current_user, provider: ModelPr
                                       mode=mode, model=model, items=opinion, decision=None, reason=error,
                                       actor_id=actor.id, created_at=now()))
             event(session, row.case_id, "REQUEST", row.id, "AI_REVIEWED", actor, version=version, mode=mode,
-                  withheld=[w["name"] for w in withheld])
+                  withheld=[w["name"] for w in withheld], sent=sent)
         return transition(rid, key, actor, "ai_review", fn)
 
     @router.post("/requests/{rid}/decisions", status_code=201)

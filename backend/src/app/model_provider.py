@@ -53,6 +53,8 @@ def read_key() -> str:
 class MetaProvider:
     mode = "LIVE"
     model = MODEL
+    url = URL
+    external = True  # leaves the site: only data approved for external processing may be in the payload
 
     # muse-spark reasons before it answers: 1500 and 4096 tokens both cut a LIVE investigation report off
     def __init__(self, key: str, timeout: float = 60.0, max_tokens: int = 8192, opener=urlopen):
@@ -65,7 +67,7 @@ class MetaProvider:
 
     def chat(self, messages: list[dict], tools: list[dict], response_format: dict | None = None,
              reasoning_effort: str | None = None) -> dict:
-        payload = {"model": MODEL, "messages": messages, "max_tokens": self._max_tokens}
+        payload = {"model": self.model, "messages": messages, "max_tokens": self._max_tokens}
         if tools:
             payload["tools"] = tools
         if response_format:  # strict JSON schema: the answer must parse into the expected shape
@@ -74,16 +76,16 @@ class MetaProvider:
             payload["reasoning_effort"] = reasoning_effort
         body = json.dumps(payload).encode("utf-8")
         text = body.decode("utf-8")
-        if self._key in text or SECRET_PATTERN.search(text):
+        if (self._key and self._key in text) or SECRET_PATTERN.search(text):
             raise EgressBlocked("secret-like content in outbound payload")
-        if RESTRICTED_PATTERN.search(text):
+        if self.external and RESTRICTED_PATTERN.search(text):
             raise EgressBlocked("data not approved for external processing in outbound payload")
-        request = Request(URL, data=body, method="POST", headers={
+        request = Request(self.url, data=body, method="POST", headers={
             "Authorization": f"Bearer {self._key}", "Content-Type": "application/json"})
         try:
             with self._open(request, timeout=self._timeout) as response:
                 result = json.load(response)
-            if result.get("model") != MODEL:
+            if self.external and result.get("model") != self.model:
                 raise ProviderError("unexpected model id in response")
             choice = result["choices"][0]
             # A reasoning model can spend max_tokens before or while answering (seen LIVE): a cut-off reply is a
@@ -103,3 +105,21 @@ class MetaProvider:
             raise ProviderError(f"network: {type(exc.reason).__name__}") from None
         except (KeyError, IndexError, TypeError, ValueError) as exc:
             raise ProviderError(f"malformed response: {type(exc).__name__}") from None
+
+
+class LocalProvider(MetaProvider):
+    """An in-house model behind an OpenAI-compatible endpoint (e.g. Ollama or vLLM on a company server).
+    Configured with LOCAL_MODEL_URL (…/v1/chat/completions) and LOCAL_MODEL_NAME; data sent to it stays on site, so
+    protected files may go to it as they are. Not configured in this repository's demo."""
+
+    mode = "LOCAL"
+    external = False
+
+    def __init__(self, url: str, model: str, key: str = "", timeout: float = 120.0, opener=urlopen):
+        super().__init__(key, timeout=timeout, opener=opener)
+        self.url, self.model = url, model
+
+    @classmethod
+    def from_env(cls) -> "LocalProvider | None":
+        url, model = os.environ.get("LOCAL_MODEL_URL", "").strip(), os.environ.get("LOCAL_MODEL_NAME", "").strip()
+        return cls(url, model, os.environ.get("LOCAL_MODEL_KEY", "").strip()) if url and model else None

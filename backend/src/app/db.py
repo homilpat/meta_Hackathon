@@ -963,6 +963,27 @@ class IntakeCaseLink(Base):
     linked_at: Mapped[str] = mapped_column(String(40))
 
 
+class VisionRequest(Base):
+    """A request to the specialist vision tool for one image, with the exact input hashes; NOT_CONFIGURED today."""
+
+    __tablename__ = "vision_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    intake_id: Mapped[int] = mapped_column(ForeignKey("intake_records.id"), index=True)
+    case_id: Mapped[str | None] = mapped_column(ForeignKey("quality_cases.id"))
+    file_id: Mapped[int] = mapped_column(ForeignKey("intake_files.id"))
+    file_sha256: Mapped[str] = mapped_column(String(64))
+    element_id: Mapped[str] = mapped_column(String(60))
+    image_sha256: Mapped[str] = mapped_column(String(64))
+    page: Mapped[int | None] = mapped_column(Integer)
+    analysis_type: Mapped[str] = mapped_column(String(30))
+    reported_phenomenon: Mapped[str | None] = mapped_column(Text)
+    requested_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(20))  # NOT_CONFIGURED | OK | PARTIAL | FAILED
+    result: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
 # Audit rows are append-only at the database level, not just by convention.
 APPEND_ONLY = ("approval_events", "workflow_events", "doc_comments", "audit_chain",
                "workflow_policies", "evidence_quality", "process_contexts", "affected_objects",
@@ -972,7 +993,8 @@ APPEND_ONLY = ("approval_events", "workflow_events", "doc_comments", "audit_chai
                "controlled_documents", "prevention_deployments", "closure_acks", "closures",
                "template_contracts", "validation_runs",
                "experience_entries", "experience_retrievals", "recommendation_decisions", "agent_steps",
-               "intake_files", "intake_parses", "intake_extractions", "intake_case_links")
+               "intake_files", "intake_parses", "intake_extractions", "intake_case_links",
+               "vision_requests")
 
 
 def append_only_ddl(table: str) -> list[str]:

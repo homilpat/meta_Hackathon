@@ -1,0 +1,44 @@
+{
+ "machine": "Windows-11-10.0.26200-SP0",
+ "python": "3.12.8",
+ "upload_cap_bytes": 10485760,
+ "budget_s": 50.0,
+ "runs": [
+  {
+   "kind": "pdf",
+   "units": 40,
+   "unit": "pages",
+   "bytes": 36812,
+   "seconds": 0.579,
+   "units_per_s": 69.1,
+   "units_at_upload_cap": 11394,
+   "seconds_at_upload_cap": 164.9,
+   "fits_in_budget": false,
+   "render": "OK"
+  },
+  {
+   "kind": "xlsx",
+   "units": 20000,
+   "unit": "rows",
+   "bytes": 595179,
+   "seconds": 1.047,
+   "units_per_s": 19106.8,
+   "units_at_upload_cap": 352357,
+   "seconds_at_upload_cap": 18.4,
+   "fits_in_budget": true,
+   "render": "NOT_SUPPORTED"
+  },
+  {
+   "kind": "csv",
+   "units": 50000,
+   "unit": "rows",
+   "bytes": 1672251,
+   "seconds": 0.164,
+   "units_per_s": 305356.0,
+   "units_at_upload_cap": 313522,
+   "seconds_at_upload_cap": 1.0,
+   "fits_in_budget": true,
+   "render": "NOT_SUPPORTED"
+  }
+ ]
+}

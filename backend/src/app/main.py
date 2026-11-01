@@ -1,3 +1,4 @@
+import contextlib
 import hashlib
 import json
 from collections import Counter
@@ -10,10 +11,11 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, event, func, select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
 
 import app as paths
-from app import effect, ncr, spc
+from app import effect, limits, ncr, spc
 from app.agent import make_agent_router
 from app.case_requests import make_requests_router
 from app.causes import make_d4_router
@@ -144,6 +146,9 @@ def create_app(database_url: str | None = None,
     app.state.local_provider = LocalProvider.from_env()  # in-house model for protected files, if configured
     app.include_router(make_intake_router(sessions, current_user, app.state.provider, app.state.local_provider))
     app.include_router(make_egress_router(sessions, current_user))
+    with contextlib.suppress(OperationalError):  # a DB not yet migrated has no settings to replay
+        limits.load(sessions)
+    app.include_router(limits.make_limits_router(sessions, current_user))
     app.include_router(make_intake_case_router(sessions, current_user))
     app.include_router(make_vision_router(sessions, current_user))
     app.include_router(make_requests_router(sessions, current_user, app.state.provider))

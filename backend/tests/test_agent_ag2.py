@@ -205,11 +205,11 @@ def test_model_failure_or_a_broken_plan_is_recorded_and_falls_back_to_the_server
 
 
 def test_the_hourly_model_cap_hands_over_to_the_server_planner(tmp_path, monkeypatch):
-    from app import agent
+    from app import limits
 
-    monkeypatch.setattr(agent, "MODEL_RUNS_PER_USER_HOUR", 1)
     p = Scripted([plan(["STATUS"])])
     c = line_client(tmp_path, provider=p)
+    monkeypatch.setitem(limits.OVERRIDES, "MODEL_RUNS_PER_USER_HOUR", 1)  # after start: start replays settings
     assert run(c, "진행 상태 알려줘").json()["planner"] == "TEST_DOUBLE"
     second = run(c, "진행 상태 알려줘").json()
     assert second["planner"] == "SERVER_RULES" and len(p.seen) == 1  # no second paid call
@@ -329,3 +329,21 @@ def test_a_failed_query_call_falls_back_to_the_fixed_query(tmp_path):
     q = next(s for s in out["steps"] if s["tool"] == "search_query")
     assert q["status"] == "ERROR" and out["status"] == "COMPLETED"
     assert next(s for s in out["steps"] if s["tool"] == "references")["result"]["query"] == FALLBACK_QUERY
+
+
+def test_recommendations_are_graded_by_their_sources_and_low_grades_fold(monkeypatch):
+    from app import limits
+    from app.agent import check_recommendations
+
+    facts = [{"text": "L02 솔더 체적 평균 0.104 mm³", "evidence": ["EV-1"]}]
+    sources = [{"key": "H01", "kind": "과거 사례", "negative": False, "verified": True, "text": "stencil clean ok"},
+               {"key": "DOC:FMEA:5", "kind": "관리 문서", "negative": False, "verified": False, "text": "FMEA"}]
+    recs = [{"text": "체적 추이를 더 보십시오.", "facts": [1], "sources": []},
+            {"text": "FMEA 관리 항목을 대조하십시오.", "facts": [1], "sources": ["DOC:FMEA:5"]},
+            {"text": "스텐실 세척을 권합니다.", "facts": [1], "sources": ["H01"]}]
+    kept, _ = check_recommendations(recs, facts, sources)
+    assert [(r["grade"], r["folded"]) for r in kept] == [("A", False), ("B", False), ("C", True)]  # best first
+    monkeypatch.setitem(limits.OVERRIDES, "MIN_RECOMMENDATION_GRADE", "A")
+    monkeypatch.setitem(limits.OVERRIDES, "MAX_RECOMMENDATIONS", 2)
+    kept, _ = check_recommendations(recs, facts, sources)
+    assert [(r["grade"], r["folded"]) for r in kept] == [("A", False), ("B", True)]  # the owner's threshold and cap

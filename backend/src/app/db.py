@@ -1095,6 +1095,19 @@ class IntakeEgressEvent(Base):
     created_at: Mapped[str] = mapped_column(String(40))
 
 
+class LimitSetting(Base):
+    """A change of an operating limit by the AI operations department: value, reason, who, when."""
+
+    __tablename__ = "limit_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(60))
+    value: Mapped[str] = mapped_column(Text)
+    reason: Mapped[str] = mapped_column(Text)
+    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
 # Audit rows are append-only at the database level, not just by convention.
 APPEND_ONLY = ("approval_events", "workflow_events", "doc_comments", "audit_chain",
                "workflow_policies", "evidence_quality", "process_contexts", "affected_objects",
@@ -1106,7 +1119,7 @@ APPEND_ONLY = ("approval_events", "workflow_events", "doc_comments", "audit_chai
                "experience_entries", "experience_retrievals", "recommendation_decisions", "agent_steps",
                "intake_files", "intake_parses", "intake_extractions", "intake_case_links",
                "vision_requests", "case_profiles", "request_submissions", "request_reviews",
-               "responsibility_events", "intake_egress_events")
+               "responsibility_events", "intake_egress_events", "limit_settings")
 
 
 def append_only_ddl(table: str) -> list[str]:

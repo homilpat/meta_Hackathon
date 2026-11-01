@@ -40,6 +40,7 @@ DEMO_USERS = {
     "alice": ("Alice (author)", "AUTHOR"), "dave": ("Dave (author)", "AUTHOR"),
     "bob": ("Bob (reviewer)", "REVIEWER"), "carol": ("Carol (reviewer)", "REVIEWER"),
     "erin": ("Erin (QA/Production)", "QA_PRODUCTION"), "frank": ("Frank (process engineer)", "PROCESS_ENGINEER"),
+    "gina": ("Gina (AI operations)", "AGENT_ADMIN"),  # changes operating limits (limits.py); no case work
 }
 # URL kind -> document type; which approved document it must build on. Who may approve comes from the active
 # WorkflowPolicy (eightd.approval_gate); DEFAULT gives NCR=REVIEWER, CONTAINMENT=QA_PRODUCTION, RCA=PROCESS_ENGINEER.

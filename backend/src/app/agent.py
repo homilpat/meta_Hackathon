@@ -22,6 +22,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 
+from app import limits
 from app.db import (
     AgentRun,
     AgentStep,
@@ -92,10 +93,10 @@ PLAN_SCHEMA = {"type": "json_schema", "json_schema": {"name": "agent_intents", "
 # this case's facts and may cite only the past cases / documents the server retrieved (check_recommendations).
 # Evidence ids are attached by the server, never written by the model.
 SUMMARY_PROMPT = """You write for a quality engineer, in polite Korean.
-1. lines: rewrite the numbered server facts as natural sentences, at most 5. For each line list the fact numbers it is
+1. lines: rewrite the numbered server facts as natural sentences, at most one line per fact. For each line list the fact numbers it is
    based on. Keep every number exactly as written there; add no number, cause or judgement the facts do not state.
    The facts are terse notes: write them out as natural, complete sentences, not copied note fragments.
-2. recommendations: at most 3 next checks or actions. Each must be based on at least one fact (list its numbers) and
+2. recommendations: at most {max_recs} next checks or actions. Each must be based on at least one fact (list its numbers) and
    may cite past cases / documents from `sources` by key when they support it. Never base a recommendation on a
    source marked negative: that response failed before. A recommendation is a proposal, never a decision.
 Do not write evidence ids in text: the server attaches them. A statistical signal or a model score is not a confirmed
@@ -128,9 +129,17 @@ def _version(*parts: Any) -> str:
 
 
 PLANNER_VERSION = _version(PLANNER_PROMPT, PLAN_SCHEMA, READ_PLAN)  # recorded on every model step
-SUMMARY_VERSION = _version(SUMMARY_PROMPT, SUMMARY_SCHEMA, SUMMARY_EFFORT)
+def summary_prompt() -> str:
+    return SUMMARY_PROMPT.replace("{max_recs}", str(limits.get("MAX_RECOMMENDATIONS")))
+
+
+def summary_version() -> str:  # the prompt actually sent, so a changed limit is a new recorded version
+    return _version(summary_prompt(), SUMMARY_SCHEMA, SUMMARY_EFFORT)
+
+
+SUMMARY_VERSION = summary_version()
 QUERY_VERSION = _version(QUERY_PROMPT, QUERY_SCHEMA, SUMMARY_EFFORT)
-MODEL_RUNS_PER_USER_HOUR = 30  # cost cap on paid planner calls; over it the server rule planner takes over
+MODEL_RUNS_PER_USER_HOUR = limits.get("MODEL_RUNS_PER_USER_HOUR")  # cost cap (limits.py: owner sets from budget)
 
 
 def classify(provider: "ModelProvider", situation: dict, goal: str) -> dict:
@@ -177,8 +186,8 @@ def check_polish(lines: Any, facts: list[str]) -> list[str]:
     """Why a model rewrite of the server facts may not be shown; [] means every line passed.
     Deterministic only: each line names facts, uses only their numbers and writes no ids. Wording is free; an added
     interpretation is not judged here (the facts and their evidence stay shown above it, labelled "판단 아님")."""
-    if not isinstance(lines, list) or not lines or len(lines) > 5:
-        return ["1~5줄의 문장이 아닙니다"]
+    if not isinstance(lines, list) or not lines or len(lines) > len(facts):
+        return ["사실 수보다 많은 문장이거나 빈 응답입니다"]
     out = []
     for n, line in enumerate(lines, 1):
         refs = [f for f in line.get("facts") or [] if isinstance(f, int) and 1 <= f <= len(facts)]
@@ -202,7 +211,7 @@ def check_recommendations(recs: Any, facts: list[dict], sources: list[dict]) -> 
         return [], ["추천 형식 오류"]
     by_key = {s["key"]: s for s in sources}
     kept, issues = [], []
-    for n, rec in enumerate(recs[:3], 1):
+    for n, rec in enumerate(recs, 1):
         refs = [f for f in rec.get("facts") or [] if isinstance(f, int) and 1 <= f <= len(facts)]
         cited, text = [str(k) for k in rec.get("sources") or []], str(rec.get("text") or "")
         why = []
@@ -220,8 +229,20 @@ def check_recommendations(recs: Any, facts: list[dict], sources: list[dict]) -> 
         if why or not text:
             issues.append(f"추천 {n}: {'; '.join(why) or '빈 문장'}")
         else:
-            kept.append({"text": text, "facts": list(dict.fromkeys(refs)), "sources": list(dict.fromkeys(cited))})
-    return kept, issues
+            used = [by_key[k] for k in dict.fromkeys(cited)]
+            grade = "A" if any(s.get("verified") for s in used) else "B" if used else "C"
+            kept.append({"text": text, "facts": list(dict.fromkeys(refs)), "sources": list(dict.fromkeys(cited)),
+                         "grade": grade, "grade_label": GRADES[grade]})
+    kept.sort(key=lambda r: r["grade"])  # stable: the model's order within a grade
+    floor = limits.get("MIN_RECOMMENDATION_GRADE")
+    for r in kept:
+        r["folded"] = r["grade"] > floor  # shown under 참고, not as a recommendation
+    return kept[:limits.get("MAX_RECOMMENDATIONS")], issues
+
+
+# Evidence grade of a recommendation, from what the server knows about its sources (never a model's confidence).
+GRADES = {"A": "효과가 검증된 과거 사례와 일치", "B": "사내 관리 문서·과거 사례 근거 (효과 미검증)",
+          "C": "이 사건 데이터만 근거"}
 
 
 def sources_of(results: dict) -> list[dict]:
@@ -232,14 +253,16 @@ def sources_of(results: dict) -> list[dict]:
         done = "; ".join(f"{o['check']}: {o['check_result']} → {o['action']} {o['outcome_status']} "
                          f"({o['metric']} {o['before']} → {o['after']})" for o in p.get("outcomes", []))
         out.append({"key": p["historical_case_id"], "kind": "과거 사례", "negative": bool(p["negative_precedent"]),
+                    "verified": any(o.get("outcome_status") == "VERIFIED" for o in p.get("outcomes", [])),
                     "text": f"{p['summary']} {done}".strip()})
     exp = results.get("experience") or {}
     for e, neg in [*((e, False) for e in exp.get("recommendations", [])),
                    *((e, True) for e in exp.get("negative_precedents", []))]:
         out.append({"key": e["entry_key"], "kind": "Experience", "negative": neg,
+                    "verified": not neg and e.get("evidence_level") == "VERIFIED_NO_RECURRENCE",
                     "text": f"{e['symptom']} / cause: {e['cause']} ({e['cause_status']}) / action: {e['action']}"})
     for d in (results.get("references") or {}).get("results", []):
-        out.append({"key": d["ref"], "kind": "관리 문서", "negative": False,
+        out.append({"key": d["ref"], "kind": "관리 문서", "negative": False, "verified": False,
                     "text": f"{d['kind']} {d['doc_number']} rev {d['revision']}: {d['title']}"})
     return out
 
@@ -786,7 +809,7 @@ def make_agent_router(app: FastAPI, sessions: sessionmaker, current_user: Callab
             texts, sources = [f["text"] for f in facts], sources_of(ex.results)
 
             def call() -> dict:
-                msg = provider.chat([{"role": "system", "content": SUMMARY_PROMPT},
+                msg = provider.chat([{"role": "system", "content": summary_prompt()},
                                      {"role": "user", "content": json.dumps(
                                          {"goal": ex.goal, "facts": [{"n": i, "text": t} for i, t in enumerate(texts, 1)],
                                           "sources": sources}, ensure_ascii=False)}],
@@ -801,7 +824,7 @@ def make_agent_router(app: FastAPI, sessions: sessionmaker, current_user: Callab
                 return {"lines": lines, "issues": check_polish(lines, texts), "recommendations": kept,
                         "rejected": rejected}
 
-            s = model_step(ex, "summarize", SUMMARY_VERSION, SUMMARY_EFFORT, call)
+            s = model_step(ex, "summarize", summary_version(), SUMMARY_EFFORT, call)
             if s["status"] != "OK":
                 reply.append({"text": f"모델 문장 다듬기 생략 ({s['error']}). 위 내용은 모두 서버 확인 결과입니다.",
                               "steps": [s["seq"]]})
@@ -811,6 +834,8 @@ def make_agent_router(app: FastAPI, sessions: sessionmaker, current_user: Callab
             def shown(item: dict) -> dict:
                 used = [facts[f - 1] for f in item["facts"]]
                 return {"text": item["text"], "facts": item["facts"], "sources": item.get("sources", []),
+                        **({"grade": item["grade"], "grade_label": item["grade_label"], "folded": item["folded"]}
+                           if "grade" in item else {}),
                         "steps": sorted({n for f in used for n in f["steps"]}),
                         "evidence": list(dict.fromkeys(e for f in used for e in f.get("evidence", [])))}
 
@@ -856,7 +881,7 @@ def make_agent_router(app: FastAPI, sessions: sessionmaker, current_user: Callab
         with sessions() as s:
             used = s.scalar(select(func.count()).select_from(AgentRun).where(
                 AgentRun.user_id == ex.actor.id, AgentRun.planner != "SERVER_RULES", AgentRun.created_at >= since))
-        return used > MODEL_RUNS_PER_USER_HOUR  # this run is already counted
+        return used > limits.get("MODEL_RUNS_PER_USER_HOUR")  # this run is already counted
 
     def execute_rules(ex: Executor, reply: list[dict]) -> None:
         intents = intents_of(ex.goal)
@@ -871,7 +896,7 @@ def make_agent_router(app: FastAPI, sessions: sessionmaker, current_user: Callab
         hands over to the server rule planner; the work never stops on the model."""
         if over_quota(ex):
             save(ex.run_id, planner="SERVER_RULES")
-            reply.append({"text": f"시간당 모델 호출 한도({MODEL_RUNS_PER_USER_HOUR}회)를 넘어 서버 규칙 플래너로 진행합니다.",
+            reply.append({"text": f"시간당 모델 호출 한도({limits.get('MODEL_RUNS_PER_USER_HOUR')}회)를 넘어 서버 규칙 플래너로 진행합니다.",
                           "steps": []})
             return execute_rules(ex, reply)
         s = model_step(ex, "plan", PLANNER_VERSION, None, lambda: classify(provider, ex.situation(), ex.goal))

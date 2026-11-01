@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app import docparse, egress
 from app.db import IntakeCaseLink, IntakeFile, IntakeParse, VisionRequest
+from app.fields import OptionalText
 from app.intake import require_intake
 from app.workflow import Actor, now, require_case, run_idempotent
 
@@ -59,7 +60,7 @@ class VisionIn(BaseModel):
     file_id: int
     element_id: str = Field(max_length=60)
     analysis_type: AnalysisType
-    reported_phenomenon: str | None = Field(None, max_length=300)  # what the customer reported, kept as theirs
+    reported_phenomenon: OptionalText | None = None  # what the customer reported, kept as theirs
 
     @model_validator(mode="after")
     def one_scope(self):

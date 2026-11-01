@@ -11,14 +11,14 @@ only files cleared for egress ever send them anywhere.
 import hashlib
 import io
 import re
+import time
 import zipfile
 from typing import Any
 
 from lxml import etree
 
 PARSER_VERSION = "docparse-2"  # 2: PDF table cells rebuilt from text positions
-MAX_RENDER_PAGES = 10
-RENDER_SCALE = 1.0  # 72 dpi: enough to see a layout, bounded memory per page
+RENDER_SCALE = 1.0  # one PDF point per pixel (72 dpi): the page as laid out, no upscaling
 RENDER_ERRORS = (RuntimeError, OSError, ValueError, MemoryError)  # pypdfium2.PdfiumError is a RuntimeError
 CAPTION = re.compile(r"^\s*(그림|사진|표|Fig\.?|Figure|Photo|Table)\s*\d", re.IGNORECASE)
 NS = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
@@ -33,61 +33,82 @@ def sha(b: bytes) -> str:
     return hashlib.sha256(b).hexdigest()
 
 
-def parse(media_type: str, data: bytes) -> tuple[list[dict], dict, dict[str, bytes]]:
-    """(elements, coverage, image bytes by element id)."""
+def parse(media_type: str, data: bytes, budget: "Budget | None" = None) -> tuple[list[dict], dict, dict[str, bytes]]:
+    """(elements, coverage, image bytes by element id), within the time budget."""
     if media_type == "application/pdf":
-        return parse_pdf(data)
+        return parse_pdf(data, budget)
     if media_type.endswith("spreadsheetml.sheet"):
-        return parse_xlsx(data)
+        return parse_xlsx(data, budget)
     if media_type == "text/csv":
-        return parse_csv(data)
+        return parse_csv(data, budget)
     return parse_docx(data)
 
 
 # --- spreadsheets ------------------------------------------------------------------------------------------
-MAX_CELLS = 20000  # per workbook: enough for an inspection sheet, bounded memory
-MAX_CSV_ROWS = 20000
+SNIFF_SAMPLE = 4096  # characters the csv module looks at to guess the delimiter (its documented use)
+
+
+class Budget:
+    """Parsing stops when the analysis time budget is spent (limits.PARSE_TIME_BUDGET_S, measured basis); what is
+    left is reported as unprocessed, never silently dropped."""
+
+    def __init__(self, seconds: float | None = None):
+        from app import limits
+
+        self.end = time.monotonic() + (limits.get("PARSE_TIME_BUDGET_S") if seconds is None else seconds)
+        self.stopped_at: str | None = None
+
+    def spent(self, where: str) -> bool:
+        if self.stopped_at is None and time.monotonic() >= self.end:  # reached, not passed: coarse clocks
+            self.stopped_at = where
+        return self.stopped_at is not None
+
+    def report(self) -> dict:
+        return {"budget_exhausted": True, "unprocessed_from": self.stopped_at} if self.stopped_at else {}
 
 
 def cell_text(v) -> str:
     return v.isoformat() if hasattr(v, "isoformat") else str(v)
 
 
-def sheet_cells(ws, t: int, prefix: str, budget: list[int]) -> list[dict]:
+def sheet_cells(ws, t: int, prefix: str, budget: "Budget") -> list[dict]:
     """Non-empty cells of one sheet with their merged span; cached values only (formulas are never evaluated)."""
     spans = {(r.min_row, r.min_col): (r.max_col - r.min_col + 1, r.max_row - r.min_row + 1)
              for r in ws.merged_cells.ranges}
     out = []
     for row in ws.iter_rows():
+        if budget.spent(f"{prefix}row {row[0].row}"):
+            break
         for c in row:
-            if c.value is None or budget[0] <= 0:
+            if c.value is None:
                 continue
-            budget[0] -= 1
             span, rows = spans.get((c.row, c.column), (1, 1))
             out.append({"id": f"{prefix}{c.coordinate}", "kind": "cell", "table": t, "sheet": ws.title, "row": c.row,
                         "col": c.column, "span": span, "row_span": rows, "text": cell_text(c.value)})
     return out
 
 
-def parse_xlsx(data: bytes) -> tuple[list[dict], dict, dict[str, bytes]]:
+def parse_xlsx(data: bytes, budget: "Budget | None" = None) -> tuple[list[dict], dict, dict[str, bytes]]:
     import openpyxl
 
     wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True, keep_links=False)
-    budget, elements, hidden = [MAX_CELLS], [], []
+    budget, elements, hidden = budget or Budget(), [], []
     for t, ws in enumerate(wb.worksheets, 1):
         if ws.sheet_state != "visible":
             hidden.append(ws.title)
+        if budget.spent(f"sheet {ws.title}"):
+            break
         elements += sheet_cells(ws, t, f"xlsx:{ws.title}!", budget)
     return elements, {"text": "NONE", "tables": "OK" if elements else "NONE", "images": "NONE",
                       "charts": "NOT_PARSED" if any(ws._charts for ws in wb.worksheets) else "NONE",
                       "scan": "NONE", "render": "NOT_SUPPORTED", "sheets": [ws.title for ws in wb.worksheets],
-                      "hidden_sheets": hidden, "truncated": budget[0] <= 0,
+                      "hidden_sheets": hidden, **budget.report(),
                       "tables_note": "수식은 계산하지 않고 파일에 저장된 값을 씁니다 (저장된 값이 없는 수식 칸은 비어 있음)"
                       + (f"; 숨김 시트 {', '.join(hidden)} 포함" if hidden else "")}, {}
 
 
 def decode_text(data: bytes) -> tuple[str, str] | None:
-    if b"\0" in data[:4096]:
+    if b"\0" in data[:SNIFF_SAMPLE]:
         return None
     for enc in ("utf-8-sig", "cp949"):
         try:
@@ -106,7 +127,7 @@ def sniff_csv(data: bytes) -> dict | None:
         return None
     text, enc = decoded
     try:
-        dialect = csv.Sniffer().sniff(text[:4096], delimiters=",;\t")
+        dialect = csv.Sniffer().sniff(text[:SNIFF_SAMPLE], delimiters=",;\t")
     except csv.Error:
         return None
     rows = list(csv.reader(io.StringIO(text), dialect))
@@ -115,50 +136,58 @@ def sniff_csv(data: bytes) -> dict | None:
     return {"rows": len(rows), "encoding": enc, "delimiter": dialect.delimiter}
 
 
-def parse_csv(data: bytes) -> tuple[list[dict], dict, dict[str, bytes]]:
+def parse_csv(data: bytes, budget: "Budget | None" = None) -> tuple[list[dict], dict, dict[str, bytes]]:
     import csv
 
+    budget = budget or Budget()
     text, enc = decode_text(data)
-    dialect = csv.Sniffer().sniff(text[:4096], delimiters=",;\t")
-    elements = [{"id": f"csv:r{r}:c{c}", "kind": "cell", "table": 1, "row": r, "col": c, "span": 1,
-                 "text": v.strip()}
-                for r, row in enumerate(csv.reader(io.StringIO(text), dialect), 1) if r <= MAX_CSV_ROWS
-                for c, v in enumerate(row, 1) if v.strip()]
+    dialect = csv.Sniffer().sniff(text[:SNIFF_SAMPLE], delimiters=",;\t")
+    elements = []
+    for r, row in enumerate(csv.reader(io.StringIO(text), dialect), 1):
+        if budget.spent(f"row {r}"):
+            break
+        elements += [{"id": f"csv:r{r}:c{c}", "kind": "cell", "table": 1, "row": r, "col": c, "span": 1,
+                      "text": v.strip()} for c, v in enumerate(row, 1) if v.strip()]
     return elements, {"text": "NONE", "tables": "OK" if elements else "NONE", "images": "NONE", "charts": "NONE",
-                      "scan": "NONE", "render": "NOT_SUPPORTED", "encoding": enc}, {}
+                      "scan": "NONE", "render": "NOT_SUPPORTED", "encoding": enc, **budget.report()}, {}
 
 
 # --- PDF ---------------------------------------------------------------------------------------------------
-ROW_TOL, COL_TOL = 2.0, 4.0  # points: same row if baselines differ less; same column if left edges do
+# Typography, not tuning: text is set at about 1.2 x the font size per line, so runs whose baselines are less than
+# half a line apart sit on one row; and an average glyph is about half an em wide, so left edges within half the
+# font size start the same column.
+ROW_TOL_EM, COL_TOL_EM = 0.6, 0.5
 
 
-def chunks(page) -> list[tuple[float, float, str]]:
-    """(x, y, text) of each text run on a page, in page coordinates."""
-    out: list[tuple[float, float, str]] = []
+def chunks(page) -> list[tuple[float, float, str, float]]:
+    """(x, y, text, font size) of each text run on a page, in page coordinates."""
+    out: list[tuple[float, float, str, float]] = []
 
-    def visit(text, cm, tm, _font, _size):
+    def visit(text, cm, tm, _font, size):
         if text.strip():
-            out.append((tm[4] * cm[0] + cm[4], tm[5] * cm[3] + cm[5], text.strip()))
+            out.append((tm[4] * cm[0] + cm[4], tm[5] * cm[3] + cm[5], text.strip(),
+                        abs((size or 10) * (tm[3] or 1) * (cm[3] or 1))))
     page.extract_text(visitor_text=visit)
     return out
 
 
-def tables_of(runs: list[tuple[float, float, str]]) -> list[list[list[tuple[float, str]]]]:
+def tables_of(runs: list[tuple[float, float, str, float]]) -> list[list[list[tuple[float, str]]]]:
     """Tables rebuilt from positions: consecutive rows of two or more runs whose left edges fall on the same
     columns. A borderless or merged-cell table may still be missed or split; it then stays as text lines."""
-    rows: list[list[tuple[float, float, str]]] = []
-    for x, y, t in sorted(runs, key=lambda r: (-r[1], r[0])):
-        if rows and abs(rows[-1][0][1] - y) < ROW_TOL:
-            rows[-1].append((x, y, t))
+    rows: list[list[tuple[float, float, str, float]]] = []
+    for x, y, t, size in sorted(runs, key=lambda r: (-r[1], r[0])):
+        if rows and abs(rows[-1][0][1] - y) < ROW_TOL_EM * size:
+            rows[-1].append((x, y, t, size))
         else:
-            rows.append([(x, y, t)])
+            rows.append([(x, y, t, size)])
     found: list[list[list[tuple[float, str]]]] = []
     cur: list[list[tuple[float, str]]] = []
     cols: list[float] = []
     for row in rows:
-        cells = sorted((x, t) for x, _, t in row)
+        cells = sorted((x, t) for x, _, t, _ in row)
         xs = [x for x, _ in cells]
-        if len(cells) >= 2 and cur and all(any(abs(x - c) < COL_TOL for c in cols) for x in xs):
+        tol = COL_TOL_EM * max(s for *_, s in row)
+        if len(cells) >= 2 and cur and all(any(abs(x - c) < tol for c in cols) for x in xs):
             cur.append(cells)
             continue
         if len(cur) >= 2:
@@ -167,14 +196,17 @@ def tables_of(runs: list[tuple[float, float, str]]) -> list[list[list[tuple[floa
     if len(cur) >= 2:
         found.append(cur)
     return found
-def parse_pdf(data: bytes) -> tuple[list[dict], dict, dict[str, bytes]]:
+def parse_pdf(data: bytes, budget: "Budget | None" = None) -> tuple[list[dict], dict, dict[str, bytes]]:
     from pypdf import PdfReader
 
+    budget = budget or Budget()
     reader = PdfReader(io.BytesIO(data))
     elements: list[dict] = []
     blobs: dict[str, bytes] = {}
     scans = tables = 0
     for n, page in enumerate(reader.pages, 1):
+        if budget.spent(f"page {n}"):
+            break
         lines = [x.strip() for x in (page.extract_text() or "").splitlines() if x.strip()]
         for i, line in enumerate(lines, 1):
             elements.append({"id": f"pdf:p{n}:l{i}", "kind": "text", "page": n, "text": line})
@@ -210,18 +242,22 @@ def parse_pdf(data: bytes) -> tuple[list[dict], dict, dict[str, bytes]]:
                 "images": "OK" if blobs else "NONE",
                 "charts": "IMAGE_ONLY" if blobs else "NONE",
                 "charts_note": "PDF 안의 차트는 그림이라 원본 수치가 없습니다 (그림 수치는 공식 통계에 쓰지 않음)",
-                "scan": "NEEDS_VISION" if scans else "NONE", "scan_pages": scans}
-    coverage.update(render_check(data, len(reader.pages)))
+                "scan": "NEEDS_VISION" if scans else "NONE", "scan_pages": scans, **budget.report()}
+    coverage.update(render_check(data, len(reader.pages), budget))
     return elements, coverage, blobs
 
 
-def render_check(data: bytes, pages: int) -> dict:
-    """Render the pages (bounded) to confirm the layout can be shown; a failure keeps the structural path."""
+def render_check(data: bytes, pages: int, budget: "Budget") -> dict:
+    """Render the pages within the time budget to confirm the layout can be shown; a failure keeps the structural
+    path. Pages left when the budget runs out are reported, not rendered."""
     try:
         doc = render_document(data)
-        n = min(pages, MAX_RENDER_PAGES)
-        for k in range(n):
+        n = 0
+        for k in range(pages):
+            if budget.spent(f"render page {k + 1}"):
+                break
             doc[k].render(scale=RENDER_SCALE).close()
+            n += 1
         doc.close()
         return {"render": "OK" if n == pages else "PARTIAL", "rendered_pages": n}
     except RENDER_ERRORS as exc:  # a renderer failure means "not rendered", never a crash

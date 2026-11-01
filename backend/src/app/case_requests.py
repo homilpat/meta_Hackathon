@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app import egress, intake_extract
+from app import egress, intake_extract, limits
 from app.db import (
     Assignment,
     CaseProfile,
@@ -105,7 +105,7 @@ class ItemIn(BaseModel):
 class RequestIn(BaseModel):
     kind: Literal["SUPPLIER_CORRECTIVE_ACTION", "AUDIT_CORRECTIVE_EVIDENCE", "CUSTOMER_REPLY", "INTERNAL"]
     title: FreeText
-    items: list[ItemIn] = Field(min_length=1, max_length=20)
+    items: list[ItemIn] = Field(min_length=1, max_length=limits.get("MAX_REQUEST_ITEMS"))
     owner_id: str
     reviewer_id: str
     external_party: dict | None = None
@@ -120,7 +120,7 @@ class SubmittedBy(BaseModel):
 
 
 class SubmissionIn(BaseModel):
-    files: list[FileIn] = Field(min_length=1, max_length=5)
+    files: list[FileIn] = Field(min_length=1, max_length=limits.get("MAX_FILES_PER_UPLOAD"))
     submitted_by: SubmittedBy
     note: OptionalText = ""
 
@@ -174,16 +174,20 @@ def get_request(session: Session, rid: int, actor: Actor) -> CaseRequest:
     return r
 
 
-TZ_ALIAS = {"KST": "Asia/Seoul", "JST": "Asia/Tokyo", "CST": "Asia/Shanghai", "UTC": "UTC"}
+TZ_ALIAS = {"KST": "Asia/Seoul"}  # the only abbreviation with one meaning among the allowed zones
 
 
 def due_moment(due_at: str, tz: str) -> datetime:
     """The due date as an instant: an explicit offset wins, otherwise it is read in the request's time zone
     (an IANA name such as Asia/Seoul, or KST / JST / CST / UTC)."""
+    allowed = limits.get("ALLOWED_TIMEZONES").split(",")
+    name = TZ_ALIAS.get(tz.upper(), tz)
+    if name not in allowed:
+        raise HTTPException(422, f"time zone {tz!r} is not allowed; use KST or one of {', '.join(allowed)}")
     try:
-        zone = ZoneInfo(TZ_ALIAS.get(tz.upper(), tz))
+        zone = ZoneInfo(name)
     except (ZoneInfoNotFoundError, ValueError):
-        raise HTTPException(422, f"unknown time zone {tz!r}; use e.g. Asia/Seoul or KST") from None
+        raise HTTPException(422, f"time zone {tz!r} is not available on this server") from None
     try:
         d = datetime.fromisoformat(due_at)
     except ValueError:
@@ -242,7 +246,7 @@ def check_review(raw: dict, r: CaseRequest, elements: dict[str, dict]) -> list[d
                  "file_id": elements[s["element_id"]]["file_id"], "page": elements[s["element_id"]].get("page")}
                 for s in x.get("sources") or [] if intake_extract.check_source(s, elements) is None]
         verdict = x.get("verdict") if x.get("verdict") in VERDICTS else "NEEDS_HUMAN"
-        note = str(x.get("note", ""))[:500]
+        note = str(x.get("note", ""))
         if verdict == "SUPPORTED" and not good:
             verdict, note = "NEEDS_HUMAN", f"근거 위치가 확인되지 않아 사람 확인 필요. {note}".strip()
         out.append({"item_id": item["item_id"], "verdict": verdict, "sources": good, "note": note,

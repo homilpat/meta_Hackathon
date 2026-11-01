@@ -78,7 +78,7 @@ export default function App() {
     investigation: <Investigation ctx={ctx} provider={provider}/>, history: <HistoryScreen ctx={ctx}/>, reports: <Reports ctx={ctx}/>, impact: <Impact ctx={ctx}/>, requests: <Requests ctx={ctx}/>, audit: <Audit ctx={ctx}/>,
   }
   const showTools = toolsOpen || specialist.some(x => x[0] === active)
-  const page = cid || ['dashboard', 'spc', 'agent', 'requests'].includes(active) ? screens[active] : <main className="page"><Card><Empty>배정된 사건이 없습니다.</Empty></Card></main>
+  const page = cid || ['dashboard', 'spc', 'agent', 'requests', 'audit'].includes(active) ? screens[active] : <main className="page"><Card><Empty>배정된 사건이 없습니다.</Empty></Card></main>
   return <div className="app">
     <aside className="sidebar">
       <div className="brand"><div className="brand-mark"><span/><span/><span/></div><div><b>QualityOps</b><small>AI</small></div></div>

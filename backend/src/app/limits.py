@@ -1,0 +1,159 @@
+"""Every operating limit in one place, with where its value comes from (spec v5.8 §23.5: configurable and stated).
+
+Who may change a value: the AI operations department (role AGENT_ADMIN) at POST /limits/{name}, with a reason,
+recorded append-only in limit_settings; the deployment may also set QO_<NAME>. A recorded setting wins over the
+environment, which wins over the default. Everyone can read the effective table at GET /limits. Values bound into
+request schemas when the server starts take effect after a restart (marked restart_required).
+basis:
+  STANDARD  an outside rule or a documented external limit (source given)
+  MEASURED  measured on this system (docs/evaluations/limits_measure.json)
+  DERIVED   computed from other values or from the format itself (formula given)
+  DECISION  decided by a person (who and when given)
+  DEFAULT   an arbitrary starting value: the owner sets it (e.g. from the company budget)
+"""
+
+import os
+from dataclasses import dataclass
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.orm import sessionmaker
+
+from app.fields import FreeText
+
+ADMIN_ROLE = "AGENT_ADMIN"
+OVERRIDES: dict[str, object] = {}  # recorded settings of this process (loaded at start, updated on change)
+RESTART = {"MAX_FILES_PER_UPLOAD", "MAX_REQUEST_ITEMS"}  # fixed in request schemas at start
+
+
+@dataclass(frozen=True)
+class Limit:
+    default: object
+    unit: str
+    basis: str
+    source: str
+
+
+LIMITS: dict[str, Limit] = {
+    "MAX_UPLOAD_BYTES": Limit(10 * 1024 * 1024, "bytes per file", "DECISION",
+                              "user, 2026-11-01 (IN0 decision 1)"),
+    "MAX_FILES_PER_UPLOAD": Limit(5, "files per request", "DEFAULT", "starting value; set by the owner"),
+    "MAX_COMPRESSION_RATIO": Limit(100, "uncompressed / compressed, per entry and in total", "STANDARD",
+                                   "zip-bomb guidance: ratio < 100:1 (knowledgelib.io file-upload-security; "
+                                   "privacy-tools-guide secure file upload). Sonar RSPEC-5042 uses 10 in its "
+                                   "example, but ordinary DOCX measured here reach 24x in total and 32x per entry"),
+    "MAX_ZIP_ENTRIES": Limit(10000, "entries per Office file", "STANDARD", "Sonar RSPEC-5042 THRESHOLD_ENTRIES"),
+    "MAX_UNZIPPED_BYTES": Limit(10 * 1024 * 1024 * 100, "bytes unpacked", "DERIVED",
+                                "MAX_UPLOAD_BYTES x MAX_COMPRESSION_RATIO (= Sonar RSPEC-5042 THRESHOLD_SIZE 1 GB)"),
+    "PARSE_TIME_BUDGET_S": Limit(50.0, "seconds of server parsing per analysis", "DERIVED",
+                                 "provider timeout 60 s - LIVE extraction p95 about 10 s (META_LIVE_LOG); "
+                                 "parsing stops there and the rest is marked unprocessed"),
+    "MAX_IMAGES_PER_CALL": Limit(9, "images in one model call", "STANDARD",
+                                 "Llama API: at most 9 images per request, 25 MB each (llama.developer.meta.com; "
+                                 "promptfoo llamaApi provider docs). muse-spark-1.3 accepted and read 10 in the "
+                                 "2026-11-01 probe (META_LIVE_LOG), so 9 is the documented, not a measured, ceiling"),
+    "EXTRACT_REASONING_EFFORT": Limit("minimal", "reasoning effort of the document extraction call", "MEASURED",
+                                      "LIVE 2026-11-01 on the LIVE fixture: minimal 8/8 in 8.4 s and 7/8 in 7.4 s, "
+                                      "default 8/8 in 19.5 s (META_LIVE_LOG); speed vs completeness is the owner's "
+                                      "choice ('minimal' or 'default')"),
+    "MODEL_RUNS_PER_USER_HOUR": Limit(30, "agent model runs per user per hour", "DEFAULT",
+                                      "arbitrary starting value; set from the company's model budget"),
+    "MAX_RECOMMENDATIONS": Limit(3, "agent recommendations shown per run", "DEFAULT",
+                                 "screen default; set by the owner"),
+    "MAX_INTAKE_QUESTIONS": Limit(8, "AI questions shown per intake draft", "DEFAULT",
+                                  "screen default; set by the owner"),
+    "MIN_RECOMMENDATION_GRADE": Limit("B", "lowest evidence grade shown as a recommendation (A best)", "DECISION",
+                                      "proposed default, set by the owner: A = matches a past case whose effect was "
+                                      "verified, B = controlled document or unverified case, C = this case's data "
+                                      "only (shown folded as 참고). Grades come from the sources, never from a "
+                                      "model's confidence (spec §23.3)"),
+    "MAX_REQUEST_ITEMS": Limit(20, "items per request card", "DEFAULT", "screen default; set by the owner"),
+    "ALLOWED_TIMEZONES": Limit("Asia/Seoul,America/New_York,America/Chicago,America/Denver,America/Los_Angeles",
+                               "IANA zones for due dates (KST = Asia/Seoul)", "DECISION",
+                               "user, 2026-11-01: Korea and the US; the US has several zones, so each by its IANA "
+                               "name and no ambiguous abbreviations (CST, EST)"),
+}
+
+
+def cast(name: str, raw: str):
+    kind = type(LIMITS[name].default)
+    try:
+        value = kind(raw.strip())
+    except ValueError:
+        raise HTTPException(422, f"{name} needs a {kind.__name__}") from None
+    if isinstance(value, int | float) and value <= 0:
+        raise HTTPException(422, f"{name} must be positive")
+    return value
+
+
+def get(name: str):
+    """The effective value: a recorded setting, else QO_<NAME> from the environment, else the default."""
+    if name in OVERRIDES:
+        return OVERRIDES[name]
+    raw = os.environ.get(f"QO_{name}")
+    return LIMITS[name].default if raw is None or raw.strip() == "" else cast(name, raw)
+
+
+def where(name: str) -> str:
+    return "SETTING" if name in OVERRIDES else "ENV" if os.environ.get(f"QO_{name}") not in (None, "") \
+        else "DEFAULT"
+
+
+def table() -> list[dict]:
+    return [{"name": k, "value": get(k), "default": v.default, "unit": v.unit, "basis": v.basis,
+             "source": v.source, "set_by": where(k), "restart_required": k in RESTART} for k, v in LIMITS.items()]
+
+
+def load(sessions: sessionmaker) -> None:
+    """Replay the recorded settings into this process (latest per name wins)."""
+    from app.db import LimitSetting
+
+    OVERRIDES.clear()
+    with sessions() as session:
+        for row in session.scalars(select(LimitSetting).order_by(LimitSetting.id)):
+            if row.name in LIMITS:
+                OVERRIDES[row.name] = cast(row.name, row.value)
+
+
+class SettingIn(BaseModel):
+    value: str
+    reason: FreeText  # why the AI operations department changed it
+
+
+def make_limits_router(sessions: sessionmaker, current_user) -> APIRouter:
+    from app.db import LimitSetting
+    from app.workflow import Actor, now
+
+    router = APIRouter()
+    Who = Annotated[Actor, Depends(current_user)]
+
+    @router.get("/limits")
+    def read(actor: Who) -> dict:
+        with sessions() as session:
+            history = [{"name": r.name, "value": r.value, "reason": r.reason, "actor_id": r.actor_id,
+                        "at": r.created_at} for r in session.scalars(select(LimitSetting).order_by(LimitSetting.id))]
+        return {"limits": table(), "history": history, "admin_role": ADMIN_ROLE}
+
+    @router.post("/limits/{name}", status_code=201)
+    def change(name: str, body: SettingIn, actor: Who) -> dict:
+        if actor.role != ADMIN_ROLE:
+            raise HTTPException(403, f"only {ADMIN_ROLE} (AI 운영 담당) changes operating limits")
+        if name not in LIMITS:
+            raise HTTPException(404, "Unknown limit")
+        value = cast(name, body.value)
+        if name == "ALLOWED_TIMEZONES":
+            from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+            try:
+                [ZoneInfo(z) for z in str(value).split(",")]
+            except (ZoneInfoNotFoundError, ValueError):
+                raise HTTPException(422, "every zone must be an IANA name") from None
+        with sessions.begin() as session:
+            session.add(LimitSetting(name=name, value=str(value), reason=body.reason, actor_id=actor.id,
+                                     created_at=now()))
+        OVERRIDES[name] = value
+        return {"limit": next(x for x in table() if x["name"] == name)}
+
+    return router

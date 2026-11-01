@@ -21,18 +21,15 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app import docparse, egress, intake_extract
+from app import docparse, egress, intake_extract, limits
 from app.db import IntakeExtraction, IntakeFile, IntakeParse, IntakeRecord
-from app.fields import FreeText
+from app.fields import FreeText, OptionalText
 from app.model_provider import ModelProvider, ProviderError
 from app.workflow import Actor, now, require_role, run_idempotent
 
 FIXTURE_DIR = Path(__file__).with_name("fixtures") / "intake"
-MAX_BYTES = 10 * 1024 * 1024  # per file
-MAX_FILES = 5  # per request
-MAX_PDF_PAGES = 50
-MAX_ZIP_ENTRIES = 2000
-MAX_UNZIPPED = 50 * 1024 * 1024  # zip-bomb guard for DOCX
+MAX_BYTES = limits.get("MAX_UPLOAD_BYTES")
+MAX_FILES = limits.get("MAX_FILES_PER_UPLOAD")
 MASKED_EGRESS = True  # protected files go masked to the external model; False withholds them entirely
 PDF, DOCX = "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 XLSX, CSV = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "text/csv"
@@ -50,10 +47,19 @@ def refuse(code: int, why: str) -> HTTPException:
     return HTTPException(code, f"{why} {RETRY}")
 
 
+def zip_guard(infos: list[zipfile.ZipInfo], kind: str) -> None:
+    """Zip-bomb guard (limits.py: entries, unpacked size, compression ratio per entry and in total)."""
+    ratio = limits.get("MAX_COMPRESSION_RATIO")
+    total, packed = sum(i.file_size for i in infos), sum(i.compress_size for i in infos)
+    if len(infos) > limits.get("MAX_ZIP_ENTRIES") or total > limits.get("MAX_UNZIPPED_BYTES") \
+            or total > ratio * max(packed, 1) or any(i.file_size > ratio * max(i.compress_size, 1) for i in infos):
+        raise refuse(413, f"압축을 풀면 비정상적으로 커지는 {kind}입니다 (압축률·크기 한도 초과).")
+
+
 def inspect(data: bytes) -> tuple[str, dict]:
     """(media type, checks) from the bytes; raises 413/415/422 with the reason and a retry path."""
-    if len(data) > MAX_BYTES:
-        raise refuse(413, f"파일이 {MAX_BYTES // (1024 * 1024)}MB를 넘습니다.")
+    if len(data) > (cap := limits.get("MAX_UPLOAD_BYTES")):
+        raise refuse(413, f"파일이 {cap // (1024 * 1024)}MB를 넘습니다.")
     if data.startswith(b"%PDF-"):
         from pypdf import PdfReader
         from pypdf.errors import PdfReadError
@@ -65,8 +71,6 @@ def inspect(data: bytes) -> tuple[str, dict]:
             pages = len(reader.pages)
         except (PdfReadError, ValueError, KeyError, TypeError) as exc:
             raise refuse(422, f"손상된 PDF입니다 ({type(exc).__name__}).") from None
-        if pages > MAX_PDF_PAGES:
-            raise refuse(413, f"PDF가 {MAX_PDF_PAGES}쪽을 넘습니다 ({pages}쪽).")
         active = sorted({m.decode() for m in re.findall(rb"/(JavaScript|JS|OpenAction|Launch|EmbeddedFile)\b", data)})
         return PDF, {"pages": pages, "active_content": active}
     if data.startswith(b"\xd0\xcf\x11\xe0"):  # OLE container: encrypted OOXML or legacy .doc/.xls
@@ -81,8 +85,7 @@ def inspect(data: bytes) -> tuple[str, dict]:
         if "xl/workbook.xml" in names:
             if any(i.flag_bits & 0x1 for i in infos):
                 raise refuse(422, "암호화된 XLSX는 열 수 없습니다.")
-            if len(infos) > MAX_ZIP_ENTRIES or sum(i.file_size for i in infos) > MAX_UNZIPPED:
-                raise refuse(413, "압축을 풀면 허용 크기를 넘는 XLSX입니다.")
+            zip_guard(infos, "XLSX")
             if "xl/vbaProject.bin" in names:
                 raise refuse(415, "매크로가 포함된 통합 문서는 접수하지 않습니다.")
             return XLSX, {"external_links": sum(n.startswith("xl/externalLinks/") for n in names),
@@ -91,8 +94,7 @@ def inspect(data: bytes) -> tuple[str, dict]:
             raise refuse(415, "PDF·DOCX·XLSX·CSV만 접수합니다 (본문이 없는 압축 파일).")
         if any(i.flag_bits & 0x1 for i in infos):
             raise refuse(422, "암호화된 DOCX는 열 수 없습니다.")
-        if len(infos) > MAX_ZIP_ENTRIES or sum(i.file_size for i in infos) > MAX_UNZIPPED:
-            raise refuse(413, "압축을 풀면 허용 크기를 넘는 DOCX입니다.")
+        zip_guard(infos, "DOCX")
         if "word/vbaProject.bin" in names:
             raise refuse(415, "매크로가 포함된 문서는 접수하지 않습니다.")
         rels = z.read("word/_rels/document.xml.rels").decode("utf-8", "replace") \
@@ -100,8 +102,6 @@ def inspect(data: bytes) -> tuple[str, dict]:
         return DOCX, {"external_links": len(re.findall(r'TargetMode="External"', rels)),
                       "embedded_objects": sum(n.startswith("word/embeddings/") for n in names)}
     if (csv_checks := docparse.sniff_csv(data)) is not None:
-        if csv_checks["rows"] > docparse.MAX_CSV_ROWS:
-            raise refuse(413, f"CSV가 {docparse.MAX_CSV_ROWS}행을 넘습니다.")
         return CSV, csv_checks
     raise refuse(415, "PDF·DOCX·XLSX·CSV만 접수합니다 (확장자가 아닌 파일 내용으로 판단합니다).")
 
@@ -153,10 +153,10 @@ def require_intake(session: Session, intake_id: int, actor: Actor) -> IntakeReco
 
 class EditIn(BaseModel):
     field: str = Field(pattern="^(" + "|".join(intake_extract.FIELDS) + ")$")
-    value: str | None = Field(None, max_length=500)
+    value: OptionalText | None = None
     reason: FreeText  # why a person changed what the document says
     element_id: str | None = Field(None, max_length=60)
-    excerpt: str | None = Field(None, max_length=500)
+    excerpt: OptionalText | None = None
 
 
 class EditsIn(BaseModel):
@@ -299,7 +299,7 @@ def add_draft_routes(router: APIRouter, sessions: sessionmaker, Who, IdemKey, pr
             f = own_file(session, intake_id, file_id, actor)
             if f.media_type != PDF:
                 raise HTTPException(409, "DOCX is not rendered; use the paragraph/table locators")
-            data, last = f.content, min(f.checks.get("pages", 0), docparse.MAX_RENDER_PAGES)
+            data, last = f.content, f.checks.get("pages", 0)
         if not 1 <= page <= last:
             raise HTTPException(404, f"Page outside 1..{last}")
         try:

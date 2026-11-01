@@ -13,6 +13,7 @@ import json
 import re
 from typing import Any
 
+from app import limits
 from app.model_provider import ModelProvider, ProviderError
 
 FIELDS = ["customer", "customer_contact", "customer_ref", "part_number", "lot", "serial_range", "issued_date",
@@ -27,7 +28,7 @@ RELATIVE = re.compile(r"(?i)\b(mon|tues|wednes|thurs|fri|satur|sun)day\b|tomorro
 INJECTION = re.compile(r"(?i)ignore (all |the )?(previous|above) instructions|disregard .{0,20}instructions|"
                        r"\bapprove the\b|지시.{0,6}무시|승인해")
 NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
-MAX_IMAGES = 6
+EXTRACT_EFFORT = None  # None: limits.EXTRACT_REASONING_EFFORT; a probe may set it directly
 EXTRACT_PROMPT = """You read customer quality documents sent to a PCB manufacturer. The server gives each document
 as numbered elements (text lines, table cells with row/column, chart data, image placeholders) and some images.
 Return ONLY the JSON.
@@ -72,6 +73,11 @@ EXTRACT_SCHEMA = {"type": "json_schema", "json_schema": {"name": "intake_extract
         "questions": {"type": "array", "items": {"type": "string"}}}}}}
 
 
+def effort() -> str | None:
+    e = EXTRACT_EFFORT or limits.get("EXTRACT_REASONING_EFFORT")
+    return None if e == "default" else e
+
+
 def norm(s: str) -> str:
     return re.sub(r"\s+", " ", s).strip().lower()
 
@@ -102,7 +108,7 @@ def model_input(files: list[dict], protected: str = "MASK", masker=None) -> tupl
         if how == "MASK":
             continue  # an image is the content itself: never sent masked
         for eid, png in f["images"].items():
-            if images < MAX_IMAGES:
+            if images < limits.get("MAX_IMAGES_PER_CALL"):
                 images += 1
                 parts += [{"type": "text", "text": f"image {eid} of file {f['file_id']}:"},
                           {"type": "image_url", "image_url": {
@@ -122,7 +128,7 @@ def extract(provider: ModelProvider, files: list[dict], protected: str = "MASK")
     masked = any(s["sent"] == "MASKED" for s in sent)
     msg = provider.chat([{"role": "system", "content": EXTRACT_PROMPT + ("\n" + MASK_NOTE if masked else "")},
                          {"role": "user", "content": parts}], [], response_format=EXTRACT_SCHEMA,
-                        reasoning_effort="minimal")["message"]
+                        reasoning_effort=effort())["message"]
     try:
         out = json.loads(msg.get("content") or "")
         assert all(k in out for k in ("documents", "fields", "links", "questions"))
@@ -156,7 +162,7 @@ def draft(raw: dict | None, files: list[dict]) -> dict:
     for t in (raw or {}).get("transcriptions", []):  # AI_TRANSCRIPTION of a scan: never source text
         el = elements.get(str(t.get("element_id")))
         if el and el["kind"] == SCAN and str(t.get("text", "")).strip():
-            el["text"] = transcribed[el["id"]] = str(t["text"]).strip()[:4000]
+            el["text"] = transcribed[el["id"]] = str(t["text"]).strip()  # bounded by the model's max_tokens
     by_field: dict[str, list[dict]] = {}
     for item in (raw or {}).get("fields", []):
         if item.get("field") not in FIELDS or not str(item.get("value", "")).strip():
@@ -200,7 +206,7 @@ def draft(raw: dict | None, files: list[dict]) -> dict:
         notes.append("스캔 페이지는 AI가 읽은 글자(AI_TRANSCRIPTION)입니다. 그 값은 원본 이미지와 대조해 확인하세요.")
     return {"fields": fields, "documents": docs, "links": links, "notes": notes,
             "transcriptions": [{"element_id": k, "text": v, "kind": "AI_TRANSCRIPTION"} for k, v in transcribed.items()],
-            "questions": [str(q) for q in (raw or {}).get("questions", [])][:8],
+            "questions": [str(q) for q in (raw or {}).get("questions", [])][:limits.get("MAX_INTAKE_QUESTIONS")],
             "flags": [{"element_id": e["id"], "file_id": e["file_id"], "flag": "INSTRUCTION_IN_DOCUMENT",
                        "note": "문서 안의 지시문입니다. 실행하지 않습니다."}
                       for e in elements.values() if INJECTION.search(e.get("text", ""))]}

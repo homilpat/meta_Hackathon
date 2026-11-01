@@ -376,11 +376,14 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
     @router.get("/queue")
     def queue(actor: Who, scope: Literal["department", "mine"] = "department") -> list[dict]:
         """Open work for the caller's role (department) across assigned cases, or only items the caller owns."""
+        from app.case_requests import request_tasks  # requests live on cases; one queue for both
+
         with sessions() as session:
             cases = session.scalars(select(Assignment.case_id).where(Assignment.user_id == actor.id)).all()
             items = []
             for case_id in sorted(set(cases)):
                 items.extend(d0_task(session, case_id, actor))
+                items.extend(request_tasks(session, case_id, actor))
                 for kind, doc_type in KINDS.items():
                     doc = _latest(session, case_id, doc_type)
                     if doc is None:

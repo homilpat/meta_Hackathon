@@ -157,6 +157,42 @@ def supplement_docx() -> bytes:
     return out.getvalue()
 
 
+def fixed_zip(data: bytes) -> bytes:
+    out = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(data)) as src, zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as dst:
+        for i in src.infolist():
+            dst.writestr(zipfile.ZipInfo(i.filename, (2026, 1, 1, 0, 0, 0)), src.read(i.filename), zipfile.ZIP_DEFLATED)
+    return out.getvalue()
+
+
+def simple_docx(lines: list[str], rows: list[list[str]] | None = None) -> bytes:
+    doc = Document()
+    for line in lines:
+        doc.add_paragraph(line)
+    if rows:
+        t = doc.add_table(rows=len(rows), cols=len(rows[0]))
+        for r, row in enumerate(rows):
+            for k, v in enumerate(row):
+                t.cell(r, k).text = v
+    buf = io.BytesIO()
+    doc.save(buf)
+    return fixed_zip(buf.getvalue())
+
+
+def audit_pdf() -> bytes:
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4, invariant=1)
+    for k, line in enumerate(["SYNTHETIC TEST DOCUMENT - Corrective evidence for audit finding AF-2026-07",
+                              "Standard: IATF 16949:2016 clause 7.1.5.1 (measurement system analysis)",
+                              "Gauge R&R study GRR-SPI-03 completed 2026-11-03: %GRR 8.2 (acceptance below 10).",
+                              "Training record TR-1102 attached for 4 SPI operators.",
+                              "Calibration certificate CAL-7781 valid until 2027-11-02."]):
+        c.drawString(50, 800 - 20 * k, line)
+    c.showPage()
+    c.save()
+    return buf.getvalue()
+
+
 def main() -> None:
     FIXTURE_DIR.mkdir(parents=True, exist_ok=True)
     for old in FIXTURE_DIR.glob("*"):
@@ -168,6 +204,17 @@ def main() -> None:
     (FIXTURE_DIR / "live_complaint_DS-QN-2026-0099.pdf").write_bytes(complaint_pdf(
         "DS-QN-2026-0099", "L05", "7", "PCB-BMS-310 rev A",
         "We suspect a stencil problem but this is not confirmed.", "2026-11-07 17:00 KST", scanned=False))
+    (FIXTURE_DIR / "supplier_reply_SN-0001_v1.docx").write_bytes(simple_docx(
+        ["SYNTHETIC TEST DOCUMENT - Supplier 8D reply v1 (Daeil Stencil, fictional)",
+         "Containment: we have contained the affected stencils.",
+         "Root cause: aperture clogging due to an extended cleaning interval."]))
+    (FIXTURE_DIR / "supplier_reply_SN-0001_v2.docx").write_bytes(simple_docx(
+        ["SYNTHETIC TEST DOCUMENT - Supplier 8D reply v2 (Daeil Stencil, fictional)",
+         "Containment: 14 stencils on hold, hold record HB-221 dated 2026-11-02.",
+         "Root cause: aperture clogging due to an extended cleaning interval (verified by a fresh-stencil run).",
+         "Corrective action: cleaning interval reduced to 2 hours; work instruction WI-ST-09 rev 4."],
+        [["Stencil", "Hold record"], ["ST-14", "HB-221"]]))
+    (FIXTURE_DIR / "audit_evidence_AF-2026-07.pdf").write_bytes(audit_pdf())
     print(sorted(p.name for p in FIXTURE_DIR.iterdir()))
 
 

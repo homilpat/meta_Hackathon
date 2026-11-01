@@ -984,6 +984,103 @@ class VisionRequest(Base):
     created_at: Mapped[str] = mapped_column(String(40))
 
 
+class CaseProfile(Base):
+    """Origin-specific facts of a case (supplier nonconformity, audit finding, ...); a change is a new version."""
+
+    __tablename__ = "case_profiles"
+    __table_args__ = (UniqueConstraint("case_id", "version"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    origin: Mapped[str] = mapped_column(String(30))
+    details: Mapped[dict] = mapped_column(JSON)
+    recorded_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    recorded_at: Mapped[str] = mapped_column(String(40))
+
+
+class CaseRequest(Base):
+    """A request attached to a case (supplier corrective action, audit evidence, ...). The row holds the current
+    state; every change is also an event in responsibility_events."""
+
+    __tablename__ = "case_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(40))
+    title: Mapped[str] = mapped_column(String(200))
+    items: Mapped[list] = mapped_column(JSON)  # [{item_id, requirement, required_evidence, criterion, basis_ref}]
+    items_sha256: Mapped[str] = mapped_column(String(64))
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"))  # internal responsible (uploads replies)
+    pending_owner_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"))  # handover not yet accepted
+    reviewer_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    external_party: Mapped[dict | None] = mapped_column(JSON)  # who is to answer outside, as documented
+    due_at: Mapped[str] = mapped_column(String(40))
+    due_tz: Mapped[str] = mapped_column(String(40))
+    status: Mapped[str] = mapped_column(String(20))  # DRAFT OPEN SUBMITTED IN_REVIEW ACCEPTED NEEDS_REVISION REJECTED
+    submission_version: Mapped[int] = mapped_column(Integer, default=0)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[str] = mapped_column(String(40))
+    updated_at: Mapped[str] = mapped_column(String(40))
+
+
+class RequestSubmission(Base):
+    """One reply version: files (stored through the intake pipeline), who submitted it outside, who registered it."""
+
+    __tablename__ = "request_submissions"
+    __table_args__ = (UniqueConstraint("request_id", "version"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    request_id: Mapped[int] = mapped_column(ForeignKey("case_requests.id"), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    intake_id: Mapped[int] = mapped_column(ForeignKey("intake_records.id"))
+    files_sha256: Mapped[str] = mapped_column(String(64))
+    submitted_by: Mapped[dict] = mapped_column(JSON)  # {org, person, identity: DOCUMENT_STATED | VERIFIED}
+    registered_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class RequestReview(Base):
+    """An AI review opinion per item (kind AI) or a person's decision (kind HUMAN) on one reply version."""
+
+    __tablename__ = "request_reviews"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    request_id: Mapped[int] = mapped_column(ForeignKey("case_requests.id"), index=True)
+    submission_version: Mapped[int] = mapped_column(Integer)
+    files_sha256: Mapped[str] = mapped_column(String(64))
+    kind: Mapped[str] = mapped_column(String(10))  # AI | HUMAN
+    mode: Mapped[str | None] = mapped_column(String(12))
+    model: Mapped[str | None] = mapped_column(String(60))
+    items: Mapped[list] = mapped_column(JSON)
+    decision: Mapped[str | None] = mapped_column(String(20))  # ACCEPTED | NEEDS_REVISION | REJECTED (HUMAN)
+    reason: Mapped[str | None] = mapped_column(Text)
+    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class ResponsibilityEvent(Base):
+    """Who did what to a request or a case responsibility: assignment, acceptance, handover, due change,
+    submission, review, decision, with the actor's role, the reason and the version it was about."""
+
+    __tablename__ = "responsibility_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"), index=True)
+    subject: Mapped[str] = mapped_column(String(20))  # REQUEST | CASE_OWNER
+    subject_id: Mapped[str] = mapped_column(String(80))
+    event: Mapped[str] = mapped_column(String(30))
+    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    actor_role: Mapped[str] = mapped_column(String(30))
+    from_user: Mapped[str | None] = mapped_column(String(40))
+    to_user: Mapped[str | None] = mapped_column(String(40))
+    reason: Mapped[str | None] = mapped_column(Text)
+    target_version: Mapped[int | None] = mapped_column(Integer)
+    detail: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
 # Audit rows are append-only at the database level, not just by convention.
 APPEND_ONLY = ("approval_events", "workflow_events", "doc_comments", "audit_chain",
                "workflow_policies", "evidence_quality", "process_contexts", "affected_objects",
@@ -994,7 +1091,8 @@ APPEND_ONLY = ("approval_events", "workflow_events", "doc_comments", "audit_chai
                "template_contracts", "validation_runs",
                "experience_entries", "experience_retrievals", "recommendation_decisions", "agent_steps",
                "intake_files", "intake_parses", "intake_extractions", "intake_case_links",
-               "vision_requests")
+               "vision_requests", "case_profiles", "request_submissions", "request_reviews",
+               "responsibility_events")
 
 
 def append_only_ddl(table: str) -> list[str]:

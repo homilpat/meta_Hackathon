@@ -17,8 +17,9 @@ request schemas, so a change takes effect after a restart.
 | MAX_IMAGES_PER_CALL | 9 | STANDARD | Llama API documented 9 images per request. muse-spark-1.3 accepted and read 10 in a probe |
 | MODEL_CONTEXT_TOKENS | 1,048,576 | STANDARD | Meta Model API docs: muse-spark context window |
 | MODEL_PRICE_INPUT/OUTPUT_PER_M_USD | 1.25 / 4.25 | STANDARD | api.meta.ai published price for muse-spark-1.1 (1.3 not separately confirmed) |
-| MAX_COST_PER_MODEL_CALL_USD | 0.10 | DEFAULT | arbitrary starting value, set from the company's model budget |
-| max input tokens | 80,000 | DERIVED | min(context − 8,192 output reserve, cost cap ÷ input price). Prompt, schema, document elements (in document order) and images count against it; what is left is reported "not sent to the model from …" |
+| MAX_COST_PER_MODEL_CALL_USD | 0 (off) | DECISION | user, 2026-11-01: the context window is the cap; a cost cap is optional, set from the budget |
+| EXTRACT_MAX_ROUNDS | 2 | DEFAULT | arbitrary starting value: round 2 asks only for missing fields with their next candidate parts; each round is a paid call |
+| max input tokens | 1,040,384 | DERIVED | context − 8,192 output reserve (or the cost cap ÷ input price, when one is set). Prompt, schema, document elements (in document order) and images count against it; what is left is reported "not sent to the model from …" |
 | BYTES_PER_TOKEN | 4 | STANDARD | rule of thumb (about 4 characters per token for English); conservative for Korean |
 | IMAGE_TOKENS | 390 | MEASURED | one LIVE run: 2,414 prompt tokens = 790 text + 362 prompt + 481 schema + 2 images. Calibration from that run, not an independent check. Every call now records its real usage (`egress.usage`, request review events), so it can be recalibrated |
 | EXTRACT_REASONING_EFFORT | minimal | MEASURED | LIVE: minimal 8/8 and 7/8 at 7–8 s, default 8/8 at 19.5 s. The owner chooses speed vs completeness |
@@ -40,3 +41,20 @@ Throughput on this machine: PDF with render about 69 pages/s, XLSX about 19,000 
 A 10 MB XLSX (about 18 s) and CSV (about 1 s) fit the 50 s budget. A 10 MB text-only PDF (about 11,000 pages) does
 not: about 3,400 pages are processed and the rest is reported as unprocessed. The measurements depend on the
 machine, so run the script again on the target server before changing the budget.
+
+## What is sent: server selection (`app/doc_select.py`)
+
+The model does not get whole documents. The server sends, in document order:
+- the head (PDF page 1, or up to the end of the first table);
+- captions, chart data and scanned pages;
+- per field, the best-ranked element with its neighbours, its table row, its header row and its column.
+
+Ranking is BM25 over each field's label words (multilingual glossary), with elements whose neighbourhood holds a
+value of the field's shape (date, number, code) first. Round 2 asks only for missing fields with their next hit.
+Label words and shapes are versioned (`labels_version` is recorded with every analysis).
+
+Measured: `python -m scripts.select_eval` (offline, 120-page dossier) caught 6/6 planted values in round 1 with
+about 1.4% of the document's tokens. LIVE (`intake_live_check large`): selected 6/6 at 2,656 prompt tokens vs whole
+6/6 at 130,024. Limits: a label written in words outside the list and outside the glossary can be missed in round 1
+(round 2 then takes the next candidate). The test document is synthetic and one layout; real documents need the
+same measurement.

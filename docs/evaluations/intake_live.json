@@ -70,23 +70,23 @@
    {
     "field": "customer_cause_claim",
     "want": "HYPOTHESIS",
-    "status": "FOUND",
-    "ok": true
+    "status": "MISSING",
+    "ok": false
    }
   ],
   "checks": {
    "usage": {
-    "completion_tokens": 1746,
+    "completion_tokens": 1623,
     "prompt_tokens": 2414,
-    "total_tokens": 4160,
+    "total_tokens": 4037,
     "completion_tokens_details": {
-     "reasoning_tokens": 554
+     "reasoning_tokens": 432
     },
     "prompt_tokens_details": {
-     "cached_tokens": 2289
+     "cached_tokens": 0
     }
    },
-   "estimated_input_tokens": 790,
+   "estimated_input_tokens": 2456,
    "deadline_absolute": true,
    "no_rate_note": true,
    "injection_flagged": true,
@@ -103,12 +103,12 @@
    }
   ],
   "questions": [
-   "검사 수량은 몇 개인가요?"
+   "검사 수량이 몇 개인지 알려주세요."
   ],
   "model": "muse-spark-1.3",
   "mode": "LIVE",
-  "latency_ms": 6554,
-  "ok": 8,
+  "latency_ms": 7260,
+  "ok": 7,
   "total": 8
  },
  "multi": {
@@ -381,5 +381,90 @@
   "latency_ms": 8355,
   "ok": 7,
   "total": 8
+ },
+ "large": {
+  "rows": [
+   {
+    "mode": "selected",
+    "ok": true,
+    "total": 6,
+    "usage": {
+     "completion_tokens": 804,
+     "prompt_tokens": 2656,
+     "total_tokens": 3460,
+     "completion_tokens_details": {
+      "reasoning_tokens": 320
+     },
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     }
+    },
+    "rounds": 1,
+    "seconds": 7.2,
+    "misses": []
+   },
+   {
+    "mode": "whole",
+    "ok": true,
+    "total": 6,
+    "usage": {
+     "completion_tokens": 858,
+     "prompt_tokens": 130024,
+     "total_tokens": 130882,
+     "completion_tokens_details": {
+      "reasoning_tokens": 263
+     },
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     }
+    },
+    "rounds": 1,
+    "seconds": 9.1,
+    "misses": []
+   }
+  ],
+  "checks": {
+   "selected": {
+    "ok": 6,
+    "total": 6,
+    "usage": {
+     "completion_tokens": 804,
+     "prompt_tokens": 2656,
+     "total_tokens": 3460,
+     "completion_tokens_details": {
+      "reasoning_tokens": 320
+     },
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     }
+    },
+    "rounds": 1,
+    "seconds": 7.2,
+    "misses": []
+   },
+   "whole": {
+    "ok": 6,
+    "total": 6,
+    "usage": {
+     "completion_tokens": 858,
+     "prompt_tokens": 130024,
+     "total_tokens": 130882,
+     "completion_tokens_details": {
+      "reasoning_tokens": 263
+     },
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     }
+    },
+    "rounds": 1,
+    "seconds": 9.1,
+    "misses": []
+   }
+  },
+  "model": "muse-spark-1.3",
+  "mode": "LIVE",
+  "latency_ms": 17577,
+  "ok": 2,
+  "total": 2
  }
 }

@@ -116,7 +116,31 @@ def review(provider) -> dict:
     return {"rows": rows, "opinions": out}
 
 
-CHECKS = {"single": single, "multi": multi, "review": review, "masked": masked}
+def large(provider) -> dict:
+    """The 120-page synthetic dossier of scripts/select_eval.py: the whole document in one call vs the server's
+    selection (with a second round for missing fields)."""
+    from scripts.select_eval import dossier
+
+    elements, _, _ = docparse.parse("application/pdf", dossier(), docparse.Budget(10_000))
+    files = [{"file_id": 1, "name": "dossier.pdf", "data_origin": "SYNTHETIC", "tier": "RAW", "elements": elements,
+              "images": {}}]
+    want = {"customer_ref": "QX-2026-5512", "lot": "LQ7", "inspected_qty": "640", "defective_qty": "19",
+            "phenomenon": "lifted lead", "reply_deadline": "2026-11-20"}
+    out = {}
+    for mode, call in (("selected", lambda: intake_extract.extract(provider, files)),
+                       ("whole", lambda: intake_extract.extract_once(provider, files))):
+        t0 = time.perf_counter()
+        raw, _, info = call()
+        d = intake_extract.draft(raw, files)
+        rows = [value_ok(d, k, v) for k, v in want.items()]
+        out[mode] = {"ok": sum(r["ok"] for r in rows), "total": len(rows), "usage": info.get("usage"),
+                     "rounds": info.get("rounds", 1), "seconds": round(time.perf_counter() - t0, 1),
+                     "misses": [r["field"] for r in rows if not r["ok"]]}
+    rows = [{"mode": m, **v, "ok": v["ok"] == v["total"]} for m, v in out.items()]
+    return {"rows": rows, "checks": out}
+
+
+CHECKS = {"single": single, "multi": multi, "review": review, "masked": masked, "large": large}
 
 
 def main() -> int:

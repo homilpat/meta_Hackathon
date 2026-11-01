@@ -5,8 +5,8 @@
  "rounds": [
   {
    "round": 1,
-   "elements_sent_total": 41,
-   "tokens_sent_total": 1328,
+   "elements_sent_total": 43,
+   "tokens_sent_total": 1381,
    "caught": {
     "customer_ref": true,
     "phenomenon": true,
@@ -19,7 +19,7 @@
    "hits": {
     "customer_ref": "pdf:p37:l25",
     "phenomenon": "pdf:p52:l25",
-    "lot": "pdf:p80:t1:r1:c1",
+    "lot": "pdf:p80:l25",
     "defective_qty": "pdf:p80:t1:r1:c3",
     "inspected_qty": "pdf:p80:t1:r1:c2",
     "reply_deadline": "pdf:p115:l25"

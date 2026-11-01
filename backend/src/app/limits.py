@@ -26,6 +26,7 @@ from app.fields import FreeText
 ADMIN_ROLE = "AGENT_ADMIN"
 OVERRIDES: dict[str, object] = {}  # recorded settings of this process (loaded at start, updated on change)
 RESTART = {"MAX_FILES_PER_UPLOAD", "MAX_REQUEST_ITEMS"}  # fixed in request schemas at start
+OFF_ALLOWED = {"MAX_COST_PER_MODEL_CALL_USD"}  # 0 switches the limit off
 
 
 @dataclass(frozen=True)
@@ -63,9 +64,11 @@ LIMITS: dict[str, Limit] = {
     "MODEL_PRICE_OUTPUT_PER_M_USD": Limit(4.25, "USD per million output tokens", "STANDARD",
                                           "api.meta.ai published price for muse-spark-1.1 (1.3 not separately "
                                           "confirmed)"),
-    "MAX_COST_PER_MODEL_CALL_USD": Limit(0.10, "USD of input per document-model call", "DEFAULT",
-                                         "arbitrary starting value, to be set from the company's model budget; "
-                                         "with the price it caps the input tokens (MAX_INPUT_TOKENS)"),
+    "MAX_COST_PER_MODEL_CALL_USD": Limit(0.0, "USD of input per document-model call; 0 = off", "DECISION",
+                                         "user, 2026-11-01: the context window is the cap; a cost cap is optional "
+                                         "and set from the company's model budget when wanted"),
+    "EXTRACT_MAX_ROUNDS": Limit(2, "model calls per document analysis (round 2 asks only for missing fields)",
+                                "DEFAULT", "arbitrary starting value: each round is a paid call; set by the owner"),
     "BYTES_PER_TOKEN": Limit(4.0, "UTF-8 bytes per token, for estimating before a call", "STANDARD",
                              "rule of thumb ~4 characters per token for English text (OpenAI tokenizer guidance); "
                              "Korean is ~3 bytes per character, so the estimate is conservative. Calibrate with "
@@ -102,7 +105,7 @@ def cast(name: str, raw: str):
         value = kind(raw.strip())
     except ValueError:
         raise HTTPException(422, f"{name} needs a {kind.__name__}") from None
-    if isinstance(value, int | float) and value <= 0:
+    if isinstance(value, int | float) and (value < 0 or (value == 0 and name not in OFF_ALLOWED)):
         raise HTTPException(422, f"{name} must be positive")
     return value
 
@@ -118,7 +121,8 @@ def get(name: str):
 def max_input_tokens() -> int:
     """DERIVED: the smaller of what fits (context minus the output reserve) and what the cost cap pays for."""
     fits = get("MODEL_CONTEXT_TOKENS") - 8192  # provider max_tokens: the answer's reserve (model_provider.py)
-    pays = int(get("MAX_COST_PER_MODEL_CALL_USD") / get("MODEL_PRICE_INPUT_PER_M_USD") * 1_000_000)
+    cost = get("MAX_COST_PER_MODEL_CALL_USD")
+    pays = int(cost / get("MODEL_PRICE_INPUT_PER_M_USD") * 1_000_000) if cost > 0 else fits
     return max(1, min(fits, pays))
 
 

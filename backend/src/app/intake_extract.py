@@ -128,19 +128,70 @@ def model_input(files: list[dict], protected: str = "MASK", masker=None, reserve
     return parts, withheld, sent
 
 
+def narrowed(files: list[dict], fields: list[str], skip: dict[str, int], base: bool,
+             sent_ids: set[tuple[int, str]]) -> tuple[list[dict], list[dict]]:
+    """Each file cut down to the elements the server selects (app/doc_select.py) and not yet sent; its images only
+    if their element was selected. Returns (files to send, selection reports)."""
+    from app import doc_select
+
+    out, reports = [], []
+    for f in files:
+        ids, rep = doc_select.select(f["elements"], fields, skip, base)
+        keep = [i for i in ids if (f["file_id"], i) not in sent_ids]  # ids repeat across files
+        sent_ids.update((f["file_id"], i) for i in keep)
+        chosen = set(keep)
+        reports.append({"file_id": f["file_id"], **rep, "sent_now": len(keep)})
+        if keep:
+            out.append({**f, "elements": [e for e in f["elements"] if e["id"] in chosen],
+                        "images": {k: v for k, v in f.get("images", {}).items() if k in chosen}})
+    return out, reports
+
+
 def extract(provider: ModelProvider, files: list[dict], protected: str = "MASK") -> tuple[dict, list[dict], dict]:
-    """(model output with tokens mapped back, withheld files, what was sent). Raises ProviderError on transport or
-    JSON failure."""
+    """(model output with tokens mapped back, withheld files, what was sent). Round 1 sends the server-selected
+    parts of each file; round 2 (EXTRACT_MAX_ROUNDS) asks only for fields still missing, with their next candidate
+    parts. Raises ProviderError on transport or JSON failure of round 1."""
+    sent_ids: set[tuple[int, str]] = set()
+    chunk, reports = narrowed(files, FIELDS, {}, True, sent_ids)
+    raw, withheld, info = extract_once(provider, chunk or files, protected)
+    info["selection"] = [reports]
+    for r in range(2, limits.get("EXTRACT_MAX_ROUNDS") + 1):
+        missing = [k for k, v in draft(raw, files)["fields"].items() if v["status"] == "MISSING"]
+        chunk, reports = narrowed(files, missing, dict.fromkeys(missing, r - 1), False, sent_ids)
+        if not missing or not chunk:
+            break
+        try:
+            more, _, more_info = extract_once(provider, chunk, protected, only=missing)
+        except ProviderError as exc:  # round 1 stands; say why the rest was not tried further
+            info["selection"].append([{"error": str(exc)}])
+            break
+        info["selection"].append(reports)
+        for k in ("fields", "transcriptions", "links", "questions"):
+            raw[k] = [*raw.get(k, []), *more.get(k, [])]
+        for k in ("prompt_tokens", "completion_tokens", "total_tokens"):
+            if k in more_info["usage"]:
+                info["usage"][k] = info["usage"].get(k, 0) + more_info["usage"][k]
+        info["files"] += [s for s in more_info["files"] if s not in info["files"]]
+    info["rounds"] = len(info["selection"])
+    return raw, withheld, info
+
+
+def extract_once(provider: ModelProvider, files: list[dict], protected: str = "MASK",
+                 only: list[str] | None = None) -> tuple[dict, list[dict], dict]:
+    """One model call over the given (already selected) elements."""
     from app.egress import MASK_NOTE, Masker, masked_payload_record
 
     masker = Masker()
-    system = EXTRACT_PROMPT + ("\n" + MASK_NOTE if protected == "MASK" else "")
+    system = EXTRACT_PROMPT + ("\n" + MASK_NOTE if protected == "MASK" else "") + (
+        f"\nOnly these fields are still needed: {', '.join(only)}. Return the others empty." if only else "")
     reserve = limits.estimate_tokens(system) + limits.estimate_tokens(json.dumps(EXTRACT_SCHEMA))
     parts, withheld, sent = model_input(files, protected, masker, reserve)
     if not parts:
         raise ProviderError("no file is cleared for external processing")
     masked = any(s["sent"] == "MASKED" for s in sent)
-    reply = provider.chat([{"role": "system", "content": EXTRACT_PROMPT + ("\n" + MASK_NOTE if masked else "")},
+    system = EXTRACT_PROMPT + ("\n" + MASK_NOTE if masked else "") + (  # what is actually sent (the reserve above
+        f"\nOnly these fields are still needed: {', '.join(only)}. Return the others empty." if only else "")
+    reply = provider.chat([{"role": "system", "content": system},
                            {"role": "user", "content": parts}], [], response_format=EXTRACT_SCHEMA,
                           reasoning_effort=effort())
     msg = reply["message"]

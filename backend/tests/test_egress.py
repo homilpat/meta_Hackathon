@@ -100,7 +100,9 @@ def test_with_an_in_house_model_protected_files_go_to_it_as_they_are_and_nothing
     local = LocalProvider("http://intranet-llm/v1/chat/completions", "llama-local", opener=opener)
     external = Scripted()
     files = [{"file_id": 1, "name": "mine.pdf", "tier": "PROTECTED", "data_origin": "UNKNOWN",
-              "elements": [{"id": "pdf:p1:l1", "kind": "text", "page": 1, "text": SECRET}], "images": {"x": b"\x89PNG"}}]
+              "elements": [{"id": "pdf:p1:l1", "kind": "text", "page": 1, "text": SECRET},
+                           {"id": "pdf:p1:img1", "kind": "image", "page": 1, "text": ""}],
+              "images": {"pdf:p1:img1": b"\x89PNG"}}]
     mode, status, _raw, _withheld, error, info = intake.analysis(external, files, local)
     assert mode == "LOCAL" and status == "OK" and error is None and external.seen == []  # the external model: unused
     assert SECRET in json.dumps(calls[0]) and "image_url" in json.dumps(calls[0])  # as is, images included

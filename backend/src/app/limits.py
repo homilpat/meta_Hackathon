@@ -67,6 +67,11 @@ LIMITS: dict[str, Limit] = {
     "MAX_COST_PER_MODEL_CALL_USD": Limit(0.0, "USD of input per document-model call; 0 = off", "DECISION",
                                          "user, 2026-11-01: the context window is the cap; a cost cap is optional "
                                          "and set from the company's model budget when wanted"),
+    "EXTRACT_MODE": Limit("HYBRID", "how documents reach the model: HYBRID or WHOLE", "DECISION",
+                          "user, 2026-11-02: table of contents + server selection + the model asks for what is "
+                          "missing (HYBRID). WHOLE reads every element (complete, costs the document's size)"),
+    "HYBRID_MAX_PARTS_PER_ROUND": Limit(5, "pages or sections the model may ask for per round", "DEFAULT",
+                                        "arbitrary starting value: bounds a round's size; set by the owner"),
     "EXTRACT_MAX_ROUNDS": Limit(2, "model calls per document analysis (round 2 asks only for missing fields)",
                                 "DEFAULT", "arbitrary starting value: each round is a paid call; set by the owner"),
     "BYTES_PER_TOKEN": Limit(4.0, "UTF-8 bytes per token, for estimating before a call", "STANDARD",

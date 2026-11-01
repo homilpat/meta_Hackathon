@@ -1,46 +1,90 @@
-"""Server-side selection of what goes to the model (app/doc_select.py) and the second round for missing fields."""
+"""How documents reach the model: HYBRID (table of contents + server selection + the model asks for what is
+missing, the default) and WHOLE (every element, in pieces when it does not fit)."""
 
 import json
 
-from app import docparse, intake_extract
+from app import docparse, intake_extract, limits
 from scripts.select_eval import TRUTH, caught, dossier
 from tests.test_intake_in2 import Scripted
 
+EMPTY = {"documents": [], "links": [], "questions": [], "transcriptions": [], "fields": [], "need": []}
 
-def test_a_long_document_is_cut_to_the_parts_that_hold_the_values():
+
+def files_of(els, cov=None):
+    return [{"file_id": 1, "name": "d.pdf", "tier": "RAW", "elements": els, "coverage": cov or {}, "images": {}}]
+
+
+def sent_ids(call) -> set[str]:
+    blocks = [json.loads(x["text"]) for x in call["messages"][1]["content"] if x["type"] == "text"
+              and x["text"].startswith("{")]
+    return {e["id"] for b in blocks if "maps" not in b for e in b["elements"]}
+
+
+def test_round_one_is_small_and_already_holds_most_values():
     from app.doc_select import select
 
     els, _, _ = docparse.parse("application/pdf", dossier(), docparse.Budget(10_000))
     ids, rep = select(els, list(TRUTH))
-    assert all(caught(els, set(ids)).values())  # every planted value is in round 1
-    assert rep["selected"] < rep["total"] / 20  # and far less than the whole document
+    assert sum(caught(els, set(ids)).values()) >= 5 and rep["selected"] < rep["total"] / 20
 
 
-def test_round_two_asks_only_for_missing_fields_with_parts_not_sent_before():
-    els, _, _ = docparse.parse("application/pdf", dossier(), docparse.Budget(10_000))
-    files = [{"file_id": 1, "name": "d.pdf", "tier": "RAW", "elements": els, "images": {}}]
-    empty = {"documents": [], "links": [], "questions": [], "transcriptions": [], "fields": []}
+def test_the_model_sees_the_map_and_gets_only_the_parts_it_asks_for(monkeypatch):
+    monkeypatch.setitem(limits.OVERRIDES, "EXTRACT_MODE", "HYBRID")
+    els, cov, _ = docparse.parse("application/pdf", dossier(), docparse.Budget(10_000))
 
     class Counted(Scripted):
         def chat(self, messages, tools, response_format=None, reasoning_effort=None):
             out = super().chat(messages, tools, response_format, reasoning_effort)
             return {**out, "usage": {"prompt_tokens": 100, "completion_tokens": 10}}
 
-    p = Counted(empty, empty)
-    _, _, info = intake_extract.extract(p, files)
-    first, second = ({e["id"] for part in call["messages"][1]["content"] if part["type"] == "text"
-                      for e in json.loads(part["text"])["elements"]} for call in p.seen)
-    assert len(p.seen) == 2 and info["rounds"] == 2 and not first & second  # nothing sent twice
+    ask = {**EMPTY, "need": [{"file_id": 1, "part": "p115", "why": "deadline"},
+                             {"file_id": 1, "part": "p999", "why": "not in the map"}]}
+    p = Counted(ask, EMPTY)
+    _raw, _, info = intake_extract.extract(p, files_of(els, cov))
+    first, second = sent_ids(p.seen[0]), sent_ids(p.seen[1])
+    assert '"maps"' in p.seen[0]["messages"][1]["content"][-1]["text"]  # round 1 carries the map
+    assert "map of each document" in p.seen[0]["messages"][0]["content"]  # the model is told it may ask
+    assert second and all(i.startswith("pdf:p115:") for i in second) and not first & second  # only what was asked
+    assert caught(els, first | second)["reply_deadline"]
+    assert info["rounds"][1]["asked"] == ["1:p115"] and info["usage"]["prompt_tokens"] == 200
     assert "Only these fields are still needed" in p.seen[1]["messages"][0]["content"]
-    assert "Only these" not in p.seen[0]["messages"][0]["content"]
-    assert info["usage"] == {"prompt_tokens": 200, "completion_tokens": 20}
 
 
-def test_the_number_of_rounds_is_a_setting(monkeypatch):
-    from app import limits
+def test_a_protected_files_map_is_masked_but_its_part_names_stay(monkeypatch):
+    monkeypatch.setitem(limits.OVERRIDES, "EXTRACT_MODE", "HYBRID")
+    els = [{"id": "pdf:p1:l1", "kind": "text", "page": 1, "text": "Customer reference: QX-2026-5512"}]
+    p = Scripted(EMPTY)
+    intake_extract.extract(p, [{**files_of(els)[0], "tier": "PROTECTED"}])
+    sent = json.dumps(p.seen[0]["messages"], ensure_ascii=False)
+    shown = json.loads(p.seen[0]["messages"][1]["content"][-1]["text"])["maps"]["1"]
+    assert "QX-2026-5512" not in sent and shown["parts"][0]["part"] == "p1"  # askable, but its words are tokens
 
-    monkeypatch.setitem(limits.OVERRIDES, "EXTRACT_MAX_ROUNDS", 1)
-    els, _, _ = docparse.parse("application/pdf", dossier(), docparse.Budget(10_000))
-    p = Scripted({"documents": [], "links": [], "questions": [], "fields": []})
-    intake_extract.extract(p, [{"file_id": 1, "name": "d.pdf", "tier": "RAW", "elements": els, "images": {}}])
-    assert len(p.seen) == 1
+
+def test_whole_mode_reads_everything_in_pieces_when_it_does_not_fit(monkeypatch):
+    monkeypatch.setitem(limits.OVERRIDES, "EXTRACT_MODE", "WHOLE")
+    els, cov, _ = docparse.parse("application/pdf", dossier(), docparse.Budget(10_000))
+    p = Scripted(*[EMPTY] * 50)
+    _, _, info = intake_extract.extract(p, files_of(els, cov))
+    assert info["pieces"] == 1 and len(sent_ids(p.seen[0])) == len(els)  # fits: one call with every element
+    monkeypatch.setitem(limits.OVERRIDES, "MODEL_CONTEXT_TOKENS", 8192 + 20000)  # a small model: must split
+    p = Scripted(*[EMPTY] * 50)
+    _, _, info = intake_extract.extract(p, files_of(els, cov))
+    got = set().union(*(sent_ids(c) for c in p.seen))
+    assert info["pieces"] > 1 and got == {e["id"] for e in els}  # every element, none twice
+    assert sum(len(sent_ids(c)) for c in p.seen) == len(els)
+
+
+def test_hybrid_reports_what_it_left_unread_and_a_person_can_have_it_all_read(tmp_path):
+    from tests.test_intake_in1 import PDF_FIXTURE, upload
+    from tests.test_intake_in2 import analyze, client
+    from tests.v5_util import H
+
+    els, cov, _ = docparse.parse("application/pdf", dossier(), docparse.Budget(10_000))
+    _, _, info = intake_extract.extract(Scripted(EMPTY), files_of(els, cov), mode="HYBRID")
+    assert info["unread"]["elements"] > 0 and info["unread"]["of"] == len(els) and info["unread"]["missing"]
+    p = Scripted(*[EMPTY] * 6)
+    c = client(tmp_path, p)
+    iid = upload(c, [("c.pdf", PDF_FIXTURE.read_bytes())]).json()["intake_id"]
+    assert analyze(c, iid).json()["draft"]["egress"]["mode"] == "HYBRID"  # the default
+    again = c.post(f"/intakes/{iid}/analyze", params={"read": "WHOLE"}, headers=H("alice")).json()["draft"]
+    assert again["egress"]["mode"] == "WHOLE" and again["version"] == 2  # a person's choice, a new version

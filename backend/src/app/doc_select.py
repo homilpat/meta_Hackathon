@@ -9,13 +9,13 @@ server chooses, and records what it chose and why:
             with the multilingual glossary; ties go to the earliest element), with its neighbours: the element
             before and after (a value often sits on the next line), and for a table cell its whole row and the
             table's header row
-Round 1 takes the best hit per field; a later round (intake_extract) takes the next hit for fields still missing.
+This is round 1 of HYBRID extraction only: the model then sees each document's map (app/doc_map.py) and asks
+for the parts it still needs; no hand-written value patterns are used to guess where values are.
 Elements are only ever left out, never altered; what was sent is listed by id.
 """
 
 import hashlib
 import json
-import re
 
 from app.retrieval import bm25
 
@@ -41,18 +41,7 @@ FIELD_LABELS: dict[str, str] = {
     "reply_deadline": "reply by deadline due respond until 회신 기한 마감 까지 回答期限 截止",
     "customer_cause_claim": "cause caused likely suspect think root 원인 추정 의심 原因 推定",
 }
-# The shape a field's value takes. An element with the label words AND a value of that shape ranks first: the label
-# alone also matches sentences that only mention the word ("please reply soon"). Standard in document extraction.
-DATE = (r"\d{4}[-./]\d{1,2}[-./]\d{1,2}|\d{1,2}[-./]\d{1,2}[-./]\d{2,4}|\d{1,2}\s*(?:월|月)|"
-        r"(?i:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}|"
-        r"(?i:mon|tues|wednes|thurs|fri|satur|sun)day|[월화수목금토일]요일")
-NUMBER = r"(?<![\w.])\d+(?:[.,]\d+)?(?![\w.])"
-CODE = (r"\b(?=[A-Za-z0-9-]*\d)(?=[A-Za-z0-9-]*[A-Za-z])[A-Za-z0-9]+(?:-[A-Za-z0-9]+)+\b"
-        r"|\b[A-Z]{1,3}\d{2,}\b")
-SHAPE = {"issued_date": DATE, "delivery_date": DATE, "found_date": DATE, "reply_deadline": DATE,
-         "inspected_qty": NUMBER, "defective_qty": NUMBER, "customer_ref": CODE, "part_number": CODE, "lot": CODE,
-         "serial_range": CODE}
-LABELS_VERSION = hashlib.sha256(json.dumps([FIELD_LABELS, SHAPE], ensure_ascii=False, sort_keys=True).encode()
+LABELS_VERSION = hashlib.sha256(json.dumps(FIELD_LABELS, ensure_ascii=False, sort_keys=True).encode()
                                 ).hexdigest()[:10]
 
 
@@ -83,22 +72,11 @@ def around(elements: list[dict], i: int) -> list[str]:
 
 
 def ranked(elements: list[dict], field: str) -> list[int]:
-    """Indexes of the elements that share a label term with the field: those whose neighbourhood also holds a value
-    of the field's shape first, then by BM25 score, a table cell before a plain line, the earliest on a tie."""
+    """Indexes of the elements that share a label term with the field: by BM25 score, a table cell before a plain
+    line with the same score (its row and column come with it), the earliest on a tie."""
     scores = bm25(FIELD_LABELS[field], [e.get("text", "") for e in elements])
-    shape = SHAPE.get(field)
-
-    def shaped(i: int) -> bool:
-        if shape is None:
-            return False
-        near = [elements[k].get("text", "") for k in range(max(0, i - 1), min(len(elements), i + 2))]
-        if elements[i]["kind"] == "cell":  # the column below a header label
-            near += [x.get("text", "") for x in elements if x["kind"] == "cell" and x.get("col") == elements[i].get("col")
-                     and x.get("table") == elements[i].get("table") and x.get("page") == elements[i].get("page")]
-        return any(re.search(shape, t) for t in near)
-    hits = [(s, i) for i, (s, _) in enumerate(scores) if s > 0]
-    return [i for _, i in sorted(hits, key=lambda h: (not shaped(h[1]), -h[0], elements[h[1]]["kind"] != "cell",
-                                                      h[1]))]
+    hits = [(sc, i) for i, (sc, _) in enumerate(scores) if sc > 0]
+    return [i for _, i in sorted(hits, key=lambda h: (-h[0], elements[h[1]]["kind"] != "cell", h[1]))]
 
 
 def select(elements: list[dict], fields: list[str], skip_hits: dict[str, int] | None = None,

@@ -3,8 +3,8 @@
 Builds a 120-page synthetic complaint dossier: a cover page with no values, the values scattered on far pages
 (reference on p.37, a LOT/quantity table on p.80, the deadline on p.115, the phenomenon on p.52), and filler pages
 that reuse the same words in other senses ("lot of", "quantity discount", "reply soon"). For each round it reports
-which fields' true elements were selected, how many elements and estimated tokens went out against the whole
-document. Writes docs/evaluations/select_eval.json. Run from backend/:  python -m scripts.select_eval
+which fields' true elements the server's round 1 selected (HYBRID; the model asks for the rest from the map),
+and the elements and estimated tokens against the whole document. Writes docs/evaluations/select_eval.json. Run from backend/:  python -m scripts.select_eval
 """
 
 import io
@@ -69,22 +69,11 @@ def caught(elements: list[dict], ids: set[str]) -> dict[str, bool]:
 def main() -> None:
     elements, _, _ = docparse.parse("application/pdf", dossier(), docparse.Budget(10_000))
     total_tokens = sum(limits.estimate_tokens(json.dumps(e, ensure_ascii=False)) for e in elements)
-    sent: set[str] = set()
-    skip: dict[str, int] = {}
-    rounds = []
-    fields = list(TRUTH)
-    for r in range(1, 4):
-        ids, rep = select(elements, fields, skip, base=(r == 1))
-        sent |= set(ids)
-        got = caught(elements, sent)
-        tokens = sum(limits.estimate_tokens(json.dumps(e, ensure_ascii=False)) for e in elements if e["id"] in sent)
-        rounds.append({"round": r, "elements_sent_total": len(sent), "tokens_sent_total": tokens,
-                       "caught": got, "caught_n": sum(got.values()), "hits": rep["hits"]})
-        fields = [f for f, ok in got.items() if not ok]  # what a model would still be missing
-        for f in fields:
-            skip[f] = skip.get(f, 0) + 1
-        if not fields:
-            break
+    ids, rep = select(elements, list(TRUTH))  # HYBRID round 1 (the server); the model asks for the rest
+    got = caught(elements, set(ids))
+    tokens = sum(limits.estimate_tokens(json.dumps(e, ensure_ascii=False)) for e in elements if e["id"] in set(ids))
+    rounds = [{"round": 1, "elements_sent_total": len(ids), "tokens_sent_total": tokens, "caught": got,
+               "caught_n": sum(got.values()), "hits": rep["hits"]}]
     out = {"pages": PAGES, "elements": len(elements), "tokens_whole_document": total_tokens, "rounds": rounds}
     (EVAL_DIR / "select_eval.json").write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"whole document: {len(elements)} elements, ~{total_tokens} tokens")

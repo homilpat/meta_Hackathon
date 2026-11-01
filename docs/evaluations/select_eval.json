@@ -5,24 +5,24 @@
  "rounds": [
   {
    "round": 1,
-   "elements_sent_total": 43,
-   "tokens_sent_total": 1381,
+   "elements_sent_total": 38,
+   "tokens_sent_total": 1232,
    "caught": {
     "customer_ref": true,
     "phenomenon": true,
     "lot": true,
     "defective_qty": true,
     "inspected_qty": true,
-    "reply_deadline": true
+    "reply_deadline": false
    },
-   "caught_n": 6,
+   "caught_n": 5,
    "hits": {
     "customer_ref": "pdf:p37:l25",
     "phenomenon": "pdf:p52:l25",
-    "lot": "pdf:p80:l25",
+    "lot": "pdf:p80:t1:r1:c1",
     "defective_qty": "pdf:p80:t1:r1:c3",
     "inspected_qty": "pdf:p80:t1:r1:c2",
-    "reply_deadline": "pdf:p115:l25"
+    "reply_deadline": "pdf:p1:l3"
    }
   }
  ]

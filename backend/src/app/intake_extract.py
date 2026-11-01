@@ -50,7 +50,7 @@ _SRC = {"type": "array", "items": {"type": "object", "additionalProperties": Fal
                                    "properties": {"element_id": {"type": "string"}, "excerpt": {"type": "string"}}}}
 EXTRACT_SCHEMA = {"type": "json_schema", "json_schema": {"name": "intake_extract", "strict": True, "schema": {
     "type": "object", "additionalProperties": False,
-    "required": ["documents", "fields", "links", "transcriptions", "questions"],
+    "required": ["documents", "fields", "links", "transcriptions", "need", "questions"],
     "properties": {
         "documents": {"type": "array", "items": {
             "type": "object", "additionalProperties": False, "required": ["file_id", "classes", "needs_confirmation"],
@@ -70,6 +70,9 @@ EXTRACT_SCHEMA = {"type": "json_schema", "json_schema": {"name": "intake_extract
         "transcriptions": {"type": "array", "items": {
             "type": "object", "additionalProperties": False, "required": ["element_id", "text"],
             "properties": {"element_id": {"type": "string"}, "text": {"type": "string"}}}},
+        "need": {"type": "array", "items": {
+            "type": "object", "additionalProperties": False, "required": ["file_id", "part", "why"],
+            "properties": {"file_id": {"type": "integer"}, "part": {"type": "string"}, "why": {"type": "string"}}}},
         "questions": {"type": "array", "items": {"type": "string"}}}}}}
 
 
@@ -128,57 +131,115 @@ def model_input(files: list[dict], protected: str = "MASK", masker=None, reserve
     return parts, withheld, sent
 
 
-def narrowed(files: list[dict], fields: list[str], skip: dict[str, int], base: bool,
-             sent_ids: set[tuple[int, str]]) -> tuple[list[dict], list[dict]]:
-    """Each file cut down to the elements the server selects (app/doc_select.py) and not yet sent; its images only
-    if their element was selected. Returns (files to send, selection reports)."""
-    from app import doc_select
+HYBRID_NOTE = """You see only parts of the documents, chosen by the server, and a map of each document: its own table
+of contents (if any) and one short entry per page or section ("part"). If a field you need is not in the parts you
+see, list in `need` the parts that most likely hold it (part names exactly as in the map, with a short reason).
+Ask only for parts the map lists; never guess a value you have not seen."""
 
-    out, reports = [], []
+
+def mask_map(m: dict, masker) -> dict:
+    """A protected file's map: its words masked like its text; part names stay so the model can ask for them."""
+    return {"toc": [{**t, "title": masker.mask(t["title"])} for t in m["toc"]], "toc_pages": m["toc_pages"],
+            "parts": [{**x, "first": masker.mask(x["first"]), "header": [masker.mask(h) for h in x["header"]],
+                       "captions": [masker.mask(c) for c in x["captions"]]} for x in m["parts"]]}
+
+
+def merge(raw: dict, more: dict, info: dict, more_info: dict) -> None:
+    for k in ("fields", "transcriptions", "links", "questions", "documents"):
+        raw[k] = [*raw.get(k, []), *more.get(k, [])]
+    for k in ("prompt_tokens", "completion_tokens", "total_tokens"):
+        if k in more_info["usage"]:
+            info["usage"][k] = info["usage"].get(k, 0) + more_info["usage"][k]
+    info["files"] += [x for x in more_info["files"] if x not in info["files"]]
+    info["estimated_input_tokens"] += more_info["estimated_input_tokens"]
+
+
+def rest_of(files: list[dict], sent: list[dict]) -> list[dict]:
+    """What a capped call did not send: each file from its first unsent element on."""
+    cut = {x["file_id"]: x["not_sent_from"] for x in sent if x.get("not_sent_from")}
+    out = []
     for f in files:
-        ids, rep = doc_select.select(f["elements"], fields, skip, base)
-        keep = [i for i in ids if (f["file_id"], i) not in sent_ids]  # ids repeat across files
-        sent_ids.update((f["file_id"], i) for i in keep)
-        chosen = set(keep)
-        reports.append({"file_id": f["file_id"], **rep, "sent_now": len(keep)})
-        if keep:
-            out.append({**f, "elements": [e for e in f["elements"] if e["id"] in chosen],
-                        "images": {k: v for k, v in f.get("images", {}).items() if k in chosen}})
-    return out, reports
+        if f["file_id"] in cut:
+            ids = [e["id"] for e in f["elements"]]
+            out.append({**f, "elements": f["elements"][ids.index(cut[f["file_id"]]):], "images": {}})
+    return out
 
 
-def extract(provider: ModelProvider, files: list[dict], protected: str = "MASK") -> tuple[dict, list[dict], dict]:
-    """(model output with tokens mapped back, withheld files, what was sent). Round 1 sends the server-selected
-    parts of each file; round 2 (EXTRACT_MAX_ROUNDS) asks only for fields still missing, with their next candidate
-    parts. Raises ProviderError on transport or JSON failure of round 1."""
-    sent_ids: set[tuple[int, str]] = set()
-    chunk, reports = narrowed(files, FIELDS, {}, True, sent_ids)
-    raw, withheld, info = extract_once(provider, chunk or files, protected)
-    info["selection"] = [reports]
+def whole(provider: ModelProvider, files: list[dict], protected: str) -> tuple[dict, list[dict], dict]:
+    """Every element is read: one call when the documents fit the model's input, otherwise consecutive pieces."""
+    raw, withheld, info = extract_once(provider, files, protected)
+    info["pieces"] = 1
+    rest = rest_of(files, info["files"])
+    while rest:
+        more, _, more_info = extract_once(provider, rest, protected)
+        merge(raw, more, info, more_info)
+        info["pieces"] += 1
+        rest = rest_of(rest, more_info["files"])
+    return raw, withheld, info
+
+
+def hybrid(provider: ModelProvider, files: list[dict], protected: str) -> tuple[dict, list[dict], dict]:
+    """Round 1: the server's selection plus each document's map. Later rounds: the parts the model asked for
+    (only parts the map lists, not sent before, at most HYBRID_MAX_PARTS_PER_ROUND), for fields still missing."""
+    from app import doc_map, doc_select
+
+    maps = {f["file_id"]: doc_map.build(f["elements"], f.get("coverage", {})) for f in files}
+    sent: set[tuple[int, str]] = set()
+    chunk = []
+    for f in files:
+        ids, _ = doc_select.select(f["elements"], FIELDS)
+        sent.update((f["file_id"], i) for i in ids)
+        chunk.append({**f, "elements": [e for e in f["elements"] if e["id"] in set(ids)],
+                      "images": {k: v for k, v in f.get("images", {}).items() if k in set(ids)}})
+    raw, withheld, info = extract_once(provider, chunk, protected, maps=maps)
+    info["rounds"] = [{"round": 1, "sent": len(sent), "asked": []}]
     for r in range(2, limits.get("EXTRACT_MAX_ROUNDS") + 1):
         missing = [k for k, v in draft(raw, files)["fields"].items() if v["status"] == "MISSING"]
-        chunk, reports = narrowed(files, missing, dict.fromkeys(missing, r - 1), False, sent_ids)
+        asked = [(int(n.get("file_id", -1)), str(n.get("part", ""))) for n in raw.get("need", [])]
+        by_id = {f["file_id"]: f for f in files}
+        parts = [(fid, part) for fid, part in dict.fromkeys(asked) if fid in by_id
+                 and any(x["part"] == part for x in maps[fid]["parts"])][:limits.get("HYBRID_MAX_PARTS_PER_ROUND")]
+        chunk = []
+        for fid, part in parts:
+            new = [e for e in doc_map.elements_of(by_id[fid]["elements"], part) if (fid, e["id"]) not in sent]
+            sent.update((fid, e["id"]) for e in new)
+            if new:
+                chunk.append({**by_id[fid], "elements": new,
+                              "images": {k: v for k, v in by_id[fid].get("images", {}).items()
+                                         if k in {e["id"] for e in new}}})
         if not missing or not chunk:
             break
         try:
-            more, _, more_info = extract_once(provider, chunk, protected, only=missing)
-        except ProviderError as exc:  # round 1 stands; say why the rest was not tried further
-            info["selection"].append([{"error": str(exc)}])
+            more, _, more_info = extract_once(provider, chunk, protected, only=missing, maps=maps)
+        except ProviderError as exc:  # earlier rounds stand; say why no more was read
+            info["rounds"].append({"round": r, "error": str(exc)})
             break
-        info["selection"].append(reports)
-        for k in ("fields", "transcriptions", "links", "questions"):
-            raw[k] = [*raw.get(k, []), *more.get(k, [])]
-        for k in ("prompt_tokens", "completion_tokens", "total_tokens"):
-            if k in more_info["usage"]:
-                info["usage"][k] = info["usage"].get(k, 0) + more_info["usage"][k]
-        info["files"] += [s for s in more_info["files"] if s not in info["files"]]
-    info["rounds"] = len(info["selection"])
+        raw["need"] = more.get("need", [])
+        merge(raw, more, info, more_info)
+        info["rounds"].append({"round": r, "sent": sum(len(c["elements"]) for c in chunk),
+                               "asked": [f"{fid}:{part}" for fid, part in parts]})
+    info["mode"] = "HYBRID"
+    total = sum(len(f["elements"]) for f in files)
+    info["unread"] = {"elements": total - len(sent), "of": total,  # what a person may choose to have read in full
+                      "missing": [k for k, v in draft(raw, files)["fields"].items() if v["status"] == "MISSING"]}
+    return raw, withheld, info
+
+
+def extract(provider: ModelProvider, files: list[dict], protected: str = "MASK",
+            mode: str | None = None) -> tuple[dict, list[dict], dict]:
+    """(model output with tokens mapped back, withheld files, what was sent). EXTRACT_MODE WHOLE (default) reads
+    every element; HYBRID sends the server's selection and a map, and the model asks for missing parts. Raises
+    ProviderError when the first call fails."""
+    if (mode or limits.get("EXTRACT_MODE")) == "HYBRID":
+        return hybrid(provider, files, protected)
+    raw, withheld, info = whole(provider, files, protected)
+    info["mode"] = "WHOLE"
     return raw, withheld, info
 
 
 def extract_once(provider: ModelProvider, files: list[dict], protected: str = "MASK",
-                 only: list[str] | None = None) -> tuple[dict, list[dict], dict]:
-    """One model call over the given (already selected) elements."""
+                 only: list[str] | None = None, maps: dict | None = None) -> tuple[dict, list[dict], dict]:
+    """One model call over the given (already selected) elements, with the documents' maps in hybrid mode."""
     from app.egress import MASK_NOTE, Masker, masked_payload_record
 
     masker = Masker()
@@ -188,8 +249,12 @@ def extract_once(provider: ModelProvider, files: list[dict], protected: str = "M
     parts, withheld, sent = model_input(files, protected, masker, reserve)
     if not parts:
         raise ProviderError("no file is cleared for external processing")
+    if maps:  # the map says what the document holds: masked like its file when the file is protected
+        how = {x["file_id"]: x["sent"] for x in sent}
+        shown = {fid: m if how.get(fid) == "RAW" else mask_map(m, masker) for fid, m in maps.items() if fid in how}
+        parts.append({"type": "text", "text": json.dumps({"maps": shown}, ensure_ascii=False)})
     masked = any(s["sent"] == "MASKED" for s in sent)
-    system = EXTRACT_PROMPT + ("\n" + MASK_NOTE if masked else "") + (  # what is actually sent (the reserve above
+    system = EXTRACT_PROMPT + ("\n" + MASK_NOTE if masked else "") + ("\n" + HYBRID_NOTE if maps else "") + (
         f"\nOnly these fields are still needed: {', '.join(only)}. Return the others empty." if only else "")
     reply = provider.chat([{"role": "system", "content": system},
                            {"role": "user", "content": parts}], [], response_format=EXTRACT_SCHEMA,
@@ -199,6 +264,7 @@ def extract_once(provider: ModelProvider, files: list[dict], protected: str = "M
         out = json.loads(msg.get("content") or "")
         assert all(k in out for k in ("documents", "fields", "links", "questions"))
         out.setdefault("transcriptions", [])
+        out.setdefault("need", [])
     except (ValueError, AssertionError, TypeError) as exc:
         raise ProviderError(f"extraction is not valid JSON ({type(exc).__name__})") from None
     info = {"files": sent, "provider_mode": provider.mode, "usage": reply.get("usage") or {},

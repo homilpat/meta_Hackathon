@@ -42,19 +42,34 @@ A 10 MB XLSX (about 18 s) and CSV (about 1 s) fit the 50 s budget. A 10 MB text-
 not: about 3,400 pages are processed and the rest is reported as unprocessed. The measurements depend on the
 machine, so run the script again on the target server before changing the budget.
 
-## What is sent: server selection (`app/doc_select.py`)
+## How documents reach the model (EXTRACT_MODE)
 
-The model does not get whole documents. The server sends, in document order:
-- the head (PDF page 1, or up to the end of the first table);
-- captions, chart data and scanned pages;
-- per field, the best-ranked element with its neighbours, its table row, its header row and its column.
+**HYBRID (default, user decision 2026-11-02).**
+1. The server sends a first selection: the document head; captions, charts and scans; and per field the best BM25
+   hit for its label words, with its table row, header and column.
+2. It also sends a map of each document (`app/doc_map.py`):
+   - the author's table of contents (PDF bookmarks, DOCX heading styles, contents pages);
+   - heading candidates: lines standing alone, shorter than the document's median line, not ending like a
+     sentence, and not repeated across pages (repeats are boilerplate);
+   - per page or section: the first line, table headers, captions, and the words found in no other part (the
+     TF-IDF idea).
+3. The model asks for the parts it still needs (`need`, at most HYBRID_MAX_PARTS_PER_ROUND per round, up to
+   EXTRACT_MAX_ROUNDS), and the server sends only those.
+4. What stays unread is shown with the fields not found. A person can re-run the analysis reading everything
+   (`POST /intakes/{id}/analyze?read=WHOLE`). Nothing is read in full automatically.
 
-Ranking is BM25 over each field's label words (multilingual glossary), with elements whose neighbourhood holds a
-value of the field's shape (date, number, code) first. Round 2 asks only for missing fields with their next hit.
-Label words and shapes are versioned (`labels_version` is recorded with every analysis).
+**WHOLE.** Every element, in pieces when the documents exceed the model's input.
 
-Measured: `python -m scripts.select_eval` (offline, 120-page dossier) caught 6/6 planted values in round 1 with
-about 1.4% of the document's tokens. LIVE (`intake_live_check large`): selected 6/6 at 2,656 prompt tokens vs whole
-6/6 at 130,024. Limits: a label written in words outside the list and outside the glossary can be missed in round 1
-(round 2 then takes the next candidate). The test document is synthetic and one layout; real documents need the
-same measurement.
+No hand-written value patterns decide what is sent. Values are always checked against their source location.
+
+| Measured | Result |
+|---|---|
+| Offline, server first pass only, held-out H1/H2/H3 | 3/6, 6/6, 4/6 (the model's requests have to fill the rest) |
+| LIVE HYBRID, held-out (never used for tuning) | H1 6/6 at 12,636 prompt tokens; H2 6/6 at 2,313; H3 6/6 at 8,729 |
+| LIVE WHOLE, same documents | 6/6 each, at 51,766 / 1,542 / 38,240 |
+
+Limits:
+- The held-out documents are synthetic, one per layout.
+- HYBRID takes a second call when it needs parts (about 9–10 s vs 7–8 s).
+- A document whose values leave no trace in the map can still be missed. The unread notice and the whole-read
+  button are for that case.

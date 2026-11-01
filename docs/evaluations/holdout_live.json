@@ -1,0 +1,92 @@
+{
+ "H1/WHOLE": {
+  "caught": 6,
+  "of": 6,
+  "missed": [],
+  "prompt_tokens": 51766,
+  "seconds": 7.7,
+  "rounds": null,
+  "pieces": 1
+ },
+ "H1/HYBRID": {
+  "caught": 6,
+  "of": 6,
+  "missed": [],
+  "prompt_tokens": 12636,
+  "seconds": 9.7,
+  "rounds": [
+   {
+    "round": 1,
+    "sent": 27,
+    "asked": []
+   },
+   {
+    "round": 2,
+    "sent": 85,
+    "asked": [
+     "1:p3",
+     "1:p22",
+     "1:p41",
+     "1:p57"
+    ]
+   }
+  ],
+  "pieces": null
+ },
+ "H2/WHOLE": {
+  "caught": 6,
+  "of": 6,
+  "missed": [],
+  "prompt_tokens": 1542,
+  "seconds": 3.4,
+  "rounds": null,
+  "pieces": 1
+ },
+ "H2/HYBRID": {
+  "caught": 6,
+  "of": 6,
+  "missed": [],
+  "prompt_tokens": 2313,
+  "seconds": 3.4,
+  "rounds": [
+   {
+    "round": 1,
+    "sent": 22,
+    "asked": []
+   }
+  ],
+  "pieces": null
+ },
+ "H3/WHOLE": {
+  "caught": 6,
+  "of": 6,
+  "missed": [],
+  "prompt_tokens": 38240,
+  "seconds": 6.6,
+  "rounds": null,
+  "pieces": 1
+ },
+ "H3/HYBRID": {
+  "caught": 6,
+  "of": 6,
+  "missed": [],
+  "prompt_tokens": 8729,
+  "seconds": 8.9,
+  "rounds": [
+   {
+    "round": 1,
+    "sent": 26,
+    "asked": []
+   },
+   {
+    "round": 2,
+    "sent": 46,
+    "asked": [
+     "1:p27",
+     "1:p39"
+    ]
+   }
+  ],
+  "pieces": null
+ }
+}

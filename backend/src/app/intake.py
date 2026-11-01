@@ -13,7 +13,7 @@ import io
 import re
 import zipfile
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import Response
@@ -223,13 +223,14 @@ def route(provider: ModelProvider | None, local: ModelProvider | None, inputs: l
     return provider, "MASK" if MASKED_EGRESS else "WITHHOLD"
 
 
-def analysis(provider: ModelProvider | None, inputs: list[dict], local: ModelProvider | None = None):
+def analysis(provider: ModelProvider | None, inputs: list[dict], local: ModelProvider | None = None,
+             read: str | None = None):
     """(mode, status, model output, withheld files, error, egress info). Never raises for model problems."""
     model, protected = route(provider, local, inputs)
     if model is None:
         return "OFFLINE", "OFFLINE", None, [], "Meta 미연결: 원문을 보고 직접 입력하세요.", None
     try:
-        raw, withheld, info = intake_extract.extract(model, inputs, protected)
+        raw, withheld, info = intake_extract.extract(model, inputs, protected, read)
         return model.mode, "PARTIAL" if withheld or any(s["sent"] == "MASKED" for s in info["files"]) else "OK", \
             raw, withheld, None, info
     except ProviderError as exc:
@@ -239,7 +240,7 @@ def analysis(provider: ModelProvider | None, inputs: list[dict], local: ModelPro
 def add_draft_routes(router: APIRouter, sessions: sessionmaker, Who, IdemKey, provider: ModelProvider | None,
                      local: ModelProvider | None = None) -> None:
     @router.post("/intakes/{intake_id}/analyze", status_code=201)
-    def analyze(intake_id: int, key: IdemKey, actor: Who):
+    def analyze(intake_id: int, key: IdemKey, actor: Who, read: Literal["WHOLE", "HYBRID"] | None = None):
         """Parse every file (server), then one Muse extraction over the files cleared for egress, checked by the
         server. No provider, nothing cleared, or a model failure: an empty draft for manual entry, never a guess."""
         with sessions.begin() as session:
@@ -249,8 +250,10 @@ def add_draft_routes(router: APIRouter, sessions: sessionmaker, Who, IdemKey, pr
                 pp = parsed(session, f)
                 inputs.append({"file_id": f.id, "name": f.name, "data_origin": f.data_origin,
                                "tier": egress.tier_of(session, f), "elements": pp.elements,
+                               "coverage": pp.coverage,
                                "images": docparse.parse(f.media_type, f.content)[2]})
-        mode, status, raw, withheld, error, info = analysis(provider, inputs, local)  # outside any transaction
+        # read=WHOLE: a person chose to have every part read (e.g. after HYBRID left fields unfound)
+        mode, status, raw, withheld, error, info = analysis(provider, inputs, local, read)  # outside any transaction
         checked = {**intake_extract.draft(raw, inputs), "egress": info}
 
         def run(session: Session) -> tuple[int, dict]:

@@ -17,7 +17,7 @@ from typing import Any
 
 from lxml import etree
 
-PARSER_VERSION = "docparse-2"  # 2: PDF table cells rebuilt from text positions
+PARSER_VERSION = "docparse-3"  # 2: PDF table cells from positions; 3: PDF outline, DOCX headings, TOC pages
 RENDER_SCALE = 1.0  # one PDF point per pixel (72 dpi): the page as laid out, no upscaling
 RENDER_ERRORS = (RuntimeError, OSError, ValueError, MemoryError)  # pypdfium2.PdfiumError is a RuntimeError
 CAPTION = re.compile(r"^\s*(그림|사진|표|Fig\.?|Figure|Photo|Table)\s*\d", re.IGNORECASE)
@@ -243,8 +243,34 @@ def parse_pdf(data: bytes, budget: "Budget | None" = None) -> tuple[list[dict], 
                 "charts": "IMAGE_ONLY" if blobs else "NONE",
                 "charts_note": "PDF 안의 차트는 그림이라 원본 수치가 없습니다 (그림 수치는 공식 통계에 쓰지 않음)",
                 "scan": "NEEDS_VISION" if scans else "NONE", "scan_pages": scans, **budget.report()}
+    coverage["outline"] = pdf_outline(reader)
+    coverage["toc_pages"] = sorted({e["page"] for e in elements if e["kind"] == "text" and TOC.match(e["text"])})
     coverage.update(render_check(data, len(reader.pages), budget))
     return elements, coverage, blobs
+
+
+TOC = re.compile(r"^\s*(table of contents|contents|목\s*차|차\s*례|目\s*次)\s*$", re.IGNORECASE)
+
+
+def pdf_outline(reader) -> list[dict]:
+    """The PDF's bookmarks as [{title, page, level}], in order; [] when the author made none or they are broken."""
+    out: list[dict] = []
+
+    def walk(items, level: int) -> None:
+        for it in items:
+            if isinstance(it, list):
+                walk(it, level + 1)
+                continue
+            try:
+                out.append({"title": str(it.title).strip(), "page": reader.get_destination_page_number(it) + 1,
+                            "level": level})
+            except (AttributeError, KeyError, TypeError, ValueError):
+                continue  # a bookmark without a resolvable page is skipped, not guessed
+    try:
+        walk(reader.outline, 1)
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return []
+    return out
 
 
 def render_check(data: bytes, pages: int, budget: "Budget") -> dict:
@@ -349,6 +375,16 @@ def compare_workbook(z: zipfile.ZipFile, part: str, target: str, series: list[di
     return result
 
 
+def heading_level(p) -> int | None:
+    """The heading level a paragraph declares (style id Heading1.. / 제목1.., or w:outlineLvl), else None."""
+    style = p.find("w:pPr/w:pStyle", NS)
+    m = re.match(r"(?i)(?:heading|제목|title)\s*(\d)?", style.get(w("w:val")) or "") if style is not None else None
+    if m:
+        return int(m.group(1) or 1)
+    lvl = p.find("w:pPr/w:outlineLvl", NS)
+    return int(lvl.get(w("w:val"))) + 1 if lvl is not None else None
+
+
 def parse_docx(data: bytes) -> tuple[list[dict], dict, dict[str, bytes]]:
     z = zipfile.ZipFile(io.BytesIO(data))
     body = etree.fromstring(z.read("word/document.xml"), SAFE_XML).find("w:body", NS)
@@ -365,7 +401,10 @@ def parse_docx(data: bytes) -> tuple[list[dict], dict, dict[str, bytes]]:
             el["caption_id"] = pid if text and CAPTION.match(text) else None
         pending.clear()
         if text:
-            elements.append({"id": pid, "kind": "text", "text": text})
+            el = {"id": pid, "kind": "text", "text": text}
+            if (level := heading_level(p)) is not None:
+                el["heading"] = level
+            elements.append(el)
         for blip in p.iter(w("a:blip")):
             target = rels.get(blip.get(w("r:embed")))
             if target and f"word/{target}" in z.namelist():

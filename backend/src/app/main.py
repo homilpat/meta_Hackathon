@@ -34,6 +34,7 @@ from app.eightd import make_v5_router
 from app.experience import make_experience_router
 from app.export import make_export_router
 from app.ingestion import SyntheticBundle, normalize
+from app.intake import make_intake_router
 from app.ml_api import make_ml_router
 from app.model_provider import MODEL, MetaProvider, ModelProvider
 from app.synthetic import (
@@ -136,6 +137,7 @@ def create_app(database_url: str | None = None,
     app.include_router(make_docs_router(sessions, current_user, app.state.provider))
     app.include_router(make_export_router(sessions, current_user))
     app.include_router(make_agent_router(app, sessions, current_user, app.state.provider))
+    app.include_router(make_intake_router(sessions, current_user))
 
     @app.get("/task-router")
     def task_router(actor: Who) -> list[dict]:

@@ -1,6 +1,16 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import DDL, JSON, ForeignKey, Integer, String, Text, UniqueConstraint, event
+from sqlalchemy import (
+    DDL,
+    JSON,
+    ForeignKey,
+    Integer,
+    LargeBinary,
+    String,
+    Text,
+    UniqueConstraint,
+    event,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -864,6 +874,37 @@ class AgentStep(Base):
     created_at: Mapped[str] = mapped_column(String(40))
 
 
+class IntakeRecord(Base):
+    """One customer-document intake (spec §23). Exists before, and apart from, any Quality Case."""
+
+    __tablename__ = "intake_records"
+    __table_args__ = (UniqueConstraint("owner_id", "idem_key"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    idem_key: Mapped[str] = mapped_column(String(80))
+    channel: Mapped[str] = mapped_column(String(20))  # CHAT_UPLOAD (EMAIL later reuses the same pipeline)
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class IntakeFile(Base):
+    """An original file as received: bytes, sniffed type, hash and checks. Never modified or executed."""
+
+    __tablename__ = "intake_files"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    intake_id: Mapped[int] = mapped_column(ForeignKey("intake_records.id"), index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    media_type: Mapped[str] = mapped_column(String(100))  # from the bytes, not the extension
+    size: Mapped[int] = mapped_column(Integer)
+    sha256: Mapped[str] = mapped_column(String(64))
+    content: Mapped[bytes] = mapped_column(LargeBinary)
+    data_origin: Mapped[str] = mapped_column(String(20))  # SYNTHETIC only for an allowlisted fixture, else UNKNOWN
+    checks: Mapped[dict] = mapped_column(JSON)  # pages, active content, macros, external links (never followed)
+    uploaded_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    uploaded_at: Mapped[str] = mapped_column(String(40))
+
+
 # Audit rows are append-only at the database level, not just by convention.
 APPEND_ONLY = ("approval_events", "workflow_events", "doc_comments", "audit_chain",
                "workflow_policies", "evidence_quality", "process_contexts", "affected_objects",
@@ -872,7 +913,8 @@ APPEND_ONLY = ("approval_events", "workflow_events", "doc_comments", "audit_chai
                "effectiveness_plans", "effectiveness_results",
                "controlled_documents", "prevention_deployments", "closure_acks", "closures",
                "template_contracts", "validation_runs",
-               "experience_entries", "experience_retrievals", "recommendation_decisions", "agent_steps")
+               "experience_entries", "experience_retrievals", "recommendation_decisions", "agent_steps",
+               "intake_files")
 
 
 def append_only_ddl(table: str) -> list[str]:

@@ -17,17 +17,18 @@ dependencies = [
   "lightgbm==4.7.0",
   "reportlab>=4.2,<6",
   "pypdf>=5,<7",
+  "python-docx>=1.1,<2",
 ]
 
 [project.optional-dependencies]
-dev = ["httpx>=0.28,<1", "pytest>=8,<10", "ruff>=0.11,<1", "python-docx>=1.1,<2"]
+dev = ["httpx>=0.28,<1", "pytest>=8,<10", "ruff>=0.11,<1"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["app*"]
 
 [tool.setuptools.package-data]
-app = ["static/*.html", "static/web/*", "static/web/assets/*"]
+app = ["static/*.html", "static/web/*", "static/web/assets/*", "fixtures/intake/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

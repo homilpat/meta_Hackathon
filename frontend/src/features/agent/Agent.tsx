@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Badge, Card, Icon } from '../../components/ui'
 import type { Ctx, J, Tone } from '../../types'
+import { IntakePanel } from '../intake/Intake'
 import { RunView } from './RunView'
 
 // What the provider status actually says; never "LIVE" unless the server verified a LIVE run.
@@ -58,7 +59,9 @@ export function Agent({ ctx, provider, go }: { ctx: Ctx; provider: J; go: (view:
         <button className="button primary" onClick={() => go('my')}>내 할 일</button><button className="button secondary" onClick={() => go('approvals')}>승인 대기</button>
         <button className="button secondary" onClick={() => go('eightd')}>D0~D8 진행</button><button className="button secondary" onClick={() => go('reports')}>문서 · 결재</button></div></Card>
       : <div className="conversation">
-        {runs === null && <p className="muted">서버에서 이 사건의 Agent 기록을 불러오는 중…</p>}
+        <IntakePanel ctx={ctx}/>
+        {!ctx.cid && <Card><b>선택된 사건이 없습니다.</b><p className="muted">고객 문서를 첨부해 접수하거나, 사건을 만든 뒤 Agent에게 목표를 보내세요.</p></Card>}
+        {ctx.cid && runs === null && <p className="muted">서버에서 이 사건의 Agent 기록을 불러오는 중…</p>}
         {runs?.length === 0 && <Card><b>이 사건의 Agent 기록이 없습니다.</b><p className="muted">예시:</p><div className="row-gap">{EXAMPLES.map(x => <button key={x} className="button secondary" onClick={() => setGoal(x)}>{x}</button>)}</div></Card>}
         {ordered.map(r => <div key={r.run_id}>
           <div className="message user-message"><div className="avatar user">{r.user_id[0].toUpperCase()}</div><div><span>{r.user_id} · {r.created_at?.slice(0, 19)}</span><p className="wrap">{r.goal}</p></div></div>

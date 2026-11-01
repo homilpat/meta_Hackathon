@@ -1,0 +1,117 @@
+{
+ "model": "muse-spark-1.3",
+ "mode": "LIVE",
+ "latency_ms": 8395,
+ "fixture": "live_complaint_DS-QN-2026-0099.pdf",
+ "fields_ok": 8,
+ "fields_total": 8,
+ "rows": [
+  {
+   "field": "customer_ref",
+   "want": "DS-QN-2026-0099",
+   "got": "DS-QN-2026-0099",
+   "status": "FOUND",
+   "ok": true,
+   "locator": [
+    "pdf:p1:l3"
+   ]
+  },
+  {
+   "field": "lot",
+   "want": "L05",
+   "got": "L05",
+   "status": "FOUND",
+   "ok": true,
+   "locator": [
+    "pdf:p1:l12"
+   ]
+  },
+  {
+   "field": "defective_qty",
+   "want": "7",
+   "got": "7",
+   "status": "FOUND",
+   "ok": true,
+   "locator": [
+    "pdf:p1:l14"
+   ]
+  },
+  {
+   "field": "part_number",
+   "want": "PCB-BMS-310 rev A",
+   "got": "PCB-BMS-310 rev A",
+   "status": "FOUND",
+   "ok": true,
+   "locator": [
+    "pdf:p1:l4"
+   ]
+  },
+  {
+   "field": "delivery_date",
+   "want": "2026-10-20",
+   "got": "2026-10-20",
+   "status": "FOUND",
+   "ok": true,
+   "locator": [
+    "pdf:p1:l4"
+   ]
+  },
+  {
+   "field": "found_date",
+   "want": "2026-10-28",
+   "got": "2026-10-28",
+   "status": "FOUND",
+   "ok": true,
+   "locator": [
+    "pdf:p1:l4"
+   ]
+  },
+  {
+   "field": "inspected_qty",
+   "want_status": "MISSING",
+   "status": "MISSING",
+   "kind": "CUSTOMER_REPORTED",
+   "ok": true
+  },
+  {
+   "field": "customer_cause_claim",
+   "want_status": "FOUND",
+   "status": "FOUND",
+   "kind": "HYPOTHESIS",
+   "ok": true
+  }
+ ],
+ "checks": {
+  "deadline_absolute": true,
+  "no_rate_note": true,
+  "injection_flagged": true,
+  "image_linked": true,
+  "rejected_values": 0
+ },
+ "documents": [
+  {
+   "classes": [
+    "COMPLAINT"
+   ],
+   "file_id": 1,
+   "needs_confirmation": false
+  }
+ ],
+ "questions": [
+  "검사 수량은 몇 개입니까?",
+  "발견 공정이 입고 검사가 맞습니까?",
+  "주간 불량 추이 차트의 기간별 수치를 알려주세요."
+ ],
+ "coverage": {
+  "text": "OK",
+  "tables": "PARTIAL",
+  "tables_note": "PDF 표는 텍스트 줄로만 추출되며 셀 구조는 보존되지 않습니다",
+  "images": "OK",
+  "charts": "IMAGE_ONLY",
+  "charts_note": "PDF 안의 차트는 그림이라 원본 수치가 없습니다 (그림 수치는 공식 통계에 쓰지 않음)",
+  "scan": "NONE",
+  "scan_pages": 0,
+  "render": "OK",
+  "rendered_pages": 2
+ }
+}

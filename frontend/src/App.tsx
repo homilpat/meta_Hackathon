@@ -12,6 +12,7 @@ import { Impact } from './features/impact/Impact'
 import { Investigation } from './features/investigation/Investigation'
 import { Prediction } from './features/prediction/Prediction'
 import { Queue } from './features/queue/Queue'
+import { Requests } from './features/requests/Requests'
 import { Agent } from './features/agent/Agent'
 import { ContextPanel } from './features/agent/ContextPanel'
 import { Spc } from './features/spc/Spc'
@@ -25,7 +26,7 @@ const primary = [
 const specialist = [
   ['eightd', 'D0~D8 진행', 'nodes'], ['spc', 'SPC 라인 모니터링', 'pulse'], ['data', '제조 데이터 · 증거', 'database'], ['prediction', '품질 예측 · XAI', 'chart'],
   ['investigation', 'AI 품질 조사', 'spark'], ['history', '과거 품질 사례', 'history'], ['reports', '문서 · 결재', 'document'],
-  ['impact', '변경 영향 분석', 'nodes'], ['audit', '감사 · 보안', 'shield'],
+  ['impact', '변경 영향 분석', 'nodes'], ['requests', '요청 · 회신 · 책임', 'check'], ['audit', '감사 · 보안', 'shield'],
 ] as const
 const nav = [...primary, ...specialist]
 const WITH_CONTEXT = ['agent', 'my', 'dept', 'approvals']
@@ -74,10 +75,10 @@ export default function App() {
   const screens: Record<string, ReactNode> = {
     dashboard: <Dashboard ctx={ctx} cases={cases} onNew={newCase}/>, agent: <Agent ctx={ctx} provider={provider} go={go}/>, my: <Queue key="mine" ctx={ctx} scope="mine"/>, dept: <Queue key="dept" ctx={ctx} scope="department"/>,
     approvals: <Queue key="approvals" ctx={ctx} scope="approvals"/>, eightd: <EightD ctx={ctx}/>, spc: <Spc ctx={ctx}/>, data: <DataWorkspace ctx={ctx}/>, prediction: <Prediction ctx={ctx}/>,
-    investigation: <Investigation ctx={ctx} provider={provider}/>, history: <HistoryScreen ctx={ctx}/>, reports: <Reports ctx={ctx}/>, impact: <Impact ctx={ctx}/>, audit: <Audit ctx={ctx}/>,
+    investigation: <Investigation ctx={ctx} provider={provider}/>, history: <HistoryScreen ctx={ctx}/>, reports: <Reports ctx={ctx}/>, impact: <Impact ctx={ctx}/>, requests: <Requests ctx={ctx}/>, audit: <Audit ctx={ctx}/>,
   }
   const showTools = toolsOpen || specialist.some(x => x[0] === active)
-  const page = cid || active === 'dashboard' || active === 'spc' ? screens[active] : <main className="page"><Card><Empty>배정된 사건이 없습니다.</Empty></Card></main>
+  const page = cid || ['dashboard', 'spc', 'agent', 'requests'].includes(active) ? screens[active] : <main className="page"><Card><Empty>배정된 사건이 없습니다.</Empty></Card></main>
   return <div className="app">
     <aside className="sidebar">
       <div className="brand"><div className="brand-mark"><span/><span/><span/></div><div><b>QualityOps</b><small>AI</small></div></div>

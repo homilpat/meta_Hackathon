@@ -148,6 +148,11 @@ def make_intake_case_router(sessions: sessionmaker, current_user) -> APIRouter:
                 raise HTTPException(409, "확인이 필요한 항목이 있습니다: " + ", ".join(open_items)
                                     + " (값을 선택하거나 직접 입력한 뒤 확인하세요)")
             files = session.scalars(select(IntakeFile).where(IntakeFile.intake_id == r.id)).all()
+            confirmed = [k for k, v in x.draft["fields"].items()
+                         if v.get("value") and v["status"] in ("FOUND", "USER_SET")]
+            if body.action == "NEW_CASE" and not confirmed:
+                raise HTTPException(409, "확인된 값이 하나도 없습니다: 원문을 보고 최소한 현상이나 고객 참조번호를 입력한 뒤 "
+                                         "사건을 만드세요 (근거 없는 사건은 D0에서 인용할 증거가 없습니다)")
             if body.action == "NEW_CASE":
                 case_id = f"CC-{r.id}"
                 if session.get(QualityCase, case_id):

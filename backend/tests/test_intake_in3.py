@@ -130,6 +130,14 @@ def test_linking_to_an_existing_case_adds_evidence_and_never_reopens_or_touches_
     assert r.status_code == 409 and "재개하지 않습니다" in r.json()["detail"]  # T14
 
 
+def test_a_new_case_needs_at_least_one_confirmed_value(tmp_path):
+    c = client(tmp_path, None)  # OFFLINE: nothing extracted
+    iid = upload(c, [("c.pdf", PDF_FIXTURE.read_bytes())]).json()["intake_id"]
+    c.post(f"/intakes/{iid}/analyze", headers=H("alice"))
+    r = confirm(c, iid, 1)
+    assert r.status_code == 409 and "확인된 값" in r.json()["detail"] and cases(c) == 0
+
+
 def test_duplicate_candidates_are_shown_never_merged(tmp_path):
     c, iid = drafted(tmp_path)
     confirm(c, iid, resolve(c, iid, 1))

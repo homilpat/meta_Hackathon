@@ -42,6 +42,18 @@ Status is what was actually executed; `NOT_RUN` / `NOT_IMPLEMENTED` are never co
 | Evidence-based recommendations | each agent recommendation needs a case fact with evidence; may cite only retrieved past cases / Experience / controlled documents; negative sources refused; numbers only from its basis; investigation next checks need case evidence ids | `backend/tests/test_agent_ag2.py` (`check_recommendations`, end-to-end run), `tests/test_s5_history.py::test_validator_precedent_rules` | PASS (local): pytest 302, smoke 27/27, e2e 3/3, frontend 25 |
 | AG5 Meta LIVE | real muse-spark tool calling through the agent and the investigation loop | `docs/evaluations/META_LIVE_LOG.md` (commands actually run); regression tests for what LIVE exposed in `tests/test_meta_smoke.py` and `tests/test_agent_ag2.py::test_model_summary_citing_an_id_not_in_the_case_is_flagged` | LIVE tool calling PASS; investigation report VALIDATED 1/2 after fix |
 
+## §23–25 v5.8 (intake, document understanding, requests and responsibility)
+
+| ID | Scenario | Where it is checked | Status |
+|---|---|---|---|
+| IN0–IN3 | upload, parse, draft, confirm into a case, D0 via Queue | `backend/tests/test_intake_in1.py`, `test_intake_in2.py`, `test_intake_in3.py`, `frontend/tests/Intake.test.tsx` | PASS (local) |
+| MM | document elements, coverage, render fallback, vision NOT_CONFIGURED | `backend/tests/test_vision_mm.py`, `test_intake_in2.py` | PASS (local) |
+| RW | supplier / audit requests, revision, stale block, handover, Queue | `backend/tests/test_requests_rw.py`, `frontend/tests/Intake.test.tsx` | PASS (local) |
+| v5.8 E2E | intake, supplier and audit scenarios over real HTTP | `backend/tests/test_v58_e2e.py`, `scripts/e2e_http.py` (6/6) | PASS (local) |
+| v5.8 LIVE | Muse document understanding on the separate LIVE fixture | `scripts/intake_live_check.py`, `docs/evaluations/intake_live.json` | LIVE PASS 8/8 (1 run) |
+
+Full table per requirement ID: `docs/implementation/V58_VERIFICATION.md`.
+
 ## Frontend tests (`frontend/tests`, vitest)
 
 | Test | Covers |

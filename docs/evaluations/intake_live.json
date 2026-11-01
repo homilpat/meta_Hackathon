@@ -1,11 +1,5 @@
 {
  "single": {
-  "model": "muse-spark-1.3",
-  "mode": "LIVE",
-  "latency_ms": 8395,
-  "fixture": "live_complaint_DS-QN-2026-0099.pdf",
-  "fields_ok": 8,
-  "fields_total": 8,
   "rows": [
    {
     "field": "customer_ref",
@@ -24,7 +18,7 @@
     "status": "FOUND",
     "ok": true,
     "locator": [
-     "pdf:p1:l12"
+     "pdf:p1:t1:r2:c1"
     ]
    },
    {
@@ -34,7 +28,7 @@
     "status": "FOUND",
     "ok": true,
     "locator": [
-     "pdf:p1:l14"
+     "pdf:p1:t1:r2:c3"
     ]
    },
    {
@@ -71,18 +65,28 @@
     "field": "inspected_qty",
     "want_status": "MISSING",
     "status": "MISSING",
-    "kind": "CUSTOMER_REPORTED",
     "ok": true
    },
    {
     "field": "customer_cause_claim",
-    "want_status": "FOUND",
+    "want": "HYPOTHESIS",
     "status": "FOUND",
-    "kind": "HYPOTHESIS",
     "ok": true
    }
   ],
   "checks": {
+   "usage": {
+    "completion_tokens": 1746,
+    "prompt_tokens": 2414,
+    "total_tokens": 4160,
+    "completion_tokens_details": {
+     "reasoning_tokens": 554
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 2289
+    }
+   },
+   "estimated_input_tokens": 790,
    "deadline_absolute": true,
    "no_rate_note": true,
    "injection_flagged": true,
@@ -99,22 +103,13 @@
    }
   ],
   "questions": [
-   "검사 수량은 몇 개입니까?",
-   "발견 공정이 입고 검사가 맞습니까?",
-   "주간 불량 추이 차트의 기간별 수치를 알려주세요."
+   "검사 수량은 몇 개인가요?"
   ],
-  "coverage": {
-   "text": "OK",
-   "tables": "PARTIAL",
-   "tables_note": "PDF 표는 텍스트 줄로만 추출되며 셀 구조는 보존되지 않습니다",
-   "images": "OK",
-   "charts": "IMAGE_ONLY",
-   "charts_note": "PDF 안의 차트는 그림이라 원본 수치가 없습니다 (그림 수치는 공식 통계에 쓰지 않음)",
-   "scan": "NONE",
-   "scan_pages": 0,
-   "render": "OK",
-   "rendered_pages": 2
-  }
+  "model": "muse-spark-1.3",
+  "mode": "LIVE",
+  "latency_ms": 6554,
+  "ok": 8,
+  "total": 8
  },
  "multi": {
   "rows": [

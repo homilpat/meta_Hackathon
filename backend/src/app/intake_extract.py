@@ -82,12 +82,14 @@ def norm(s: str) -> str:
     return re.sub(r"\s+", " ", s).strip().lower()
 
 
-def model_input(files: list[dict], protected: str = "MASK", masker=None) -> tuple[list[dict], list[dict], list[dict]]:
+def model_input(files: list[dict], protected: str = "MASK", masker=None, reserve: int = 0
+                ) -> tuple[list[dict], list[dict], list[dict]]:
     """(content parts, files withheld, how each file was sent). A RAW file goes as is with its images; a PROTECTED
     file goes masked without images (protected="MASK"), as is to an in-house model (protected="RAW"), or not at
     all (protected="WITHHOLD")."""
     parts: list[dict] = []
     withheld, sent, images = [], [], 0
+    left = limits.max_input_tokens() - reserve  # cost and context cap (after the prompt and schema); rest reported
     for f in files:
         tier = f.get("tier") or ("RAW" if f.get("data_origin") == "SYNTHETIC" else "PROTECTED")
         how = "RAW" if tier == "RAW" else protected
@@ -102,14 +104,24 @@ def model_input(files: list[dict], protected: str = "MASK", masker=None) -> tupl
             els = [{**e, "text": masker.mask(e.get("text", "")), **({"title": None, "series": None}
                                                                     if e.get("series") is not None else {})}
                    for e in els]
+        kept = []
+        for e in els:  # document order: the beginning of a document first
+            cost = limits.estimate_tokens(json.dumps(e, ensure_ascii=False))
+            if cost > left:
+                sent[-1].update(not_sent_from=e["id"], not_sent=len(els) - len(kept))
+                break
+            left -= cost
+            kept.append(e)
+        els = kept
         parts.append({"type": "text", "text": json.dumps({"file_id": f["file_id"], "name": f["name"] if how == "RAW"
                                                           else f"file {f['file_id']}", "elements": els},
                                                          ensure_ascii=False)})
         if how == "MASK":
             continue  # an image is the content itself: never sent masked
         for eid, png in f["images"].items():
-            if images < limits.get("MAX_IMAGES_PER_CALL"):
+            if images < limits.get("MAX_IMAGES_PER_CALL") and left >= limits.get("IMAGE_TOKENS"):
                 images += 1
+                left -= limits.get("IMAGE_TOKENS")
                 parts += [{"type": "text", "text": f"image {eid} of file {f['file_id']}:"},
                           {"type": "image_url", "image_url": {
                               "url": f"data:image/png;base64,{base64.b64encode(png).decode()}"}}]
@@ -122,20 +134,27 @@ def extract(provider: ModelProvider, files: list[dict], protected: str = "MASK")
     from app.egress import MASK_NOTE, Masker, masked_payload_record
 
     masker = Masker()
-    parts, withheld, sent = model_input(files, protected, masker)
+    system = EXTRACT_PROMPT + ("\n" + MASK_NOTE if protected == "MASK" else "")
+    reserve = limits.estimate_tokens(system) + limits.estimate_tokens(json.dumps(EXTRACT_SCHEMA))
+    parts, withheld, sent = model_input(files, protected, masker, reserve)
     if not parts:
         raise ProviderError("no file is cleared for external processing")
     masked = any(s["sent"] == "MASKED" for s in sent)
-    msg = provider.chat([{"role": "system", "content": EXTRACT_PROMPT + ("\n" + MASK_NOTE if masked else "")},
-                         {"role": "user", "content": parts}], [], response_format=EXTRACT_SCHEMA,
-                        reasoning_effort=effort())["message"]
+    reply = provider.chat([{"role": "system", "content": EXTRACT_PROMPT + ("\n" + MASK_NOTE if masked else "")},
+                           {"role": "user", "content": parts}], [], response_format=EXTRACT_SCHEMA,
+                          reasoning_effort=effort())
+    msg = reply["message"]
     try:
         out = json.loads(msg.get("content") or "")
         assert all(k in out for k in ("documents", "fields", "links", "questions"))
         out.setdefault("transcriptions", [])
     except (ValueError, AssertionError, TypeError) as exc:
         raise ProviderError(f"extraction is not valid JSON ({type(exc).__name__})") from None
-    info = {"files": sent, "provider_mode": provider.mode,
+    info = {"files": sent, "provider_mode": provider.mode, "usage": reply.get("usage") or {},
+            "estimated_input_tokens": reserve + sum(limits.estimate_tokens(p["text"]) for p in parts
+                                                    if p["type"] == "text")
+            + limits.get("IMAGE_TOKENS") * sum(p["type"] == "image_url" for p in parts),
+            "max_input_tokens": limits.max_input_tokens(),
             "masked_payload": masked_payload_record([p for p in parts if p["type"] == "text"]) if masked else None}
     return masker.unmask_obj(out), withheld, info
 

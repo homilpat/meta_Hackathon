@@ -54,6 +54,25 @@ LIMITS: dict[str, Limit] = {
                                  "Llama API: at most 9 images per request, 25 MB each (llama.developer.meta.com; "
                                  "promptfoo llamaApi provider docs). muse-spark-1.3 accepted and read 10 in the "
                                  "2026-11-01 probe (META_LIVE_LOG), so 9 is the documented, not a measured, ceiling"),
+    "MODEL_CONTEXT_TOKENS": Limit(1048576, "tokens the model accepts in one call", "STANDARD",
+                                  "Meta Model API docs: muse-spark family context window 1,048,576 tokens "
+                                  "(ai.developer.meta.com/docs/models)"),
+    "MODEL_PRICE_INPUT_PER_M_USD": Limit(1.25, "USD per million input tokens", "STANDARD",
+                                         "api.meta.ai published price for muse-spark-1.1 (1.3 not separately "
+                                         "confirmed)"),
+    "MODEL_PRICE_OUTPUT_PER_M_USD": Limit(4.25, "USD per million output tokens", "STANDARD",
+                                          "api.meta.ai published price for muse-spark-1.1 (1.3 not separately "
+                                          "confirmed)"),
+    "MAX_COST_PER_MODEL_CALL_USD": Limit(0.10, "USD of input per document-model call", "DEFAULT",
+                                         "arbitrary starting value, to be set from the company's model budget; "
+                                         "with the price it caps the input tokens (MAX_INPUT_TOKENS)"),
+    "BYTES_PER_TOKEN": Limit(4.0, "UTF-8 bytes per token, for estimating before a call", "STANDARD",
+                             "rule of thumb ~4 characters per token for English text (OpenAI tokenizer guidance); "
+                             "Korean is ~3 bytes per character, so the estimate is conservative. Calibrate with "
+                             "the usage recorded on every call"),
+    "IMAGE_TOKENS": Limit(390, "input tokens one image costs, for estimating", "MEASURED",
+                          "LIVE 2026-11-01: 2,414 prompt tokens = 790 text + 362 prompt + 481 schema (estimated) + 2 "
+                          "images -> about 390 each (one run; recalibrate from recorded usage)"),
     "EXTRACT_REASONING_EFFORT": Limit("minimal", "reasoning effort of the document extraction call", "MEASURED",
                                       "LIVE 2026-11-01 on the LIVE fixture: minimal 8/8 in 8.4 s and 7/8 in 7.4 s, "
                                       "default 8/8 in 19.5 s (META_LIVE_LOG); speed vs completeness is the owner's "
@@ -94,6 +113,17 @@ def get(name: str):
         return OVERRIDES[name]
     raw = os.environ.get(f"QO_{name}")
     return LIMITS[name].default if raw is None or raw.strip() == "" else cast(name, raw)
+
+
+def max_input_tokens() -> int:
+    """DERIVED: the smaller of what fits (context minus the output reserve) and what the cost cap pays for."""
+    fits = get("MODEL_CONTEXT_TOKENS") - 8192  # provider max_tokens: the answer's reserve (model_provider.py)
+    pays = int(get("MAX_COST_PER_MODEL_CALL_USD") / get("MODEL_PRICE_INPUT_PER_M_USD") * 1_000_000)
+    return max(1, min(fits, pays))
+
+
+def estimate_tokens(text: str) -> int:
+    return int(len(text.encode("utf-8")) / get("BYTES_PER_TOKEN")) + 1
 
 
 def where(name: str) -> str:

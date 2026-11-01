@@ -116,3 +116,30 @@ def test_protected_files_can_be_withheld_entirely(tmp_path, monkeypatch):
     d = analyze(c, body["intake_id"]).json()["draft"]
     assert [w["name"] for w in d["withheld"]] == ["mine.pdf"] and d["status"] == "PARTIAL"
     assert SECRET not in json.dumps(p.seen[0]["messages"], ensure_ascii=False)
+
+
+def test_model_input_is_capped_by_cost_and_the_rest_is_reported(tmp_path, monkeypatch):
+    from app import intake_extract, limits
+
+    monkeypatch.setitem(limits.OVERRIDES, "MAX_COST_PER_MODEL_CALL_USD", 0.0001)  # = 80 input tokens
+    els = [{"id": f"pdf:p1:l{i}", "kind": "text", "page": 1, "text": f"line {i} of a long document"} for i in range(50)]
+    parts, _, sent = intake_extract.model_input([{"file_id": 1, "name": "big.pdf", "tier": "RAW",
+                                                  "elements": els, "images": {}}])
+    shown = json.loads(parts[0]["text"])["elements"]
+    assert 0 < len(shown) < 50 and sent[0]["not_sent_from"] == f"pdf:p1:l{len(shown)}"
+    assert sent[0]["not_sent"] == 50 - len(shown)
+    assert limits.max_input_tokens() == 80
+
+
+def test_every_extraction_records_the_tokens_it_used(tmp_path):
+    class Counted(Scripted):
+        def chat(self, messages, tools, response_format=None, reasoning_effort=None):
+            out = super().chat(messages, tools, response_format, reasoning_effort)
+            return {**out, "usage": {"prompt_tokens": 812, "completion_tokens": 240}}
+
+    p = Counted({"documents": [], "links": [], "questions": [], "fields": []})
+    c = client(tmp_path, p)
+    iid = upload(c, [("c.pdf", PDF_FIXTURE.read_bytes())]).json()["intake_id"]
+    eg = analyze(c, iid).json()["draft"]["egress"]
+    assert eg["usage"] == {"prompt_tokens": 812, "completion_tokens": 240}
+    assert eg["estimated_input_tokens"] > 0 and eg["max_input_tokens"] >= eg["estimated_input_tokens"]

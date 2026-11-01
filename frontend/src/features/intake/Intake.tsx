@@ -97,7 +97,8 @@ export function IntakeCard({ ctx, intake }: { ctx: Ctx; intake: J }) {
         {d.mode === 'TEST_DOUBLE' && <Badge tone="amber">TEST_DOUBLE (Meta 아님)</Badge>}</p>
       {d.error && <Note>{d.error}</Note>}
       {d.withheld?.length > 0 && <Note>외부 전송 승인 안 된 파일은 모델에 보내지 않았습니다: {d.withheld.map((w: J) => w.name).join(', ')}</Note>}
-      {d.egress?.files?.length > 0 && <p className="muted wrap">전송 방식: {d.egress.files.map((x: J) => `${x.name} ${x.sent === 'MASKED' ? '마스킹(값·이미지 제외)' : d.mode === 'LOCAL' ? '사내 모델' : '원문'}`).join(' · ')}{d.egress.masked_payload && ` · 전송 내용 sha256 ${d.egress.masked_payload.sha256.slice(0, 12)}…`}</p>}
+      {d.egress?.files?.length > 0 && <p className="muted wrap">전송 방식: {d.egress.files.map((x: J) => `${x.name} ${x.sent === 'MASKED' ? '마스킹(값·이미지 제외)' : d.mode === 'LOCAL' ? '사내 모델' : '원문'}`).join(' · ')}{d.egress.masked_payload && ` · 전송 내용 sha256 ${d.egress.masked_payload.sha256.slice(0, 12)}…`}{d.egress.usage?.prompt_tokens != null && ` · 사용 토큰 입력 ${d.egress.usage.prompt_tokens} / 출력 ${d.egress.usage.completion_tokens ?? '-'}`}</p>}
+      {d.egress?.files?.filter((x: J) => x.not_sent_from).map((x: J) => <Note key={x.file_id}>{x.name}: 비용 한도로 {x.not_sent_from}부터 {x.not_sent}개 요소는 모델에 보내지 않았습니다 (원문 위치로 직접 확인)</Note>)}
       {d.documents?.length > 0 && <p className="muted">문서 분류: {d.documents.map((x: J) => `#${x.file_id} ${x.classes.join('+')}${x.needs_confirmation ? ' (확인 필요)' : ''}`).join(' · ')}</p>}
       <div className="table-wrap"><table><thead><tr><th>항목</th><th>상태</th><th>값</th><th>원문 위치 · 발췌</th><th>수정 (사유 필수)</th></tr></thead><tbody>
         {Object.entries(d.fields).map(([k, v]: [string, J]) => <tr key={k}><td>{FIELD[k] ?? k}{v.kind === 'HYPOTHESIS' && <> <Badge tone="violet">가설</Badge></>}</td>

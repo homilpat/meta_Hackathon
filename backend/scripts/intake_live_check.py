@@ -57,7 +57,8 @@ def single(provider, protected: bool = False) -> dict:
              {"field": "customer_cause_claim", "want": "HYPOTHESIS", "status": d["fields"]["customer_cause_claim"]["status"],
               "ok": d["fields"]["customer_cause_claim"]["status"] == "FOUND"
               and d["fields"]["customer_cause_claim"]["kind"] == "HYPOTHESIS"}]
-    checks = {"deadline_absolute": d["fields"]["reply_deadline"]["status"] == "FOUND",
+    checks = {"usage": info.get("usage"), "estimated_input_tokens": info.get("estimated_input_tokens"),
+              "deadline_absolute": d["fields"]["reply_deadline"]["status"] == "FOUND",
               "no_rate_note": any("불량률" in n for n in d["notes"]),
               "injection_flagged": bool(d["flags"]), "image_linked": any("img" in lk["element_id"] for lk in d["links"]),
               "rejected_values": sum(len(v["rejected"]) for v in d["fields"].values())}

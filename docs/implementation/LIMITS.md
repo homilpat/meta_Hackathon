@@ -15,6 +15,12 @@ request schemas, so a change takes effect after a restart.
 | MAX_UNZIPPED_BYTES | 1 GB | DERIVED | upload limit × compression ratio (= Sonar THRESHOLD_SIZE) |
 | PARSE_TIME_BUDGET_S | 50 s | DERIVED | provider timeout 60 s − LIVE extraction p95 ≈ 10 s. Parsing stops there and the rest is reported as unprocessed (replaces fixed page, cell and row caps) |
 | MAX_IMAGES_PER_CALL | 9 | STANDARD | Llama API documented 9 images per request. muse-spark-1.3 accepted and read 10 in a probe |
+| MODEL_CONTEXT_TOKENS | 1,048,576 | STANDARD | Meta Model API docs: muse-spark context window |
+| MODEL_PRICE_INPUT/OUTPUT_PER_M_USD | 1.25 / 4.25 | STANDARD | api.meta.ai published price for muse-spark-1.1 (1.3 not separately confirmed) |
+| MAX_COST_PER_MODEL_CALL_USD | 0.10 | DEFAULT | arbitrary starting value, set from the company's model budget |
+| max input tokens | 80,000 | DERIVED | min(context − 8,192 output reserve, cost cap ÷ input price). Prompt, schema, document elements (in document order) and images count against it; what is left is reported "not sent to the model from …" |
+| BYTES_PER_TOKEN | 4 | STANDARD | rule of thumb (about 4 characters per token for English); conservative for Korean |
+| IMAGE_TOKENS | 390 | MEASURED | one LIVE run: 2,414 prompt tokens = 790 text + 362 prompt + 481 schema + 2 images. Calibration from that run, not an independent check. Every call now records its real usage (`egress.usage`, request review events), so it can be recalibrated |
 | EXTRACT_REASONING_EFFORT | minimal | MEASURED | LIVE: minimal 8/8 and 7/8 at 7–8 s, default 8/8 at 19.5 s. The owner chooses speed vs completeness |
 | MODEL_RUNS_PER_USER_HOUR | 30 | DEFAULT | arbitrary starting value, to be set from the company's model budget |
 | MAX_RECOMMENDATIONS | 3 | DEFAULT | screen default |

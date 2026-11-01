@@ -1,0 +1,29 @@
+{
+ "pages": 120,
+ "elements": 2896,
+ "tokens_whole_document": 97857,
+ "rounds": [
+  {
+   "round": 1,
+   "elements_sent_total": 41,
+   "tokens_sent_total": 1328,
+   "caught": {
+    "customer_ref": true,
+    "phenomenon": true,
+    "lot": true,
+    "defective_qty": true,
+    "inspected_qty": true,
+    "reply_deadline": true
+   },
+   "caught_n": 6,
+   "hits": {
+    "customer_ref": "pdf:p37:l25",
+    "phenomenon": "pdf:p52:l25",
+    "lot": "pdf:p80:t1:r1:c1",
+    "defective_qty": "pdf:p80:t1:r1:c3",
+    "inspected_qty": "pdf:p80:t1:r1:c2",
+    "reply_deadline": "pdf:p115:l25"
+   }
+  }
+ ]
+}

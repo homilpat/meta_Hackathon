@@ -25,6 +25,10 @@ class QualityCase(Base):
     domain: Mapped[str] = mapped_column(String(40))
     data_origin: Mapped[str] = mapped_column(String(20))
     created_at: Mapped[str] = mapped_column(String(40), default=lambda: datetime.now(UTC).isoformat())
+    # §25.1: where the case started (its type) is not how it came in (the channel)
+    origin: Mapped[str] = mapped_column(String(30), default="PROCESS_SIGNAL", server_default="PROCESS_SIGNAL")
+    channel: Mapped[str] = mapped_column(String(20), default="MANUAL", server_default="MANUAL")
+    owner_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"))  # case responsible (§25.3); NULL = not set
 
 
 class SourceAsset(Base):
@@ -905,6 +909,60 @@ class IntakeFile(Base):
     uploaded_at: Mapped[str] = mapped_column(String(40))
 
 
+class IntakeParse(Base):
+    """The server parser's elements (with locators) and per-element coverage for one file and parser version."""
+
+    __tablename__ = "intake_parses"
+    __table_args__ = (UniqueConstraint("file_id", "parser_version"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    file_id: Mapped[int] = mapped_column(ForeignKey("intake_files.id"), index=True)
+    parser_version: Mapped[str] = mapped_column(String(30))
+    elements: Mapped[list] = mapped_column(JSON)
+    coverage: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class IntakeExtraction(Base):
+    """One version of an intake draft: a checked model extraction (or OFFLINE / FAILED), or a person's edit."""
+
+    __tablename__ = "intake_extractions"
+    __table_args__ = (UniqueConstraint("intake_id", "version"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    intake_id: Mapped[int] = mapped_column(ForeignKey("intake_records.id"), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    kind: Mapped[str] = mapped_column(String(12))  # EXTRACTION | USER_EDIT
+    mode: Mapped[str] = mapped_column(String(12))  # LIVE | TEST_DOUBLE | OFFLINE
+    status: Mapped[str] = mapped_column(String(12))  # OK | PARTIAL | FAILED | OFFLINE | EDITED
+    model: Mapped[str | None] = mapped_column(String(60))
+    prompt_version: Mapped[str | None] = mapped_column(String(20))
+    parser_version: Mapped[str] = mapped_column(String(30))
+    draft: Mapped[dict] = mapped_column(JSON)  # the checked fields, documents, links, notes, questions, flags
+    raw: Mapped[dict | None] = mapped_column(JSON)  # what the model returned, before the server's checks
+    withheld: Mapped[list] = mapped_column(JSON)  # files not sent to the model, and why
+    changes: Mapped[list] = mapped_column(JSON)  # a person's edits (field, value, reason) for USER_EDIT
+    error: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class IntakeCaseLink(Base):
+    """An intake confirmed by a person into a new case or linked to an existing one (one link per intake)."""
+
+    __tablename__ = "intake_case_links"
+    __table_args__ = (UniqueConstraint("intake_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    intake_id: Mapped[int] = mapped_column(ForeignKey("intake_records.id"))
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"), index=True)
+    mode: Mapped[str] = mapped_column(String(10))  # NEW | EXISTING
+    extraction_version: Mapped[int] = mapped_column(Integer)  # the draft version the person confirmed
+    evidence_ids: Mapped[list] = mapped_column(JSON)  # CUSTOMER_REPORTED evidence registered from it
+    linked_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    linked_at: Mapped[str] = mapped_column(String(40))
+
+
 # Audit rows are append-only at the database level, not just by convention.
 APPEND_ONLY = ("approval_events", "workflow_events", "doc_comments", "audit_chain",
                "workflow_policies", "evidence_quality", "process_contexts", "affected_objects",
@@ -914,7 +972,7 @@ APPEND_ONLY = ("approval_events", "workflow_events", "doc_comments", "audit_chai
                "controlled_documents", "prevention_deployments", "closure_acks", "closures",
                "template_contracts", "validation_runs",
                "experience_entries", "experience_retrievals", "recommendation_decisions", "agent_steps",
-               "intake_files")
+               "intake_files", "intake_parses", "intake_extractions", "intake_case_links")
 
 
 def append_only_ddl(table: str) -> list[str]:

@@ -260,6 +260,27 @@ def run_idempotent(sessions: sessionmaker, endpoint: str, key: str, actor: Actor
         return JSONResponse(body, status_code=status)
 
 
+def d0_task(session: Session, case_id: str, actor: Actor) -> list[dict]:
+    """A case without a D0 judgement is open work for the D0 role of its policy: owned by the one assigned holder
+    of that role, the department's when several hold it, and shown to the case's authors as unassigned when none."""
+    from app.db import TriageAssessment
+    from app.eightd import active_policy
+
+    if session.scalar(select(TriageAssessment.id).where(TriageAssessment.case_id == case_id).limit(1)):
+        return []
+    role = active_policy(session, case_id).body["approval_gates"]["D0"]["approver"]
+    holders = sorted(u for u in session.scalars(select(Assignment.user_id).where(Assignment.case_id == case_id))
+                     if u in DEMO_USERS and DEMO_USERS[u][1] == role)
+    base = {"case_id": case_id, "kind": "triage", "doc_type": "D0", "version": None, "status": "PENDING"}
+    if actor.role == role and holders:
+        return [{**base, "task": "D0_TRIAGE", "owner": holders[0] if len(holders) == 1 else None,
+                 "detail": "D0 판정 대기 (8D/단순 NCR 경로)"}]
+    if actor.role == "AUTHOR" and not holders:
+        return [{**base, "task": "D0_UNASSIGNED", "owner": actor.id,
+                 "detail": f"D0 판정자({role})가 배정되지 않았습니다. 사건 배정에서 추가하세요."}]
+    return []
+
+
 def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
                 provider: ModelProvider | None = None) -> APIRouter:
     router = APIRouter()
@@ -359,6 +380,7 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
             cases = session.scalars(select(Assignment.case_id).where(Assignment.user_id == actor.id)).all()
             items = []
             for case_id in sorted(set(cases)):
+                items.extend(d0_task(session, case_id, actor))
                 for kind, doc_type in KINDS.items():
                     doc = _latest(session, case_id, doc_type)
                     if doc is None:

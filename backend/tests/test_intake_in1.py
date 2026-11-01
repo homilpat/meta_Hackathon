@@ -51,7 +51,7 @@ def test_fixtures_are_synthetic_other_files_are_unknown_and_no_case_is_created(c
     files = r.json()["files"]
     assert [f["media_type"].split("/")[-1][:3] for f in files] == ["pdf", "vnd", "pdf"]
     assert [f["data_origin"] for f in files] == ["SYNTHETIC", "SYNTHETIC", "UNKNOWN"]  # a name declares nothing
-    assert files[0]["checks"]["pages"] == 1 and files[1]["checks"]["external_links"] == 0
+    assert files[0]["checks"]["pages"] == 3 and files[1]["checks"]["external_links"] == 0
     with Session(c.app.state.engine) as s:
         assert s.scalar(select(func.count()).select_from(QualityCase)) == 0  # T01: no case before confirmation
 

@@ -18,7 +18,8 @@ def comment(c, user, body, version=1, kind="ncr", **kw):
 
 
 def tasks(c, user, scope="department"):
-    return [(i["task"], i["doc_type"], i["owner"]) for i in get(c, f"/queue?scope={scope}", user)]
+    return [(i["task"], i["doc_type"], i["owner"]) for i in get(c, f"/queue?scope={scope}", user)
+            if i["kind"] != "triage"]  # document tasks; D0 tasks are checked in test_intake_in3
 
 
 def test_claim_comments_reach_the_author_queue_and_are_append_only(env):  # noqa: F811

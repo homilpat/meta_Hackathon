@@ -13,6 +13,7 @@ import hashlib
 import json
 from datetime import UTC, datetime
 from typing import Annotated, Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import Response
@@ -109,7 +110,7 @@ class RequestIn(BaseModel):
     reviewer_id: str
     external_party: dict | None = None
     due_at: str = Field(min_length=10, max_length=40)
-    due_tz: str = Field(min_length=1, max_length=40)  # the label people use (e.g. KST); the offset is in due_at
+    due_tz: str = Field(min_length=1, max_length=40)  # Asia/Seoul or KST; used when due_at has no offset
 
 
 class SubmittedBy(BaseModel):
@@ -173,19 +174,29 @@ def get_request(session: Session, rid: int, actor: Actor) -> CaseRequest:
     return r
 
 
-def due_moment(due_at: str) -> datetime:
-    """A due date is an instant with its offset ("2026-11-07T17:00:00+09:00"); without one it is ambiguous."""
+TZ_ALIAS = {"KST": "Asia/Seoul", "JST": "Asia/Tokyo", "CST": "Asia/Shanghai", "UTC": "UTC"}
+
+
+def due_moment(due_at: str, tz: str) -> datetime:
+    """The due date as an instant: an explicit offset wins, otherwise it is read in the request's time zone
+    (an IANA name such as Asia/Seoul, or KST / JST / CST / UTC)."""
+    try:
+        zone = ZoneInfo(TZ_ALIAS.get(tz.upper(), tz))
+    except (ZoneInfoNotFoundError, ValueError):
+        raise HTTPException(422, f"unknown time zone {tz!r}; use e.g. Asia/Seoul or KST") from None
     try:
         d = datetime.fromisoformat(due_at)
     except ValueError:
-        raise HTTPException(422, f"due date {due_at!r} is not an ISO date-time") from None
-    if d.tzinfo is None:
-        raise HTTPException(422, "due date needs an offset, e.g. 2026-11-07T17:00:00+09:00")
-    return d
+        raise HTTPException(422, f"due date {due_at!r} is not an ISO date or date-time") from None
+    return d if d.tzinfo else d.replace(tzinfo=zone)
+
+
+def due_iso(due_at: str, tz: str) -> str:
+    return due_moment(due_at, tz).isoformat()  # stored with its offset, so later comparisons never guess
 
 
 def overdue(r: CaseRequest) -> bool:
-    return r.status in ACTIVE and due_moment(r.due_at) < datetime.now(UTC)
+    return r.status in ACTIVE and due_moment(r.due_at, r.due_tz) < datetime.now(UTC)
 
 
 def request_out(session: Session, r: CaseRequest) -> dict:
@@ -374,7 +385,7 @@ def make_requests_router(sessions: sessionmaker, current_user, provider: ModelPr
 
         def run(session: Session) -> tuple[int, dict]:
             require_case(session, case_id, actor)
-            due_moment(body.due_at)
+            due_at = due_iso(body.due_at, body.due_tz)
             for who, label in ((body.owner_id, "owner"), (body.reviewer_id, "reviewer")):
                 if not assigned(session, case_id, who):
                     raise HTTPException(422, f"{label} {who} is not assigned to this case; assign first")
@@ -390,12 +401,12 @@ def make_requests_router(sessions: sessionmaker, current_user, provider: ModelPr
             at = now()
             r = CaseRequest(case_id=case_id, kind=body.kind, title=body.title, items=items, items_sha256=sha,
                             owner_id=body.owner_id, pending_owner_id=None, reviewer_id=body.reviewer_id,
-                            external_party=body.external_party, due_at=body.due_at, due_tz=body.due_tz,
+                            external_party=body.external_party, due_at=due_at, due_tz=body.due_tz,
                             status="DRAFT", submission_version=0, created_by=actor.id, created_at=at, updated_at=at)
             session.add(r)
             session.flush()
             event(session, case_id, "REQUEST", r.id, "CREATED", actor, to=body.owner_id,
-                  reviewer=body.reviewer_id, due_at=body.due_at, due_tz=body.due_tz)
+                  reviewer=body.reviewer_id, due_at=due_at, due_tz=body.due_tz)
             session.flush()
             return 201, request_out(session, r)
         return run_idempotent(sessions, f"request_create:{case_id}", key, actor, run)
@@ -547,10 +558,9 @@ def make_requests_router(sessions: sessionmaker, current_user, provider: ModelPr
                 raise HTTPException(403, "only the creator, owner or reviewer changes the due date")
             if r.status not in ACTIVE:
                 raise HTTPException(409, f"request is {r.status}")
-            due_moment(body.due_at)
-            old, r.due_at = r.due_at, body.due_at
+            old, r.due_at = r.due_at, due_iso(body.due_at, r.due_tz)
             event(session, r.case_id, "REQUEST", r.id, "DUE_CHANGED", actor, reason=body.reason, old=old,
-                  new=body.due_at, tz=r.due_tz)
+                  new=r.due_at, tz=r.due_tz)
         return transition(rid, key, actor, "due", fn)
 
     @router.post("/requests/{rid}/handover", status_code=201)

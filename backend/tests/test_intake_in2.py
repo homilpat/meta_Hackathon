@@ -206,3 +206,25 @@ def test_parsed_images_are_only_for_the_owner(tmp_path, who):
     iid, pdf_id, _ = two_files(c)
     assert c.get(f"/intakes/{iid}/files/{pdf_id}/images/pdf:p1:img1", headers=H("alice")).status_code == 200
     assert c.get(f"/intakes/{iid}/files/{pdf_id}/images/pdf:p1:img1", headers=H(who)).status_code == 404
+
+
+def test_a_value_read_off_a_scan_is_kept_only_for_a_person_to_confirm(tmp_path):
+    p = Scripted()
+    c = client(tmp_path, p)
+    body = upload(c, [("complaint.pdf", PDF_FIXTURE.read_bytes())]).json()
+    p.replies.append({"documents": [], "links": [], "questions": [],
+                      "transcriptions": [{"element_id": "pdf:p3:scan", "text": "Shipping note: 60 boards shipped "
+                                          "2026-10-20, carrier ref SH-5521"},
+                                         {"element_id": "pdf:p1:l5", "text": "rewritten text"}],  # not a scan: ignored
+                      "fields": [f("delivery_date", "2026-10-20", ("pdf:p3:scan", "shipped 2026-10-20")),
+                                 f("serial_range", "60 boards", ("pdf:p3:scan", "70 boards"))]})
+    d = analyze(c, body["intake_id"]).json()["draft"]
+    sent = p.seen[0]["messages"][1]["content"]
+    assert any(x.get("type") == "text" and "pdf:p3:scan" in x["text"] for x in sent)  # the scan image went along
+    assert d["fields"]["delivery_date"]["status"] == "NEEDS_CONFIRMATION"  # model-read: a person compares
+    assert d["fields"]["serial_range"]["status"] == "UNVERIFIED"  # not even in the model's own transcription
+    assert [t["element_id"] for t in d["transcriptions"]] == ["pdf:p3:scan"]
+    assert d["transcriptions"][0]["kind"] == "AI_TRANSCRIPTION" and any("AI가 읽은 글자" in n for n in d["notes"])
+    original = {e["id"]: e for e in c.get(f"/intakes/{body['intake_id']}/draft", headers=H("alice")).json()
+                ["files"][0]["elements"]}
+    assert original["pdf:p3:scan"]["text"] == ""  # the parse itself is never overwritten by a model reading

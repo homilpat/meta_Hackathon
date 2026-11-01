@@ -158,8 +158,9 @@ def test_audit_finding_handover_acceptance_evidence_and_review(tmp_path):
     due = ok(post(c, f"/requests/{rid}/due", {"due_at": "2026-12-20T18:00:00+09:00", "reason": "감사원 승인 연장"},
                   user="dave"))
     assert due["overdue"] is False and due["events"][-1]["detail"]["old"] == "2026-01-01T00:00:00+09:00"
-    assert post(c, f"/requests/{rid}/due", {"due_at": "2026-12-20 18:00", "reason": "x"}, user="dave"
-                ).status_code == 422  # a due date without an offset is ambiguous
+    local = ok(post(c, f"/requests/{rid}/due", {"due_at": "2026-12-21 18:00", "reason": "현지 시각"}, user="dave"))
+    assert local["due_at"] == "2026-12-21T18:00:00+09:00"  # read in the request's zone (KST) and stored with it
+    assert post(c, f"/cases/{case}/requests", {**request_body("INTERNAL"), "due_tz": "Mars/Base"}).status_code == 422
     sub = ok(post(c, f"/requests/{rid}/submissions", {"files": files(AUDIT), "submitted_by": {"org": "SMT 공정기술"}},
                   user="dave"))
     ok(post(c, f"/requests/{rid}/review-start", user="bob"))

@@ -193,6 +193,18 @@ def audit_pdf() -> bytes:
     return buf.getvalue()
 
 
+def scan_pdf(line: str) -> bytes:
+    """A one-page PDF with no text layer: a picture of a shipping note."""
+    img = Image.new("L", (900, 200), 255)
+    ImageDraw.Draw(img).text((20, 80), line, fill=0)
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4, invariant=1)
+    c.drawImage(ImageReader(io.BytesIO(png(img))), 30, 560, width=540, height=120)
+    c.showPage()
+    c.save()
+    return buf.getvalue()
+
+
 def main() -> None:
     FIXTURE_DIR.mkdir(parents=True, exist_ok=True)
     for old in FIXTURE_DIR.glob("*"):
@@ -215,6 +227,17 @@ def main() -> None:
          "Corrective action: cleaning interval reduced to 2 hours; work instruction WI-ST-09 rev 4."],
         [["Stencil", "Hold record"], ["ST-14", "HB-221"]]))
     (FIXTURE_DIR / "audit_evidence_AF-2026-07.pdf").write_bytes(audit_pdf())
+    # LIVE-only set (never used by the automated tests): a supplement that conflicts, a scan, a supplier reply
+    (FIXTURE_DIR / "live_supplement_DS-QN-2026-0099.docx").write_bytes(simple_docx(
+        ["SYNTHETIC TEST DOCUMENT - 고객 보완 자료 (DS-QN-2026-0099)",
+         "입고 검사 결과를 보완합니다. 해당 출하분 LOT는 L06으로 기재되어 있습니다."],
+        [["LOT", "검사 수량", "불량 수량", "단위"], ["L06", "350", "7", "보드"]]))
+    (FIXTURE_DIR / "live_scan_DS-QN-2026-0099.pdf").write_bytes(scan_pdf(
+        "SYNTHETIC SCAN - Shipping note: 120 boards shipped 2026-10-21, carrier ref SH-7788"))
+    (FIXTURE_DIR / "live_supplier_reply_SN-0099.docx").write_bytes(simple_docx(
+        ["SYNTHETIC TEST DOCUMENT - Supplier 8D reply (Hanul Stencil, fictional)",
+         "Containment: 9 stencils on hold, hold record HB-990 dated 2026-11-04.",
+         "Root cause: we believe the stencil tension drifted; no verification test has been run yet."]))
     print(sorted(p.name for p in FIXTURE_DIR.iterdir()))
 
 

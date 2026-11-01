@@ -1,117 +1,284 @@
 {
- "model": "muse-spark-1.3",
- "mode": "LIVE",
- "latency_ms": 8395,
- "fixture": "live_complaint_DS-QN-2026-0099.pdf",
- "fields_ok": 8,
- "fields_total": 8,
- "rows": [
-  {
-   "field": "customer_ref",
-   "want": "DS-QN-2026-0099",
-   "got": "DS-QN-2026-0099",
-   "status": "FOUND",
-   "ok": true,
-   "locator": [
-    "pdf:p1:l3"
-   ]
+ "single": {
+  "model": "muse-spark-1.3",
+  "mode": "LIVE",
+  "latency_ms": 8395,
+  "fixture": "live_complaint_DS-QN-2026-0099.pdf",
+  "fields_ok": 8,
+  "fields_total": 8,
+  "rows": [
+   {
+    "field": "customer_ref",
+    "want": "DS-QN-2026-0099",
+    "got": "DS-QN-2026-0099",
+    "status": "FOUND",
+    "ok": true,
+    "locator": [
+     "pdf:p1:l3"
+    ]
+   },
+   {
+    "field": "lot",
+    "want": "L05",
+    "got": "L05",
+    "status": "FOUND",
+    "ok": true,
+    "locator": [
+     "pdf:p1:l12"
+    ]
+   },
+   {
+    "field": "defective_qty",
+    "want": "7",
+    "got": "7",
+    "status": "FOUND",
+    "ok": true,
+    "locator": [
+     "pdf:p1:l14"
+    ]
+   },
+   {
+    "field": "part_number",
+    "want": "PCB-BMS-310 rev A",
+    "got": "PCB-BMS-310 rev A",
+    "status": "FOUND",
+    "ok": true,
+    "locator": [
+     "pdf:p1:l4"
+    ]
+   },
+   {
+    "field": "delivery_date",
+    "want": "2026-10-20",
+    "got": "2026-10-20",
+    "status": "FOUND",
+    "ok": true,
+    "locator": [
+     "pdf:p1:l4"
+    ]
+   },
+   {
+    "field": "found_date",
+    "want": "2026-10-28",
+    "got": "2026-10-28",
+    "status": "FOUND",
+    "ok": true,
+    "locator": [
+     "pdf:p1:l4"
+    ]
+   },
+   {
+    "field": "inspected_qty",
+    "want_status": "MISSING",
+    "status": "MISSING",
+    "kind": "CUSTOMER_REPORTED",
+    "ok": true
+   },
+   {
+    "field": "customer_cause_claim",
+    "want_status": "FOUND",
+    "status": "FOUND",
+    "kind": "HYPOTHESIS",
+    "ok": true
+   }
+  ],
+  "checks": {
+   "deadline_absolute": true,
+   "no_rate_note": true,
+   "injection_flagged": true,
+   "image_linked": true,
+   "rejected_values": 0
   },
-  {
-   "field": "lot",
-   "want": "L05",
-   "got": "L05",
-   "status": "FOUND",
-   "ok": true,
-   "locator": [
-    "pdf:p1:l12"
-   ]
-  },
-  {
-   "field": "defective_qty",
-   "want": "7",
-   "got": "7",
-   "status": "FOUND",
-   "ok": true,
-   "locator": [
-    "pdf:p1:l14"
-   ]
-  },
-  {
-   "field": "part_number",
-   "want": "PCB-BMS-310 rev A",
-   "got": "PCB-BMS-310 rev A",
-   "status": "FOUND",
-   "ok": true,
-   "locator": [
-    "pdf:p1:l4"
-   ]
-  },
-  {
-   "field": "delivery_date",
-   "want": "2026-10-20",
-   "got": "2026-10-20",
-   "status": "FOUND",
-   "ok": true,
-   "locator": [
-    "pdf:p1:l4"
-   ]
-  },
-  {
-   "field": "found_date",
-   "want": "2026-10-28",
-   "got": "2026-10-28",
-   "status": "FOUND",
-   "ok": true,
-   "locator": [
-    "pdf:p1:l4"
-   ]
-  },
-  {
-   "field": "inspected_qty",
-   "want_status": "MISSING",
-   "status": "MISSING",
-   "kind": "CUSTOMER_REPORTED",
-   "ok": true
-  },
-  {
-   "field": "customer_cause_claim",
-   "want_status": "FOUND",
-   "status": "FOUND",
-   "kind": "HYPOTHESIS",
-   "ok": true
+  "documents": [
+   {
+    "classes": [
+     "COMPLAINT"
+    ],
+    "file_id": 1,
+    "needs_confirmation": false
+   }
+  ],
+  "questions": [
+   "검사 수량은 몇 개입니까?",
+   "발견 공정이 입고 검사가 맞습니까?",
+   "주간 불량 추이 차트의 기간별 수치를 알려주세요."
+  ],
+  "coverage": {
+   "text": "OK",
+   "tables": "PARTIAL",
+   "tables_note": "PDF 표는 텍스트 줄로만 추출되며 셀 구조는 보존되지 않습니다",
+   "images": "OK",
+   "charts": "IMAGE_ONLY",
+   "charts_note": "PDF 안의 차트는 그림이라 원본 수치가 없습니다 (그림 수치는 공식 통계에 쓰지 않음)",
+   "scan": "NONE",
+   "scan_pages": 0,
+   "render": "OK",
+   "rendered_pages": 2
   }
- ],
- "checks": {
-  "deadline_absolute": true,
-  "no_rate_note": true,
-  "injection_flagged": true,
-  "image_linked": true,
-  "rejected_values": 0
  },
- "documents": [
-  {
-   "classes": [
-    "COMPLAINT"
-   ],
-   "file_id": 1,
-   "needs_confirmation": false
-  }
- ],
- "questions": [
-  "검사 수량은 몇 개입니까?",
-  "발견 공정이 입고 검사가 맞습니까?",
-  "주간 불량 추이 차트의 기간별 수치를 알려주세요."
- ],
- "coverage": {
-  "text": "OK",
-  "tables": "PARTIAL",
-  "tables_note": "PDF 표는 텍스트 줄로만 추출되며 셀 구조는 보존되지 않습니다",
-  "images": "OK",
-  "charts": "IMAGE_ONLY",
-  "charts_note": "PDF 안의 차트는 그림이라 원본 수치가 없습니다 (그림 수치는 공식 통계에 쓰지 않음)",
-  "scan": "NONE",
-  "scan_pages": 0,
-  "render": "OK",
-  "rendered_pages": 2
+ "multi": {
+  "rows": [
+   {
+    "field": "lot",
+    "want": "CONFLICT L05/L06",
+    "status": "CONFLICT",
+    "got": [
+     "L05",
+     "L06"
+    ],
+    "ok": true
+   },
+   {
+    "field": "inspected_qty",
+    "want": "350",
+    "got": "350",
+    "status": "FOUND",
+    "ok": true,
+    "locator": [
+     "docx:t1:r2:c2"
+    ]
+   },
+   {
+    "field": "defective_qty",
+    "want": "7",
+    "got": "7",
+    "status": "FOUND",
+    "ok": true,
+    "locator": [
+     "pdf:p1:l14",
+     "docx:t1:r2:c3"
+    ]
+   }
+  ],
+  "checks": {
+   "scan_transcribed": true,
+   "scan_text": "SYNTHETIC SCAN - Shipping note: 120 boardsshipped 2026-10-21, carrier ref SH-7788",
+   "docx_supplement": true,
+   "pdf_complaint": true,
+   "scan_values_need_confirmation": [],
+   "rejected_values": 0
+  },
+  "documents": [
+   {
+    "classes": [
+     "COMPLAINT"
+    ],
+    "file_id": 1,
+    "needs_confirmation": false
+   },
+   {
+    "classes": [
+     "SUPPLEMENT"
+    ],
+    "file_id": 2,
+    "needs_confirmation": false
+   },
+   {
+    "classes": [
+     "OTHER"
+    ],
+    "file_id": 3,
+    "needs_confirmation": false
+   }
+  ],
+  "questions": [
+   "LOT가 L05인지 L06인지 확인해 주세요?",
+   "검사 수량과 시리얼 범위를 확인해 주세요?",
+   "출하일과 선적 메모 내용을 확인해 주세요?"
+  ],
+  "coverage": [
+   {
+    "text": "OK",
+    "tables": "PARTIAL",
+    "tables_note": "PDF 표는 텍스트 줄로만 추출되며 셀 구조는 보존되지 않습니다",
+    "images": "OK",
+    "charts": "IMAGE_ONLY",
+    "charts_note": "PDF 안의 차트는 그림이라 원본 수치가 없습니다 (그림 수치는 공식 통계에 쓰지 않음)",
+    "scan": "NONE",
+    "scan_pages": 0,
+    "render": "OK",
+    "rendered_pages": 2
+   },
+   {
+    "text": "OK",
+    "tables": "OK",
+    "images": "NONE",
+    "charts": "NONE",
+    "scan": "NONE",
+    "render": "NOT_SUPPORTED",
+    "render_note": "DOCX는 렌더링하지 않으며 문단·표·셀 위치로 원문을 가리킵니다"
+   },
+   {
+    "text": "NONE",
+    "tables": "NONE",
+    "tables_note": "PDF 표는 텍스트 줄로만 추출되며 셀 구조는 보존되지 않습니다",
+    "images": "OK",
+    "charts": "IMAGE_ONLY",
+    "charts_note": "PDF 안의 차트는 그림이라 원본 수치가 없습니다 (그림 수치는 공식 통계에 쓰지 않음)",
+    "scan": "NEEDS_VISION",
+    "scan_pages": 1,
+    "render": "OK",
+    "rendered_pages": 1
+   }
+  ],
+  "model": "muse-spark-1.3",
+  "mode": "LIVE",
+  "latency_ms": 9793,
+  "ok": 3,
+  "total": 3
+ },
+ "review": {
+  "rows": [
+   {
+    "item": "I1",
+    "want": "SUPPORTED with a source",
+    "got": "SUPPORTED",
+    "sources": [
+     "docx:p2"
+    ],
+    "ok": true
+   },
+   {
+    "item": "I2",
+    "want": "not SUPPORTED (claimed, not verified)",
+    "got": "MISSING",
+    "ok": true
+   }
+  ],
+  "opinions": [
+   {
+    "item_id": "I1",
+    "verdict": "SUPPORTED",
+    "sources": [
+     {
+      "element_id": "docx:p2",
+      "excerpt": "Containment: 9 stencils on hold, hold record HB-990 dated 2026-11-04.",
+      "file_id": 1,
+      "page": null
+     }
+    ],
+    "note": "Hold record number and date documented",
+    "kind": "AI_OPINION"
+   },
+   {
+    "item_id": "I2",
+    "verdict": "MISSING",
+    "sources": [
+     {
+      "element_id": "docx:p3",
+      "excerpt": "Root cause: we believe the stencil tension drifted; no verification test has been run yet.",
+      "file_id": 1,
+      "page": null
+     }
+    ],
+    "note": "Reply states no verification test has been run",
+    "kind": "AI_OPINION"
+   }
+  ],
+  "model": "muse-spark-1.3",
+  "mode": "LIVE",
+  "latency_ms": 2901,
+  "ok": 2,
+  "total": 2
  }
 }

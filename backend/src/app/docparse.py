@@ -56,6 +56,7 @@ def parse_pdf(data: bytes) -> tuple[list[dict], dict, dict[str, bytes]]:
             scans += 1
             elements.append({"id": f"pdf:p{n}:scan", "kind": "scan_page", "page": n, "text": "",
                              "status": "NEEDS_VISION"})
+            blobs[f"pdf:p{n}:scan"] = images[0].data  # the scan itself: only a vision path can read it
             continue
         for i, img in enumerate(images, 1):
             eid = f"pdf:p{n}:img{i}"

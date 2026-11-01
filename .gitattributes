@@ -1,3 +1,6 @@
 # The served bundle is compared byte-for-byte with a Linux CI build; keep the frontend sources and the output LF on every OS.
 frontend/** text eol=lf
 backend/src/app/static/web/** text eol=lf
+*.pdf binary
+*.docx binary
+*.png binary

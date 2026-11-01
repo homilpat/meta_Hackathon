@@ -4,3 +4,5 @@ backend/src/app/static/web/** text eol=lf
 *.pdf binary
 *.docx binary
 *.png binary
+*.csv binary
+*.xlsx binary

@@ -246,6 +246,20 @@ Saved HYBRID traces of contracts with such a contents page replay as STALE under
 - Their Self-Route retrieves first and switches to full context when the model says the retrieved parts cannot answer. That is neither a page nor a token threshold.
 - No published standard per-call cap was found. In practice the cap is the context window or a budget, as decided here on 2026-11-01.
 
+### Self-Route considered and not adopted (2026-11-02, offline estimate, no calls)
+
+Self-Route (Li et al. 2024) reads selectively first and switches to the full document when the model says it cannot answer. `python -m scripts.selfroute_estimate` estimates it from the recorded runs: navigation first, then a full read whenever any category had no valid quote.
+
+| Set | Fallback triggered | Recall: navigation / full / Self-Route at most | Cost: navigation / full / Self-Route at least |
+|---|---|---|---|
+| heldout | 6 of 10 | 0.632 / 0.719 / 0.632 | $0.70 / $0.70 / $1.00 |
+| heldout_long | 8 of 10 | 0.579 / 0.658 / 0.605 | $0.70 / $1.29 / $1.72 |
+
+Why it does not fit this task:
+- **One document, several fields.** Some field is usually absent from the document (Termination for Convenience in most contracts; an inspected quantity in many complaints), so the fallback fires almost every time. Its cost is navigation plus full, 30–40% above full reading.
+- **The misses are partial finds,** such as 2 of 8 party mentions. The model does not say "cannot answer" for those, so the fallback does not recover them.
+- **Decision:** hybrid WHOLE_FIRST stays the default (user, 2026-11-02).
+
 ## B. Synthetic manufacturing fixtures (EV-FR-02): `scripts/fixture_eval.py`
 
 Truths were written by hand from the generators, and each locator was checked once against the parser. This is **not a manufacturing benchmark**.

@@ -72,7 +72,8 @@ def test_whole_mode_reads_everything_in_pieces_when_it_does_not_fit(monkeypatch)
     p = Scripted(*[EMPTY] * 50)
     _, _, info = intake_extract.extract(p, files_of(els, cov))
     assert info["pieces"] == 1 and len(sent_ids(p.seen[0])) == len(els)  # fits: one call with every element
-    monkeypatch.setitem(limits.OVERRIDES, "MODEL_CONTEXT_TOKENS", 8192 + 20000)  # a small model: must split
+    monkeypatch.setitem(limits.OVERRIDES, "MODEL_CONTEXT_TOKENS",  # a small model: must split
+                        limits.get("MODEL_MAX_OUTPUT_TOKENS") + 20000)
     p = Scripted(*[EMPTY] * 50)
     _, _, info = intake_extract.extract(p, files_of(els, cov))
     got = set().union(*(sent_ids(c) for c in p.seen))

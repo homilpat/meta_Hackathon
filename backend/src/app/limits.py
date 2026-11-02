@@ -26,8 +26,8 @@ from app.fields import FreeText
 ADMIN_ROLE = "AGENT_ADMIN"
 OVERRIDES: dict[str, object] = {}  # recorded settings of this process (loaded at start, updated on change)
 RESTART = {"MAX_FILES_PER_UPLOAD", "MAX_REQUEST_ITEMS"}  # fixed in request schemas at start
-CHOICES = {"MODEL_RESPONSE_REUSE": {"ON", "OFF"}, "EXTRACT_MODE": {"WHOLE_FIRST", "HYBRID", "WHOLE", "AUTO"}}
-OFF_ALLOWED = {"MAX_COST_PER_MODEL_CALL_USD", "MODEL_TEMPERATURE", "MODEL_SEED"}  # 0 is a valid setting
+CHOICES = {"MODEL_RESPONSE_REUSE": {"ON", "OFF"}, "INVESTIGATION_REASONING_EFFORT": {"minimal", "default"}, "EXTRACT_MODE": {"WHOLE_FIRST", "HYBRID", "WHOLE", "AUTO"}}
+OFF_ALLOWED = {"MAX_COST_PER_MODEL_CALL_USD", "MODEL_TEMPERATURE", "MODEL_SEED", "INVESTIGATION_MAX_COST_USD"}  # 0 is a valid setting
 
 
 @dataclass(frozen=True)
@@ -109,6 +109,32 @@ LIMITS: dict[str, Limit] = {
                                   "user, 2026-11-02: the same document and question must not get a different "
                                   "answer on a second look; OFF for a fresh answer. Evaluations call the model "
                                   "directly (scripts/evalkit.py) so run-to-run change stays measurable"),
+    "MODEL_MAX_OUTPUT_TOKENS": Limit(131072, "output tokens one model call may write (its reasoning included)",
+                                     "STANDARD", "Muse Spark documented maximum output (Vercel AI Gateway, LiteLLM "
+                                     "provider docs); replaces a fixed 8,192 that cut 2 of 8 LIVE investigation "
+                                     "reports. Reasoning tokens count toward it and bill at the output price"),
+    "MODEL_OUTPUT_TOKENS_PER_S": Limit(116, "slowest measured output speed, tokens per second", "MEASURED",
+                                       "LIVE investigation calls 2026-11-02: 38 calls over 1,000 output tokens, "
+                                       "min 116, p10 125, median 167 tokens/s (muse-spark-1.3)"),
+    "INVESTIGATION_REASONING_EFFORT": Limit("minimal", "reasoning effort of investigation calls ('minimal' or "
+                                            "'default')", "DECISION",
+                                            "user, 2026-11-02: 71% of the investigation's output tokens were "
+                                            "reasoning at the default; extraction measured the same answers ~3x "
+                                            "faster at minimal. Measured again on the LIVE loop run"),
+    "INVESTIGATION_MAX_COST_USD": Limit(0.0, "USD per investigation run (0 = off: each call is bounded by the "
+                                        "model's input, MODEL_CONTEXT_TOKENS)", "DECISION",
+                                        "user, 2026-11-02: the same rule as document extraction; the owner sets an "
+                                        "amount from the budget. Replaces a fixed 30,000-token run cap that stopped "
+                                        "4 of 13 LIVE runs (a complete run measured 40-50k prompt tokens, $0.06-0.08)"),
+    "INVESTIGATION_MAX_ROUNDS": Limit(5, "model calls per investigation run", "DEFAULT",
+                                      "starting value, set by the owner; LIVE runs on 2026-11-02 used 3-5"),
+    "INVESTIGATION_MAX_TOOL_CALLS": Limit(8, "tool calls per investigation run", "DEFAULT",
+                                          "starting value, set by the owner; LIVE runs on 2026-11-02 used 4-6"),
+    "INVESTIGATION_DEADLINE_S": Limit(300, "seconds per investigation run", "DEFAULT",
+                                      "starting value: wall time of one run (LIVE runs took 50-70 s); each call is "
+                                      "bounded by the provider timeout (limits.model_timeout_s)"),
+    "INVESTIGATION_RUNS_PER_USER_HOUR": Limit(10, "investigation runs per user per hour", "DEFAULT",
+                                              "starting value, set from the company's model budget"),
     "MODEL_RUNS_PER_USER_HOUR": Limit(30, "agent model runs per user per hour", "DEFAULT",
                                       "arbitrary starting value; set from the company's model budget"),
     "MAX_RECOMMENDATIONS": Limit(3, "agent recommendations shown per run", "DEFAULT",
@@ -151,10 +177,15 @@ def get(name: str):
 
 def max_input_tokens() -> int:
     """DERIVED: the smaller of what fits (context minus the output reserve) and what the cost cap pays for."""
-    fits = get("MODEL_CONTEXT_TOKENS") - 8192  # provider max_tokens: the answer's reserve (model_provider.py)
+    fits = get("MODEL_CONTEXT_TOKENS") - get("MODEL_MAX_OUTPUT_TOKENS")  # the context holds the answer too
     cost = get("MAX_COST_PER_MODEL_CALL_USD")
     pays = int(cost / get("MODEL_PRICE_INPUT_PER_M_USD") * 1_000_000) if cost > 0 else fits
     return max(1, min(fits, pays))
+
+
+def model_timeout_s() -> int:
+    """DERIVED: a call that writes the most it may (MODEL_MAX_OUTPUT_TOKENS) at the slowest measured speed ends."""
+    return -(-get("MODEL_MAX_OUTPUT_TOKENS") // get("MODEL_OUTPUT_TOKENS_PER_S"))
 
 
 def estimate_tokens(text: str) -> int:

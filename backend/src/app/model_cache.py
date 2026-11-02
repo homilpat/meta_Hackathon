@@ -27,7 +27,8 @@ class Reusing:
     def key(self, messages, tools, response_format, reasoning_effort) -> str:
         sent = {"model": self.inner.model, "url": getattr(self.inner, "url", None), "messages": messages,
                 "tools": tools, "response_format": response_format, "reasoning_effort": reasoning_effort,
-                "max_tokens": getattr(self.inner, "_max_tokens", None), **sampling()}
+                "max_tokens": getattr(self.inner, "_max_tokens", None) or limits.get("MODEL_MAX_OUTPUT_TOKENS"),
+                **sampling()}
         return hashlib.sha256(json.dumps(sent, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
 
     def chat(self, messages: list[dict], tools: list[dict], response_format: dict | None = None,

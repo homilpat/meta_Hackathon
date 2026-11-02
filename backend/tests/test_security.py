@@ -5,7 +5,7 @@ from alembic.config import Config
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import Session
 
-from app import audit, investigator
+from app import audit, limits
 from app.db import Evidence, SourceEvent
 from tests.test_s3_investigation import final, tools_msg
 from tests.test_s6_followups import H, approve, create, env  # noqa: F401 - env: seeded case fixture
@@ -80,7 +80,7 @@ def test_prompt_injection_in_a_source_record_cannot_act_or_pass_validation(env):
 
 def test_investigation_quota_per_user(env, monkeypatch):  # noqa: F811
     c = env
-    monkeypatch.setattr(investigator, "RUNS_PER_USER_HOUR", 1)
+    monkeypatch.setitem(limits.OVERRIDES, "INVESTIGATION_RUNS_PER_USER_HOUR", 1)
     c.app_ref.state.provider.replies[:] = [final("not json")]
     assert c.post("/cases/C1/investigations", json={}, headers=H("alice")).status_code == 201
     r = c.post("/cases/C1/investigations", json={}, headers=H("alice"))

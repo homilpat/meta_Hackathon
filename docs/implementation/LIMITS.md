@@ -19,7 +19,7 @@ request schemas, so a change takes effect after a restart.
 | MODEL_PRICE_INPUT/OUTPUT_PER_M_USD | 1.25 / 4.25 | STANDARD | api.meta.ai published price for muse-spark-1.1 (1.3 not separately confirmed) |
 | MAX_COST_PER_MODEL_CALL_USD | 0 (off) | DECISION | user, 2026-11-01: the context window is the cap; a cost cap is optional, set from the budget |
 | EXTRACT_MAX_ROUNDS | 2 | DEFAULT | arbitrary starting value: round 2 asks only for missing fields with their next candidate parts; each round is a paid call |
-| max input tokens | 1,040,384 | DERIVED | context − 8,192 output reserve (or the cost cap ÷ input price, when one is set). Prompt, schema, document elements (in document order) and images count against it; what is left is reported "not sent to the model from …" |
+| max input tokens | 917,504 | DERIVED | context − MODEL_MAX_OUTPUT_TOKENS (the context holds the answer too) (or the cost cap ÷ input price, when one is set). Prompt, schema, document elements (in document order) and images count against it; what is left is reported "not sent to the model from …" |
 | BYTES_PER_TOKEN | 4 | STANDARD | rule of thumb (about 4 characters per token for English); conservative for Korean |
 | IMAGE_TOKENS | 390 | MEASURED | one LIVE run: 2,414 prompt tokens = 790 text + 362 prompt + 481 schema + 2 images. Calibration from that run, not an independent check. Every call now records its real usage (`egress.usage`, request review events), so it can be recalibrated |
 | EXTRACT_REASONING_EFFORT | minimal | MEASURED | LIVE: minimal 8/8 and 7/8 at 7–8 s, default 8/8 at 19.5 s. The owner chooses speed vs completeness |
@@ -29,6 +29,15 @@ request schemas, so a change takes effect after a restart.
 | EXTRACT_COMPLETION_TOKENS_PER_CALL | 1,274 | MEASURED | CUAD held-out LIVE: 62,409 completion tokens / 49 calls (AUTO's output estimate) |
 | TOKENS_PER_ESTIMATE_TEXT | 1.34 | MEASURED | CUAD held-out LIVE, WHOLE: actual / byte-estimated prompt tokens |
 | TOKENS_PER_ESTIMATE_MAP | 2.3 | MEASURED | CUAD held-out LIVE, HYBRID: maps are word lists and cost more per byte |
+| INVESTIGATION_MAX_COST_USD | 0 (off) | DECISION | user, 2026-11-02: same rule as extraction (model input is the bound; the owner sets an amount). Replaces a fixed 30,000-token run cap that stopped 4 of 13 LIVE runs |
+| INVESTIGATION_MAX_ROUNDS | 5 | DEFAULT | starting value; LIVE runs used 3–5 |
+| INVESTIGATION_MAX_TOOL_CALLS | 8 | DEFAULT | starting value; LIVE runs used 4–6 |
+| INVESTIGATION_DEADLINE_S | 300 | DEFAULT | starting value: wall time of one run (LIVE runs took 50–70 s); each call is bounded by the provider timeout |
+| INVESTIGATION_RUNS_PER_USER_HOUR | 10 | DEFAULT | starting value, set from the model budget |
+| MODEL_MAX_OUTPUT_TOKENS | 131,072 | STANDARD | Muse Spark documented maximum output (Vercel AI Gateway, LiteLLM docs). Reasoning tokens count toward it and bill at the output price. Replaces a fixed 8,192 that cut 2 of 8 LIVE investigation reports |
+| MODEL_OUTPUT_TOKENS_PER_S | 116 | MEASURED | slowest of 38 LIVE investigation calls (p10 125, median 167) |
+| provider timeout | 1,130 s | DERIVED | MODEL_MAX_OUTPUT_TOKENS ÷ MODEL_OUTPUT_TOKENS_PER_S (a call writing the most it may still ends); replaces a fixed 60 s |
+| INVESTIGATION_REASONING_EFFORT | minimal | DECISION | user, 2026-11-02: 71% of the investigation's output was reasoning at the default |
 | MODEL_RUNS_PER_USER_HOUR | 30 | DEFAULT | arbitrary starting value, to be set from the company's model budget |
 | MAX_RECOMMENDATIONS | 3 | DEFAULT | screen default |
 | MIN_RECOMMENDATION_GRADE | B | DECISION (proposed) | A = matches a past case whose effect was verified, B = controlled document or unverified case, C = this case's data only (folded as 참고). Grades come from the sources, never from a model's confidence (spec §23.3) |

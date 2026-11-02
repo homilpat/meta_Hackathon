@@ -67,8 +67,9 @@ class MetaProvider:
     # (scripts/cuad_eval.py, user 2026-11-02); the secret check always runs.
     restricted_check = True
 
-    # muse-spark reasons before it answers: 1500 and 4096 tokens both cut a LIVE investigation report off
-    def __init__(self, key: str, timeout: float = 60.0, max_tokens: int = 8192, opener=urlopen):
+    # Output cap and timeout come from limits.py at call time (MODEL_MAX_OUTPUT_TOKENS, model_timeout_s) unless a
+    # caller fixes them here; the reasoning a model does before answering counts toward the output cap.
+    def __init__(self, key: str, timeout: float | None = None, max_tokens: int | None = None, opener=urlopen):
         self._key, self._timeout, self._max_tokens, self._open = key, timeout, max_tokens, opener
 
     @classmethod
@@ -78,7 +79,10 @@ class MetaProvider:
 
     def chat(self, messages: list[dict], tools: list[dict], response_format: dict | None = None,
              reasoning_effort: str | None = None) -> dict:
-        payload = {"model": self.model, "messages": messages, "max_tokens": self._max_tokens}
+        from app import limits
+
+        payload = {"model": self.model, "messages": messages,
+                   "max_tokens": self._max_tokens or limits.get("MODEL_MAX_OUTPUT_TOKENS")}
         payload |= sampling()
         if tools:
             payload["tools"] = tools
@@ -95,7 +99,7 @@ class MetaProvider:
         request = Request(self.url, data=body, method="POST", headers={
             "Authorization": f"Bearer {self._key}", "Content-Type": "application/json"})
         try:
-            with self._open(request, timeout=self._timeout) as response:
+            with self._open(request, timeout=self._timeout or limits.model_timeout_s()) as response:
                 result = json.load(response)
             if self.external and result.get("model") != self.model:
                 raise ProviderError("unexpected model id in response")
@@ -127,7 +131,7 @@ class LocalProvider(MetaProvider):
     mode = "LOCAL"
     external = False
 
-    def __init__(self, url: str, model: str, key: str = "", timeout: float = 120.0, opener=urlopen):
+    def __init__(self, url: str, model: str, key: str = "", timeout: float | None = None, opener=urlopen):
         super().__init__(key, timeout=timeout, opener=opener)
         self.url, self.model = url, model
 

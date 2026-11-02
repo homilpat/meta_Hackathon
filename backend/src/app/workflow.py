@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 from starlette.convertors import StringConvertor, register_url_convertor
 
-from app import audit, factcheck, history, impact, investigator, ncr, policy
+from app import audit, factcheck, history, impact, investigator, limits, ncr, policy
 from app.db import (
     ApprovalEvent,
     Assignment,
@@ -661,7 +661,7 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
             since = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
             used = len(session.scalars(select(ModelRun.id).where(ModelRun.requested_by == actor.id,
                                                                  ModelRun.started_at >= since)).all())
-            if used >= investigator.RUNS_PER_USER_HOUR:  # cost/abuse cap on paid model calls
+            if used >= limits.get("INVESTIGATION_RUNS_PER_USER_HOUR"):  # cost/abuse cap on paid model calls
                 raise HTTPException(429, f"Investigation quota reached ({used} runs in the last hour)")
             if not session.scalar(select(Evidence.id).where(Evidence.case_id == case_id).limit(1)):
                 raise HTTPException(422, "Case has no evidence; upload sources first")

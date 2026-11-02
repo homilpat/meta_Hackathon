@@ -124,9 +124,23 @@ def validate_report(session: Session, case_id: str, report: InvestigationReport,
     return errors
 
 
+NEGATION = re.compile(r"(?i)\b(no|not|never|cannot|without|nor|neither)\b|n't\b")
+
+
+def asserts_certainty(text: str) -> bool:
+    """A causal-certainty phrase counts unless the words just before it in the same sentence negate it: "SPI values
+    alone do not prove causation" and "No root cause is established" are the careful wording the prompt asks for
+    (LIVE 2026-11-02: both were refused before this check, in 4 of 4 server-rejected reports)."""
+    for m in CAUSAL_CERTAINTY.finditer(text):
+        before = re.split(r"[.;!?]", text[:m.start()])[-1].split()[-6:]
+        if not NEGATION.search(" ".join(before)):
+            return True
+    return False
+
+
 def _text_errors(tag: str, text: str, records: dict[str, dict]) -> list[str]:
     errors = []
-    if CAUSAL_CERTAINTY.search(text):
+    if asserts_certainty(text):
         errors.append(f"{tag}: causal certainty is not allowed")
     if SHAP_AS_CAUSE.search(text):
         errors.append(f"{tag}: SHAP attribution is not causal evidence")

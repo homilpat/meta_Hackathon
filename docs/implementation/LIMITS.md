@@ -26,6 +26,9 @@ request schemas, so a change takes effect after a restart.
 | MODEL_TEMPERATURE | 0 | DECISION | user, 2026-11-02: as repeatable as the model allows. Muse accepts 0–2 with API default 1.0 according to the LiteLLM and promptfoo provider docs (not yet confirmed on api.meta.ai). 0 narrows run-to-run change but does not remove it |
 | MODEL_SEED | 1 | DEFAULT | any fixed integer (the value does not matter, only that it stays the same); 0 = not sent, for a model that refuses it |
 | MODEL_RESPONSE_REUSE | ON | DECISION | user, 2026-11-02: an identical request (model, messages, tools, schema, effort, temperature, seed) gets the stored answer (`model_responses`, migration 0025) instead of a new call; errors are never stored; OFF calls anew |
+| EXTRACT_COMPLETION_TOKENS_PER_CALL | 1,274 | MEASURED | CUAD held-out LIVE: 62,409 completion tokens / 49 calls (AUTO's output estimate) |
+| TOKENS_PER_ESTIMATE_TEXT | 1.34 | MEASURED | CUAD held-out LIVE, WHOLE: actual / byte-estimated prompt tokens |
+| TOKENS_PER_ESTIMATE_MAP | 2.3 | MEASURED | CUAD held-out LIVE, HYBRID: maps are word lists and cost more per byte |
 | MODEL_RUNS_PER_USER_HOUR | 30 | DEFAULT | arbitrary starting value, to be set from the company's model budget |
 | MAX_RECOMMENDATIONS | 3 | DEFAULT | screen default |
 | MIN_RECOMMENDATION_GRADE | B | DECISION (proposed) | A = matches a past case whose effect was verified, B = controlled document or unverified case, C = this case's data only (folded as 참고). Grades come from the sources, never from a model's confidence (spec §23.3) |
@@ -62,6 +65,8 @@ machine, so run the script again on the target server before changing the budget
    (`POST /intakes/{id}/analyze?read=WHOLE`). Nothing is read in full automatically.
 
 **WHOLE.** Every element, in pieces when the documents exceed the model's input.
+
+**AUTO.** WHOLE unless HYBRID is cheaper even at its most expensive, estimated before any call; the estimate and choice are recorded with the extraction (`egress.auto`). Measured on CUAD: [EV_LOCAL_EVAL.md](../evaluations/EV_LOCAL_EVAL.md).
 
 No hand-written value patterns decide what is sent. Values are always checked against their source location.
 

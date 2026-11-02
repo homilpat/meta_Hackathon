@@ -26,7 +26,7 @@ from app.fields import FreeText
 ADMIN_ROLE = "AGENT_ADMIN"
 OVERRIDES: dict[str, object] = {}  # recorded settings of this process (loaded at start, updated on change)
 RESTART = {"MAX_FILES_PER_UPLOAD", "MAX_REQUEST_ITEMS"}  # fixed in request schemas at start
-CHOICES = {"MODEL_RESPONSE_REUSE": {"ON", "OFF"}}
+CHOICES = {"MODEL_RESPONSE_REUSE": {"ON", "OFF"}, "EXTRACT_MODE": {"HYBRID", "WHOLE", "AUTO"}}
 OFF_ALLOWED = {"MAX_COST_PER_MODEL_CALL_USD", "MODEL_TEMPERATURE", "MODEL_SEED"}  # 0 is a valid setting
 
 
@@ -68,9 +68,18 @@ LIMITS: dict[str, Limit] = {
     "MAX_COST_PER_MODEL_CALL_USD": Limit(0.0, "USD of input per document-model call; 0 = off", "DECISION",
                                          "user, 2026-11-01: the context window is the cap; a cost cap is optional "
                                          "and set from the company's model budget when wanted"),
-    "EXTRACT_MODE": Limit("HYBRID", "how documents reach the model: HYBRID or WHOLE", "DECISION",
+    "EXTRACT_MODE": Limit("HYBRID", "how documents reach the model: HYBRID, WHOLE or AUTO (the cheaper, ties to WHOLE)", "DECISION",
                           "user, 2026-11-02: table of contents + server selection + the model asks for what is "
                           "missing (HYBRID). WHOLE reads every element (complete, costs the document's size)"),
+    "EXTRACT_COMPLETION_TOKENS_PER_CALL": Limit(1274, "output tokens of one extraction call, for AUTO's estimate",
+                                                "MEASURED", "CUAD held-out LIVE 2026-11-02: 62,409 completion tokens "
+                                                "over 49 calls (conditions A, B, C; muse-spark-1.3, minimal effort)"),
+    "TOKENS_PER_ESTIMATE_TEXT": Limit(1.34, "actual prompt tokens per estimated token, document elements",
+                                      "MEASURED", "CUAD held-out LIVE 2026-11-02, WHOLE: 526,682 actual / 393,138 "
+                                      "estimated (muse-spark-1.3)"),
+    "TOKENS_PER_ESTIMATE_MAP": Limit(2.3, "actual prompt tokens per estimated token, document maps (word lists)",
+                                     "MEASURED", "CUAD held-out LIVE 2026-11-02, HYBRID: 473,099 actual / 234,885 "
+                                     "estimated, maps 70% of the estimate; (2.014 - 0.3 x 1.34) / 0.7"),
     "HYBRID_MAX_PARTS_PER_ROUND": Limit(5, "pages or sections the model may ask for per round", "DEFAULT",
                                         "arbitrary starting value: bounds a round's size; set by the owner"),
     "EXTRACT_MAX_ROUNDS": Limit(2, "model calls per document analysis (round 2 asks only for missing fields)",

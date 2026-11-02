@@ -134,6 +134,38 @@ What this shows, and what it does not:
   - English contracts say nothing about manufacturing complaints, photos, charts or Korean documents.
   - The CUAD score must not be combined with B into one "document accuracy".
 
+### Short vs long: where WHOLE and HYBRID split (2026-11-02, second budget $5, spent $1.99)
+
+- **New held-out set:** `heldout_long` adds the 10 longest test contracts not already used (33–115 pages; fixed rule in the manifest).
+- **AUTO** (`EXTRACT_MODE=AUTO`) estimates both costs before any call, from what each would send.
+  - Byte estimates are scaled to real tokens by ratios measured on the first held-out run: elements ×1.34, maps ×2.3.
+  - It chooses WHOLE unless HYBRID is cheaper even at its most expensive.
+  - Condition D is AUTO. Every one of its requests was identical to a recorded A or C request, so its answers are those recorded answers (0 new calls).
+
+| Set | Condition | Span P | Span R | Gold inside a quote | Page recall | Cost |
+|---|---|---|---|---|---|---|
+| heldout (11–106 pages) | A HYBRID | 0.643 | 0.632 | 0.684 | 0.877 | $0.70 |
+| | C WHOLE | 0.695 | **0.719** | **0.860** | 1.0 | $0.70 |
+| | D AUTO | 0.667 | 0.632 | 0.772 | 0.895 | $0.54 |
+| heldout_long (33–115 pages) | A HYBRID | 0.786 | 0.579 | 0.605 | 0.790 | **$0.70** |
+| | C WHOLE | 0.714 | **0.658** | **0.711** | 1.0 | $1.29 |
+| | D AUTO | 0.733 | 0.579 | 0.658 | 0.842 | $0.85 |
+
+Per contract (20 contracts):
+- **Accuracy:** HYBRID found the same answers as WHOLE in 17 contracts and one more in 1. It **lost heavily in 2**: 47 pages, 2 vs 7 of 11; 88 pages, 4 vs 7 of 10. Those losses are about whether the map leads the model to the answer pages, not about length alone.
+- **Cost:**
+  - On the 20 contracts, WHOLE costs $0.023–0.228 per contract and HYBRID $0.015–0.127.
+  - Above about 30 pages HYBRID was cheaper every time, by roughly half.
+  - Below about 25 pages WHOLE was cheaper in 7 of 8, because the map and the second call cost more than the document.
+- **AUTO's cost estimate:**
+  - In sample, it matched the cheaper mode in 9 of 10.
+  - Out of sample (heldout_long), it matched in 5 of 10. For the five 33–44-page contracts it chose WHOLE, but HYBRID was cheaper: HYBRID's real round 2 is usually far below its maximum.
+  - Every error leaned to WHOLE, which never lost an answer.
+- **The real trade-off:** reading every page costs a few cents more per long document (about +$0.06 on average here) and recovers the answers HYBRID sometimes misses (recall +8–9 points).
+  - This is a decision about money per document, not a page count. `MAX_COST_PER_MODEL_CALL_USD` already lets the owner set it.
+  - The default (HYBRID) is unchanged until the owner decides.
+- **Limits:** 20 contracts and one run each. AUTO's ratios were fit on heldout, and heldout_long is the out-of-sample check.
+
 ## B. Synthetic manufacturing fixtures (EV-FR-02): `scripts/fixture_eval.py`
 
 Truths were written by hand from the generators, and each locator was checked once against the parser. This is **not a manufacturing benchmark**.

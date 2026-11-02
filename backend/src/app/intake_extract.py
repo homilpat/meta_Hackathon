@@ -240,15 +240,58 @@ def hybrid(provider: ModelProvider, files: list[dict], protected: str, task: dic
     return raw, withheld, info
 
 
+def auto_mode(files: list[dict], task: dict | None = None) -> tuple[str, dict]:
+    """AUTO: WHOLE unless HYBRID is cheaper even at its most expensive, estimated before any call from what each
+    would send. HYBRID: every round repeats the prompt, schema, note and maps; round 1 adds the server's selection,
+    each later round at most the HYBRID_MAX_PARTS_PER_ROUND largest parts. WHOLE: the prompt and every element once
+    (per piece when it must split). Byte estimates are scaled to real tokens by the measured TOKENS_PER_ESTIMATE_*
+    (maps are word lists and cost more per byte). Output: EXTRACT_COMPLETION_TOKENS_PER_CALL per call. Ties go to
+    WHOLE, which read more on the CUAD held-out run (page recall 1.0 vs 0.88)."""
+    from app import doc_map, doc_select
+
+    task = task or intake_task()
+    est, out = limits.estimate_tokens, limits.get("EXTRACT_COMPLETION_TOKENS_PER_CALL")
+    system = est(task["prompt"]) + est(json.dumps(task["schema"]))
+    size = {(f["file_id"], e["id"]): est(json.dumps(e, ensure_ascii=False)) for f in files for e in f["elements"]}
+    images = min(sum(len(f.get("images", {})) for f in files), limits.get("MAX_IMAGES_PER_CALL"))
+    whole_in = sum(size.values()) + images * limits.get("IMAGE_TOKENS")
+    pieces = -(-whole_in // max(1, limits.max_input_tokens() - system))
+    whole = {"input": whole_in + pieces * system, "calls": pieces}
+    maps, first, parts = 0, 0, []
+    for f in files:
+        m = doc_map.build(f["elements"], f.get("coverage", {}))
+        maps += est(json.dumps(task["map"](m) if task["map"] else m, ensure_ascii=False))
+        ids, _ = doc_select.select(f["elements"], task["fields"], labels=task["labels"])
+        first += sum(size[(f["file_id"], i)] for i in ids)
+        parts += [sum(size[(f["file_id"], e["id"])] for e in els) for els in doc_map.units(f["elements"]).values()]
+    rounds = limits.get("EXTRACT_MAX_ROUNDS")
+    later = sum(sorted(parts, reverse=True)[:limits.get("HYBRID_MAX_PARTS_PER_ROUND")])
+    text, mapr = limits.get("TOKENS_PER_ESTIMATE_TEXT"), limits.get("TOKENS_PER_ESTIMATE_MAP")  # measured
+    whole["input"] = round(whole["input"] * text)
+    hybrid = {"input": round(rounds * ((system + est(HYBRID_NOTE)) * text + maps * mapr)
+                             + (first + (rounds - 1) * later) * text), "calls": rounds}
+    price = limits.get("MODEL_PRICE_INPUT_PER_M_USD"), limits.get("MODEL_PRICE_OUTPUT_PER_M_USD")
+    for x in (whole, hybrid):
+        x["usd"] = round((x["input"] * price[0] + x["calls"] * out * price[1]) / 1e6, 5)
+    mode = "WHOLE" if whole["usd"] <= hybrid["usd"] else "HYBRID"
+    return mode, {"chosen": mode, "whole": whole, "hybrid_at_most": hybrid,
+                  "rule": "WHOLE unless HYBRID is cheaper at its most expensive (estimated before any call)"}
+
+
 def extract(provider: ModelProvider, files: list[dict], protected: str = "MASK",
             mode: str | None = None, task: dict | None = None) -> tuple[dict, list[dict], dict]:
     """(model output with tokens mapped back, withheld files, what was sent). EXTRACT_MODE WHOLE (default) reads
     every element; HYBRID sends the server's selection and a map, and the model asks for missing parts. Raises
     ProviderError when the first call fails."""
-    if (mode or limits.get("EXTRACT_MODE")) == "HYBRID":
-        return hybrid(provider, files, protected, task)
-    raw, withheld, info = whole(provider, files, protected, task)
-    info["mode"] = "WHOLE"
+    mode, choice = mode or limits.get("EXTRACT_MODE"), None
+    if mode == "AUTO":
+        mode, choice = auto_mode(files, task)
+    if mode == "HYBRID":
+        raw, withheld, info = hybrid(provider, files, protected, task)
+    else:
+        raw, withheld, info = whole(provider, files, protected, task)
+        info["mode"] = "WHOLE"
+    info["auto"] = choice  # AUTO's estimate and choice, None when a mode was set
     return raw, withheld, info
 
 

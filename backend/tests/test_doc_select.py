@@ -3,6 +3,8 @@ missing, the default) and WHOLE (every element, in pieces when it does not fit).
 
 import json
 
+import pytest
+
 from app import docparse, intake_extract, limits
 from scripts.select_eval import TRUTH, caught, dossier
 from tests.test_intake_in2 import Scripted
@@ -88,3 +90,25 @@ def test_hybrid_reports_what_it_left_unread_and_a_person_can_have_it_all_read(tm
     assert analyze(c, iid).json()["draft"]["egress"]["mode"] == "HYBRID"  # the default
     again = c.post(f"/intakes/{iid}/analyze", params={"read": "WHOLE"}, headers=H("alice")).json()["draft"]
     assert again["egress"]["mode"] == "WHOLE" and again["version"] == 2  # a person's choice, a new version
+
+
+def test_auto_reads_a_short_document_whole_and_a_long_one_by_hybrid_and_records_why(monkeypatch):
+    short = [{"id": f"pdf:p1:l{i}", "kind": "text", "page": 1, "text": t} for i, t in
+             enumerate(["Customer: Hanbit Motors", "LOT L02, 12 defective boards", "Please reply by 2026-11-07"])]
+    mode, why = intake_extract.auto_mode(files_of(short))
+    assert mode == "WHOLE" and why["whole"]["usd"] <= why["hybrid_at_most"]["usd"]
+    els, cov, _ = docparse.parse("application/pdf", dossier(), docparse.Budget(10_000))  # 120 pages
+    mode, why = intake_extract.auto_mode(files_of(els, cov))
+    assert mode == "HYBRID" and why["hybrid_at_most"]["usd"] < why["whole"]["usd"]
+    monkeypatch.setitem(limits.OVERRIDES, "EXTRACT_MODE", "AUTO")
+    p = Scripted(*[EMPTY] * 3)
+    _, _, info = intake_extract.extract(p, files_of(short))
+    assert info["mode"] == "WHOLE" and info["auto"]["chosen"] == "WHOLE" and len(p.seen) == 1
+
+
+def test_extract_mode_takes_only_known_values():
+    from fastapi import HTTPException
+
+    assert limits.cast("EXTRACT_MODE", "AUTO") == "AUTO"
+    with pytest.raises(HTTPException):
+        limits.cast("EXTRACT_MODE", "SOMETIMES")

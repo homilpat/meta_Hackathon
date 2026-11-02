@@ -43,12 +43,15 @@ SOURCES = {
                         "data.zip",
                  "sha256": "f8161d18bea4e9c05e78fa6dda61c19c846fb8087ea969c172753bc2f45b999a"},
 }
-SPLITS = {"dev": ("train_separate_questions.json", 3), "heldout": ("test.json", 10)}  # contracts per split
+# split -> (official file, contracts, how chosen). heldout_long: the longest test contracts not in heldout, added
+# 2026-11-02 to measure where AUTO switches to HYBRID (the first held-out set had only 2 contracts above 34 pages)
+SPLITS = {"dev": ("train_separate_questions.json", 3, "seed"), "heldout": ("test.json", 10, "seed"),
+          "heldout_long": ("test.json", 10, "longest")}
 SEED = 20261102
 MIN_PAGES = 10  # the plan's rule (CUAD_EVAL_PLAN.md): long enough that finding the part matters
 CATEGORIES = ["Parties", "Agreement Date", "Governing Law", "Expiration Date", "Termination For Convenience"]
 CONDITIONS = {"A": ("pdf", "HYBRID", None), "B": ("pdf", "HYBRID", "no_contents"), "C": ("pdf", "WHOLE", None),
-              "T": ("text", "WHOLE", None)}
+              "T": ("text", "WHOLE", None), "D": ("pdf", "AUTO", None)}
 
 PROMPT = """You read one commercial contract. The server gives it as numbered elements (text lines, table cells).
 For each question, copy exactly the passages of the contract that answer it, with the element id each passage
@@ -202,15 +205,17 @@ def prepare(args: list[str]) -> int:
         "attribution": "The Atticus Project, CUAD v1, https://www.atticusprojectai.org/cuad",
         "sources": {n: {**s, "bytes": (raw_dir / n).stat().st_size} for n, s in SOURCES.items()},
         "official_split": {}, "subset_rule": {
-            "seed": SEED, "contracts": {s: n for s, (_, n) in SPLITS.items()}, "min_pdf_pages": MIN_PAGES,
+            "seed": SEED, "contracts": {s: n for s, (_, n, _) in SPLITS.items()}, "min_pdf_pages": MIN_PAGES,
             "categories": CATEGORIES, "how": "contracts of the split with a PDF in CUAD_v1.zip and at least "
             "min_pdf_pages pages, sorted by title, random.Random(seed).sample(...)",
             "dev": "train split; may be looked at while adjusting prompt or labels",
-            "heldout": "official test split; never used for tuning; gold never enters model input or labels"},
+            "heldout": "official test split; never used for tuning; gold never enters model input or labels",
+            "heldout_long": "official test split: the 10 eligible contracts with the most pages that are not in "
+                            "heldout (ties by title); out of sample for AUTO's measured token ratios"},
         "retries": "none: a failed call is a failed question, counted", "subset": {},
         "limitations": [
             "CUAD has been public since 2021: the model may have seen these contracts in training",
-            "a 13-contract subset of 5 of 41 categories, not CUAD's official result",
+            "a 23-contract subset of 5 of 41 categories, not CUAD's official result",
             "English commercial contracts: says nothing about manufacturing complaints, photos, charts or Korean",
             ("official AUPR / Precision@80%/90% Recall need per-candidate probabilities, which the model does not "
             "return (self-reported confidence is not a calibrated probability)")],
@@ -219,15 +224,17 @@ def prepare(args: list[str]) -> int:
     gold, text_dir, pdf_dir = {}, CUAD_DIR / "text", CUAD_DIR / "pdf"
     text_dir.mkdir(exist_ok=True)
     pdf_dir.mkdir(exist_ok=True)
-    for split, (fname, n) in SPLITS.items():
+    taken: set[str] = set()
+    for split, (fname, n, how) in SPLITS.items():
         data = json.loads(splitz.read(fname))
         manifest["version"] = manifest["version"] or data.get("version")
-        eligible, short, no_pdf = [], 0, 0
+        eligible, short, no_pdf, pages_of = [], 0, 0, {}
         for c in sorted(data["data"], key=lambda c: c["title"]):
             if c["title"] not in pdfs:
                 no_pdf += 1
                 continue
-            if len(PdfReader(io.BytesIO(pdfz.read(pdfs[c["title"]]))).pages) < MIN_PAGES:
+            pages_of[c["title"]] = len(PdfReader(io.BytesIO(pdfz.read(pdfs[c["title"]]))).pages)
+            if pages_of[c["title"]] < MIN_PAGES:
                 short += 1
                 continue
             eligible.append(c)
@@ -235,7 +242,10 @@ def prepare(args: list[str]) -> int:
                                              "excluded_no_pdf": no_pdf, f"excluded_under_{MIN_PAGES}_pages": short,
                                              "eligible": len(eligible)}
         rows = []
-        for c in random.Random(SEED).sample(eligible, n):
+        chosen = random.Random(SEED).sample(eligible, n) if how == "seed" else sorted(
+            (c for c in eligible if c["title"] not in taken), key=lambda c: (-pages_of[c["title"]], c["title"]))[:n]
+        taken |= {c["title"] for c in chosen}
+        for c in chosen:
             pdf = pdfz.read(pdfs[c["title"]])
             cid = evalkit.sha256_bytes(c["title"].encode())[:12]
             (pdf_dir / f"{cid}.pdf").write_bytes(pdf)
@@ -303,8 +313,28 @@ class Recorder:
             self.calls.append({**call, "error": str(exc), "seconds": round(time.perf_counter() - t0, 2)})
             raise
         self.calls.append({**call, "content": r["message"].get("content"), "usage": r.get("usage") or {},
-                           "seconds": round(time.perf_counter() - t0, 2)})
+                           "seconds": round(time.perf_counter() - t0, 2), "reused": bool(r.get("reused"))})
         return r
+
+
+class ReuseTraces:
+    """For --reuse: an identical request (same messages; same model and settings, as the traces record) gets the
+    answer an earlier LIVE trace of the same split recorded, as the product's model_cache does; anything else calls
+    the model. Its usage is kept so the report shows what the call costs; the budget counts only new calls."""
+
+    def __init__(self, provider, split: str):
+        self.p, self.mode, self.model, self.known = provider, provider.mode, provider.model, {}
+        for t in sorted((CUAD_DIR / "traces").glob(f"{split}-*-LIVE-*.jsonl")):
+            for line in t.read_text(encoding="utf-8").splitlines()[1:]:
+                for c in json.loads(line)["calls"]:
+                    if "error" not in c and not c.get("reused"):
+                        self.known.setdefault(c["request_sha256"], c)
+
+    def chat(self, messages, tools, response_format=None, reasoning_effort=None):
+        c = self.known.get(evalkit.sha256_json(messages))
+        if c is not None:
+            return {"message": {"content": c["content"]}, "usage": c["usage"], "reused": True}
+        return self.p.chat(messages, tools, response_format=response_format, reasoning_effort=reasoning_effort)
 
 
 class Replay:
@@ -377,7 +407,7 @@ def run_one(provider, row: dict, condition: str, manifest: dict) -> dict:
             "input_sha256": evalkit.sha256_json(files[0]["elements"])[:16], "seconds": round(time.perf_counter()
                                                                                               - t0, 2),
             "calls": rec.calls, "raw": raw, "info": {k: (info or {}).get(k) for k in ("rounds", "pieces", "usage",
-                                                                                      "unread")},
+                                                                                      "unread", "auto", "mode")},
             "error": error, "at": evalkit.now()}
 
 
@@ -399,6 +429,8 @@ def collect(args: list[str]) -> int:
         # text: the word is content, not our marking. Evaluation-only exception (user 2026-11-02), recorded in
         # the trace; the secret check stays on and the product never turns this off.
         provider.restricted_check = False
+        if "--reuse" in args:
+            provider = ReuseTraces(provider, split)
     out = CUAD_DIR / "traces" / f"{split}-{condition}-{provider.mode}-{evalkit.now().replace(':', '')}.jsonl"
     out.parent.mkdir(parents=True, exist_ok=True)
     spent = 0.0
@@ -412,14 +444,14 @@ def collect(args: list[str]) -> int:
         for row in rows:
             if budget is not None:  # stop before a contract whose worst case would pass the budget
                 whole = limits.estimate_tokens(json.dumps(files_of(row, CONDITIONS[condition][0])[0]["elements"]))
-                calls = limits.get("EXTRACT_MAX_ROUNDS") if CONDITIONS[condition][1] == "HYBRID" else 1
+                calls = limits.get("EXTRACT_MAX_ROUNDS") if CONDITIONS[condition][1] != "WHOLE" else 1
                 worst = calls * evalkit.cost_usd(
                     {"prompt_tokens": whole, "completion_tokens": 8192})
                 if spent + worst > budget:
                     print(f"STOPPED: budget {budget} USD (spent {spent:.3f}, next worst case {worst:.3f})")
                     break
             r = run_one(provider, row, condition, manifest)
-            spent += sum(evalkit.cost_usd(c.get("usage") or {}) for c in r["calls"])
+            spent += sum(evalkit.cost_usd(c.get("usage") or {}) for c in r["calls"] if not c.get("reused"))
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
             print(row["id"], "error" if r["error"] else "ok", f"{r['seconds']}s", f"spent {spent:.3f} USD")
     print("trace", out)

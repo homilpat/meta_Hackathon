@@ -26,7 +26,7 @@ from app.fields import FreeText
 ADMIN_ROLE = "AGENT_ADMIN"
 OVERRIDES: dict[str, object] = {}  # recorded settings of this process (loaded at start, updated on change)
 RESTART = {"MAX_FILES_PER_UPLOAD", "MAX_REQUEST_ITEMS"}  # fixed in request schemas at start
-CHOICES = {"MODEL_RESPONSE_REUSE": {"ON", "OFF"}, "EXTRACT_MODE": {"HYBRID", "WHOLE", "AUTO"}}
+CHOICES = {"MODEL_RESPONSE_REUSE": {"ON", "OFF"}, "EXTRACT_MODE": {"WHOLE_FIRST", "HYBRID", "WHOLE", "AUTO"}}
 OFF_ALLOWED = {"MAX_COST_PER_MODEL_CALL_USD", "MODEL_TEMPERATURE", "MODEL_SEED"}  # 0 is a valid setting
 
 
@@ -68,9 +68,11 @@ LIMITS: dict[str, Limit] = {
     "MAX_COST_PER_MODEL_CALL_USD": Limit(0.0, "USD of input per document-model call; 0 = off", "DECISION",
                                          "user, 2026-11-01: the context window is the cap; a cost cap is optional "
                                          "and set from the company's model budget when wanted"),
-    "EXTRACT_MODE": Limit("HYBRID", "how documents reach the model: HYBRID, WHOLE or AUTO (the cheaper, ties to WHOLE)", "DECISION",
-                          "user, 2026-11-02: table of contents + server selection + the model asks for what is "
-                          "missing (HYBRID). WHOLE reads every element (complete, costs the document's size)"),
+    "EXTRACT_MODE": Limit("WHOLE_FIRST", "how documents reach the model: WHOLE_FIRST, WHOLE, HYBRID or AUTO",
+                          "DECISION", "user, 2026-11-02, after the CUAD LIVE runs: WHOLE_FIRST reads every element "
+                          "when it fits one call (context and cost cap) and uses HYBRID (contents + server selection "
+                          "+ the model asks for parts) only beyond that. WHOLE always reads all (in pieces); AUTO picks "
+                          "the cheaper by estimate"),
     "EXTRACT_COMPLETION_TOKENS_PER_CALL": Limit(1274, "output tokens of one extraction call, for AUTO's estimate",
                                                 "MEASURED", "CUAD held-out LIVE 2026-11-02: 62,409 completion tokens "
                                                 "over 49 calls (conditions A, B, C; muse-spark-1.3, minimal effort)"),

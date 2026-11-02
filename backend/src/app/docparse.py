@@ -17,7 +17,7 @@ from typing import Any
 
 from lxml import etree
 
-PARSER_VERSION = "docparse-3"  # 2: PDF table cells from positions; 3: PDF outline, DOCX headings, TOC pages
+PARSER_VERSION = "docparse-4"  # 2: PDF table cells; 3: outline, DOCX headings, TOC pages; 4: TOC with no-break spaces
 RENDER_SCALE = 1.0  # one PDF point per pixel (72 dpi): the page as laid out, no upscaling
 RENDER_ERRORS = (RuntimeError, OSError, ValueError, MemoryError)  # pypdfium2.PdfiumError is a RuntimeError
 CAPTION = re.compile(r"^\s*(그림|사진|표|Fig\.?|Figure|Photo|Table)\s*\d", re.IGNORECASE)
@@ -249,7 +249,7 @@ def parse_pdf(data: bytes, budget: "Budget | None" = None) -> tuple[list[dict], 
     return elements, coverage, blobs
 
 
-TOC = re.compile(r"^\s*(table of contents|contents|목\s*차|차\s*례|目\s*次)\s*$", re.IGNORECASE)
+TOC = re.compile(r"^\s*(table\s+of\s+contents|contents|목\s*차|차\s*례|目\s*次)\s*$", re.IGNORECASE)  # \s: no-break too
 
 
 def pdf_outline(reader) -> list[dict]:

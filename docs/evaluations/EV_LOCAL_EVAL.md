@@ -183,6 +183,22 @@ Per contract (20 contracts):
   - The two contracts where HYBRID lost heavily are the clearer signal, and page recall (0.79 vs 1.0, the same in both runs) shows HYBRID never read some answer pages.
 - **Budget:** the second $5 budget has spent $3.98 (heldout_long A and C twice, plus AUTO by reuse).
 
+### Why HYBRID missed: the two contracts where it lost heavily (offline, from the saved traces)
+
+| Contract | What HYBRID read | Lost | Cause |
+|---|---|---|---|
+| heldout, 47 pages | round 1 pages 1, 3, 8, 16, 41; round 2 the 5 pages it asked for (6, 30, 43–45) | Parties: 2 of 8 vs WHOLE 7 | Gold marks every place a party is named (pages 1–2 and on). Reading a few pages finds few mentions: partly a property of this category, not a wrong value. The **contents page was not found**, see 1 below |
+| heldout_long, 88 pages | round 1 pages 1, 28, 53, 54, 65, 88; round 2 pages 53, 54, 64, 65 (asked 4 of 5 allowed) | Governing Law 0 of 1; Termination for Convenience 0 of 3 | The model asked for the right section, but the clause continued onto the next page (p66, which starts "(signature page follows)"). The answers on pp. 22 and 56 sit on pages whose map entry begins with a bare page number ("-21-", "-55-") |
+
+What to improve in HYBRID if long documents are common (not done; each needs a LIVE re-measure on heldout_long, about $0.7):
+1. **Fixed now (parser `docparse-4`):** a contents page spelled with no-break spaces ("TABLE OF CONTENTS" with U+00A0) was not detected, so the map had no contents.
+2. **The map's "first line" is often a page number or running header** ("-21-", "Exhibit 10.1"). It could skip such lines and show the first real line or heading.
+3. **Clauses run past the page the model asks for.** A requested part could come with the start of the next page, up to the next heading candidate.
+4. **The map is heavy:** 70% of HYBRID's input, at about 2.3 tokens per estimated token, sent in every round. The per-part unique-word lists are most of it.
+5. **Only one follow-up round** (`EXTRACT_MAX_ROUNDS` 2). The model could not ask again after seeing p65.
+
+Saved HYBRID traces of contracts with such a contents page replay as STALE under `docparse-4`. Their results stand for the code they were collected with (code SHA in each trace).
+
 ## B. Synthetic manufacturing fixtures (EV-FR-02): `scripts/fixture_eval.py`
 
 Truths were written by hand from the generators, and each locator was checked once against the parser. This is **not a manufacturing benchmark**.

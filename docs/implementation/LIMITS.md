@@ -50,7 +50,17 @@ machine, so run the script again on the target server before changing the budget
 
 ## How documents reach the model (EXTRACT_MODE)
 
-**HYBRID (default, user decision 2026-11-02).**
+**WHOLE_FIRST (default since 2026-11-02, user decision after the CUAD LIVE runs).**
+- Every element is read in one call when it fits: within the model's input and, when the owner sets one, `MAX_COST_PER_MODEL_CALL_USD`.
+- Only beyond that does the document go HYBRID.
+- The split is the money per call the owner allows, not a page count.
+- Why:
+  - WHOLE read every answer page.
+  - HYBRID never read about 21% of them on long contracts and sometimes lost several answers.
+  - Below about 25 pages WHOLE was also cheaper.
+  - Measurements: [EV_LOCAL_EVAL.md](../evaluations/EV_LOCAL_EVAL.md).
+
+**HYBRID (the default from 2026-11-02 until WHOLE_FIRST; now used beyond one call or when chosen).**
 1. The server sends a first selection: the document head; captions, charts and scans; and per field the best BM25
    hit for its label words, with its table row, header and column.
 2. It also sends a map of each document (`app/doc_map.py`):

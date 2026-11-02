@@ -278,6 +278,21 @@ def auto_mode(files: list[dict], task: dict | None = None) -> tuple[str, dict]:
                   "rule": "WHOLE unless HYBRID is cheaper at its most expensive (estimated before any call)"}
 
 
+def whole_first(files: list[dict], task: dict | None = None) -> tuple[str, dict]:
+    """WHOLE_FIRST (default, user 2026-11-02): read every element when the documents fit one call, i.e. within the
+    model's input and the owner's cost cap (limits.max_input_tokens); otherwise HYBRID. WHOLE read every answer page
+    on CUAD and HYBRID sometimes missed some; the split is the money per call the owner allows, not a page count."""
+    task = task or intake_task()
+    est = limits.estimate_tokens
+    system = est(task["prompt"]) + est(json.dumps(task["schema"]))
+    images = min(sum(len(f.get("images", {})) for f in files), limits.get("MAX_IMAGES_PER_CALL"))
+    need = round((system + sum(est(json.dumps(e, ensure_ascii=False)) for f in files for e in f["elements"]))
+                 * limits.get("TOKENS_PER_ESTIMATE_TEXT")) + images * limits.get("IMAGE_TOKENS")
+    mode = "WHOLE" if need <= limits.max_input_tokens() else "HYBRID"
+    return mode, {"chosen": mode, "whole_input_tokens": need, "max_input_tokens": limits.max_input_tokens(),
+                  "rule": "WHOLE when every element fits one call (context window and cost cap), else HYBRID"}
+
+
 def extract(provider: ModelProvider, files: list[dict], protected: str = "MASK",
             mode: str | None = None, task: dict | None = None) -> tuple[dict, list[dict], dict]:
     """(model output with tokens mapped back, withheld files, what was sent). EXTRACT_MODE WHOLE (default) reads
@@ -286,12 +301,14 @@ def extract(provider: ModelProvider, files: list[dict], protected: str = "MASK",
     mode, choice = mode or limits.get("EXTRACT_MODE"), None
     if mode == "AUTO":
         mode, choice = auto_mode(files, task)
+    elif mode == "WHOLE_FIRST":
+        mode, choice = whole_first(files, task)
     if mode == "HYBRID":
         raw, withheld, info = hybrid(provider, files, protected, task)
     else:
         raw, withheld, info = whole(provider, files, protected, task)
         info["mode"] = "WHOLE"
-    info["auto"] = choice  # AUTO's estimate and choice, None when a mode was set
+    info["auto"] = choice  # AUTO's or WHOLE_FIRST's estimate and choice, None when a mode was set
     return raw, withheld, info
 
 

@@ -87,9 +87,10 @@ def test_hybrid_reports_what_it_left_unread_and_a_person_can_have_it_all_read(tm
     p = Scripted(*[EMPTY] * 6)
     c = client(tmp_path, p)
     iid = upload(c, [("c.pdf", PDF_FIXTURE.read_bytes())]).json()["intake_id"]
-    assert analyze(c, iid).json()["draft"]["egress"]["mode"] == "HYBRID"  # the default
-    again = c.post(f"/intakes/{iid}/analyze", params={"read": "WHOLE"}, headers=H("alice")).json()["draft"]
-    assert again["egress"]["mode"] == "WHOLE" and again["version"] == 2  # a person's choice, a new version
+    first = analyze(c, iid).json()["draft"]["egress"]
+    assert first["mode"] == "WHOLE" and first["auto"]["chosen"] == "WHOLE"  # the default WHOLE_FIRST: it fits
+    again = c.post(f"/intakes/{iid}/analyze", params={"read": "HYBRID"}, headers=H("alice")).json()["draft"]
+    assert again["egress"]["mode"] == "HYBRID" and again["version"] == 2  # a person's choice, a new version
 
 
 def test_auto_reads_a_short_document_whole_and_a_long_one_by_hybrid_and_records_why(monkeypatch):
@@ -112,3 +113,18 @@ def test_extract_mode_takes_only_known_values():
     assert limits.cast("EXTRACT_MODE", "AUTO") == "AUTO"
     with pytest.raises(HTTPException):
         limits.cast("EXTRACT_MODE", "SOMETIMES")
+
+
+def test_whole_first_reads_all_when_it_fits_one_call_and_hybrid_beyond_the_owners_cap(monkeypatch):
+    els, cov, _ = docparse.parse("application/pdf", dossier(), docparse.Budget(10_000))  # 120 pages
+    p = Scripted(*[EMPTY] * 3)
+    _, _, info = intake_extract.extract(p, files_of(els, cov))  # default WHOLE_FIRST, no cap: fits
+    assert info["mode"] == "WHOLE" and len(p.seen) == 1 and info["auto"]["chosen"] == "WHOLE"
+    monkeypatch.setitem(limits.OVERRIDES, "MAX_COST_PER_MODEL_CALL_USD", 0.01)  # the owner caps a call at 1 cent
+    p = Scripted(*[EMPTY] * 3)
+    _, _, info = intake_extract.extract(p, files_of(els, cov))
+    assert info["mode"] == "HYBRID" and info["auto"]["whole_input_tokens"] > info["auto"]["max_input_tokens"]
+
+
+def test_a_contents_page_spelled_with_no_break_spaces_is_found():
+    assert docparse.TOC.match("TABLE OF CONTENTS") and docparse.TOC.match("Table of Contents")

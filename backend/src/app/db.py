@@ -1095,6 +1095,21 @@ class IntakeEgressEvent(Base):
     created_at: Mapped[str] = mapped_column(String(40))
 
 
+class ModelResponse(Base):
+    """A model answer stored by the exact request it answered (sha256 of model, messages, tools, schema and
+    settings): the same request gets the same answer again instead of a new, possibly different, call."""
+
+    __tablename__ = "model_responses"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    request_sha256: Mapped[str] = mapped_column(String(64), unique=True)
+    model: Mapped[str] = mapped_column(String(80))
+    provider_mode: Mapped[str] = mapped_column(String(20))
+    message: Mapped[dict] = mapped_column(JSON)
+    usage: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
 class LimitSetting(Base):
     """A change of an operating limit by the AI operations department: value, reason, who, when."""
 
@@ -1109,7 +1124,7 @@ class LimitSetting(Base):
 
 
 # Audit rows are append-only at the database level, not just by convention.
-APPEND_ONLY = ("approval_events", "workflow_events", "doc_comments", "audit_chain",
+APPEND_ONLY = ("model_responses", "approval_events", "workflow_events", "doc_comments", "audit_chain",
                "workflow_policies", "evidence_quality", "process_contexts", "affected_objects",
                "triage_assessments", "team_events", "actions", "action_events",
                "cause_hypotheses", "why_links", "experiments", "causal_decisions",

@@ -21,6 +21,18 @@ A key on its own never starts a paid call.
 
 Data, traces and gold live in `.eval_data/` (git-ignored, or wherever `QO_EVAL_DATA` points). Committed reports in `docs/evaluations/ev/` hold ids, hashes and scores, not document text.
 
+## Repeatable answers (user decision 2026-11-02)
+
+The aim is to reduce the change itself first, then measure what is left.
+
+**Reducing it:**
+- Every model call sends `temperature` 0 and a fixed `seed` (`MODEL_TEMPERATURE`, `MODEL_SEED` in LIMITS.md).
+- In the product, an identical request gets its stored answer (`app/model_cache.py`), so the same document and question never get a second, different answer.
+
+**Measuring what is left:**
+- Even at temperature 0, a hosted model does not guarantee identical output, and a model update changes answers under the same name.
+- The evaluation therefore calls the model directly, without reuse, and records temperature and seed with every run (`sampling` in each header), so repeated LIVE runs show the change that is left.
+
 ## Commands (run from `backend/`)
 
 ```

@@ -23,6 +23,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from app import EVAL_DIR, REPO_ROOT, docparse
+from app.model_provider import sampling
 
 # Downloaded data and traces (they may hold document text): outside git (.gitignore), here unless QO_EVAL_DATA says
 DATA_DIR = Path(os.environ.get("QO_EVAL_DATA") or REPO_ROOT / ".eval_data")
@@ -65,6 +66,7 @@ def run_info(evaluator: str, **extra) -> dict:
     """What a result belongs to: code, parser, evaluator source, Python, command and time."""
     return {"code_sha": code_sha(), "parser_version": docparse.PARSER_VERSION,
             "evaluator": evaluator, "evaluator_sha256": sha256_file(Path(importlib.util.find_spec(evaluator).origin))[:16],
+            "sampling": sampling(),
             "python": platform.python_version(), "command": " ".join(["python -m", evaluator, *sys.argv[1:]]),
             "at": now(), **extra}
 

@@ -23,6 +23,9 @@ request schemas, so a change takes effect after a restart.
 | BYTES_PER_TOKEN | 4 | STANDARD | rule of thumb (about 4 characters per token for English); conservative for Korean |
 | IMAGE_TOKENS | 390 | MEASURED | one LIVE run: 2,414 prompt tokens = 790 text + 362 prompt + 481 schema + 2 images. Calibration from that run, not an independent check. Every call now records its real usage (`egress.usage`, request review events), so it can be recalibrated |
 | EXTRACT_REASONING_EFFORT | minimal | MEASURED | LIVE: minimal 8/8 and 7/8 at 7–8 s, default 8/8 at 19.5 s. The owner chooses speed vs completeness |
+| MODEL_TEMPERATURE | 0 | DECISION | user, 2026-11-02: as repeatable as the model allows. Muse accepts 0–2 with API default 1.0 according to the LiteLLM and promptfoo provider docs (not yet confirmed on api.meta.ai). 0 narrows run-to-run change but does not remove it |
+| MODEL_SEED | 1 | DEFAULT | any fixed integer (the value does not matter, only that it stays the same); 0 = not sent, for a model that refuses it |
+| MODEL_RESPONSE_REUSE | ON | DECISION | user, 2026-11-02: an identical request (model, messages, tools, schema, effort, temperature, seed) gets the stored answer (`model_responses`, migration 0025) instead of a new call; errors are never stored; OFF calls anew |
 | MODEL_RUNS_PER_USER_HOUR | 30 | DEFAULT | arbitrary starting value, to be set from the company's model budget |
 | MAX_RECOMMENDATIONS | 3 | DEFAULT | screen default |
 | MIN_RECOMMENDATION_GRADE | B | DECISION (proposed) | A = matches a past case whose effect was verified, B = controlled document or unverified case, C = this case's data only (folded as 참고). Grades come from the sources, never from a model's confidence (spec §23.3) |

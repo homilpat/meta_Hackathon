@@ -26,7 +26,8 @@ from app.fields import FreeText
 ADMIN_ROLE = "AGENT_ADMIN"
 OVERRIDES: dict[str, object] = {}  # recorded settings of this process (loaded at start, updated on change)
 RESTART = {"MAX_FILES_PER_UPLOAD", "MAX_REQUEST_ITEMS"}  # fixed in request schemas at start
-OFF_ALLOWED = {"MAX_COST_PER_MODEL_CALL_USD"}  # 0 switches the limit off
+CHOICES = {"MODEL_RESPONSE_REUSE": {"ON", "OFF"}}
+OFF_ALLOWED = {"MAX_COST_PER_MODEL_CALL_USD", "MODEL_TEMPERATURE", "MODEL_SEED"}  # 0 is a valid setting
 
 
 @dataclass(frozen=True)
@@ -85,6 +86,18 @@ LIMITS: dict[str, Limit] = {
                                       "LIVE 2026-11-01 on the LIVE fixture: minimal 8/8 in 8.4 s and 7/8 in 7.4 s, "
                                       "default 8/8 in 19.5 s (META_LIVE_LOG); speed vs completeness is the owner's "
                                       "choice ('minimal' or 'default')"),
+    "MODEL_TEMPERATURE": Limit(0.0, "sampling temperature sent with every model call", "DECISION",
+                               "user, 2026-11-02: answers as repeatable as the model allows. Muse accepts 0-2, API "
+                               "default 1.0 (LiteLLM / promptfoo provider docs; not yet confirmed on api.meta.ai). "
+                               "0 = always the most likely token; it narrows, but does not remove, run-to-run change"),
+    "MODEL_SEED": Limit(1, "sampling seed sent with every model call (0 = not sent)", "DEFAULT",
+                        "any fixed integer: the value does not matter, only that it stays the same; reproducibility "
+                        "is best effort on the provider's side"),
+    "MODEL_RESPONSE_REUSE": Limit("ON", "ON: an identical request (same model, messages, tools, schema and settings) "
+                                        "gets the stored answer instead of a new call", "DECISION",
+                                  "user, 2026-11-02: the same document and question must not get a different "
+                                  "answer on a second look; OFF for a fresh answer. Evaluations call the model "
+                                  "directly (scripts/evalkit.py) so run-to-run change stays measurable"),
     "MODEL_RUNS_PER_USER_HOUR": Limit(30, "agent model runs per user per hour", "DEFAULT",
                                       "arbitrary starting value; set from the company's model budget"),
     "MAX_RECOMMENDATIONS": Limit(3, "agent recommendations shown per run", "DEFAULT",
@@ -110,6 +123,8 @@ def cast(name: str, raw: str):
         value = kind(raw.strip())
     except ValueError:
         raise HTTPException(422, f"{name} needs a {kind.__name__}") from None
+    if name in CHOICES and value not in CHOICES[name]:
+        raise HTTPException(422, f"{name} must be one of {', '.join(sorted(CHOICES[name]))}")
     if isinstance(value, int | float) and (value < 0 or (value == 0 and name not in OFF_ALLOWED)):
         raise HTTPException(422, f"{name} must be positive")
     return value

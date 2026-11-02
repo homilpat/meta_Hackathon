@@ -15,7 +15,8 @@ def test_provider_status_never_exposes_a_key(tmp_path):
 
     configured = TestClient(create_app(f"sqlite:///{tmp_path / 'p.db'}", Scripted())).get("/provider").json()
     assert configured == {"model": "scripted-test-double", "mode": "TEST_DOUBLE", "configured": True,
-                          "live_status": "TEST_DOUBLE"}
+                          "live_status": "TEST_DOUBLE", "sampling": {"temperature": 0.0, "seed": 1},
+                          "response_reuse": "ON"}
 
 
 def test_built_web_ui_is_served_when_present():

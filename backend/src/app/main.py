@@ -41,7 +41,8 @@ from app.ingestion import SyntheticBundle, normalize
 from app.intake import make_intake_router
 from app.intake_case import make_intake_case_router
 from app.ml_api import make_ml_router
-from app.model_provider import MODEL, LocalProvider, MetaProvider, ModelProvider
+from app.model_cache import Reusing
+from app.model_provider import MODEL, LocalProvider, MetaProvider, ModelProvider, sampling
 from app.synthetic import (
     LINE_VERSION,
     canonical,
@@ -132,6 +133,8 @@ def create_app(database_url: str | None = None,
     current_user = make_auth(sessions)
     Who = Annotated[Actor, Depends(current_user)]
     app.state.provider = provider or MetaProvider.from_env()  # None -> investigations return 503
+    if isinstance(app.state.provider, MetaProvider):  # a real model: the same request gets the same answer
+        app.state.provider = Reusing(app.state.provider, sessions)
     app.include_router(make_router(sessions, current_user, app.state.provider))
     app.include_router(make_ml_router(sessions, current_user))
     app.include_router(make_v5_router(sessions, current_user))
@@ -144,6 +147,8 @@ def create_app(database_url: str | None = None,
     app.include_router(make_export_router(sessions, current_user))
     app.include_router(make_agent_router(app, sessions, current_user, app.state.provider))
     app.state.local_provider = LocalProvider.from_env()  # in-house model for protected files, if configured
+    if app.state.local_provider is not None:
+        app.state.local_provider = Reusing(app.state.local_provider, sessions)
     app.include_router(make_intake_router(sessions, current_user, app.state.provider, app.state.local_provider))
     app.include_router(make_egress_router(sessions, current_user))
     with contextlib.suppress(OperationalError):  # a DB not yet migrated has no settings to replay
@@ -362,7 +367,8 @@ def create_app(database_url: str | None = None,
                     ModelRun.mode == "LIVE", ModelRun.status == "VALIDATED").limit(1))
             status = "VERIFIED" if ok else "CONFIGURED_NOT_VERIFIED"
         return {"model": p.model if p else MODEL, "mode": p.mode if p else None, "configured": p is not None,
-                "live_status": status}
+                "live_status": status, "sampling": sampling(),  # what every call sends, so a result can be redone
+                "response_reuse": limits.get("MODEL_RESPONSE_REUSE")}
 
     @app.get("/reference-models/steel")
     def steel_reference() -> dict:

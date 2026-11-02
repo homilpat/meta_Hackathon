@@ -50,6 +50,14 @@ def read_key() -> str:
     return ""
 
 
+def sampling() -> dict:
+    """temperature and seed sent with every call (limits.py: MODEL_TEMPERATURE, MODEL_SEED; seed 0 = not sent)."""
+    from app import limits
+
+    seed = limits.get("MODEL_SEED")
+    return {"temperature": limits.get("MODEL_TEMPERATURE"), **({"seed": seed} if seed else {})}
+
+
 class MetaProvider:
     mode = "LIVE"
     model = MODEL
@@ -68,6 +76,7 @@ class MetaProvider:
     def chat(self, messages: list[dict], tools: list[dict], response_format: dict | None = None,
              reasoning_effort: str | None = None) -> dict:
         payload = {"model": self.model, "messages": messages, "max_tokens": self._max_tokens}
+        payload |= sampling()
         if tools:
             payload["tools"] = tools
         if response_format:  # strict JSON schema: the answer must parse into the expected shape

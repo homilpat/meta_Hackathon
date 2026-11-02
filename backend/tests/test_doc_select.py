@@ -143,8 +143,8 @@ def test_the_map_skips_page_numbers_and_running_headers_and_a_page_brings_its_co
         (3, 1, "-3-"), (3, 2, "State of New York, without regard to its conflict rules."), (3, 3, "13. Notices"),
         (3, 4, "All notices are given in writing to the addresses below."), (3, 5, "Confidential draft")]]
     m = doc_map.build(els, {})
-    assert [x["first"] for x in m["parts"]] == ["ACME SUPPLY AGREEMENT", "12. Governing Law. This Agreement is governed "
-                                                "by the laws of the", "State of New York, without regard to its "
-                                                "conflict rules."]
+    assert [x["first"] for x in m["parts"]] == ["ACME SUPPLY AGREEMENT", ("12. Governing Law. This Agreement is governed "
+                                                "by the laws of the"), ("State of New York, without regard to its "
+                                                "conflict rules.")]
     assert [e["id"] for e in doc_map.continuation(els, "p2")] == ["pdf:p3:l1", "pdf:p3:l2"]  # stops at "13. Notices"
     assert doc_map.continuation(els, "s0") == [] and doc_map.continuation(els, "p3") == []

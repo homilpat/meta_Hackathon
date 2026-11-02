@@ -388,18 +388,25 @@ def collect(args: list[str]) -> int:
         if provider is None:
             print("NOT_RUN:", why)
             return 2
+        # CUAD is a public CC BY 4.0 dataset of SEC filings that say "CONFIDENTIAL TREATMENT REQUESTED" in their
+        # text: the word is content, not our marking. Evaluation-only exception (user 2026-11-02), recorded in
+        # the trace; the secret check stays on and the product never turns this off.
+        provider.restricted_check = False
     out = CUAD_DIR / "traces" / f"{split}-{condition}-{provider.mode}-{evalkit.now().replace(':', '')}.jsonl"
     out.parent.mkdir(parents=True, exist_ok=True)
     spent = 0.0
     with open(out, "w", encoding="utf-8") as f:
         f.write(json.dumps({"header": evalkit.run_info("scripts.cuad_eval", split=split, condition=condition,
                                                        run_mode=provider.mode, model=provider.model,
+                                                       egress_exception=None if budget is None else
+                                                       "CONFIDENTIAL-word backstop off: public CC BY dataset",
                                                        budget_usd=budget, manifest_sha256=evalkit.sha256_file(
                                                            MANIFEST)[:16])}) + "\n")
         for row in rows:
             if budget is not None:  # stop before a contract whose worst case would pass the budget
                 whole = limits.estimate_tokens(json.dumps(files_of(row, CONDITIONS[condition][0])[0]["elements"]))
-                worst = limits.get("EXTRACT_MAX_ROUNDS") * evalkit.cost_usd(
+                calls = limits.get("EXTRACT_MAX_ROUNDS") if CONDITIONS[condition][1] == "HYBRID" else 1
+                worst = calls * evalkit.cost_usd(
                     {"prompt_tokens": whole, "completion_tokens": 8192})
                 if spent + worst > budget:
                     print(f"STOPPED: budget {budget} USD (spent {spent:.3f}, next worst case {worst:.3f})")

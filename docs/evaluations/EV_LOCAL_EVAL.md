@@ -9,7 +9,7 @@ New Muse LIVE calls are **off by default**. They run only when all three of thes
 
 A key on its own never starts a paid call.
 
-**No LIVE trace has been collected under this contract yet. Every model-performance number is therefore NOT_RUN.**
+**LIVE collection on 2026-11-02:** a budget of $3 was confirmed by the user (the upper end of the plan's estimate). The run spent **$2.32**: CUAD held-out A/B/C/T, the fixture extraction, and one probe confirming that api.meta.ai accepts temperature 0 and a seed. Each condition ran once, so run-to-run change is **not measured yet**. The investigation loop with LIVE is still NOT_RUN.
 
 | Mode | Meaning |
 |---|---|
@@ -97,7 +97,33 @@ All four go through the product's `intake_extract` with a CUAD task; the reading
 | C | 0.119 | 0.088 | 0/10 | 1.0 | 0 | 0 |
 | T | 0.268 | 0.179 | 0/10 | – | 0 | 0 |
 
-- **Muse LIVE A/B/C/T: NOT_RUN** (no confirmed budget). The plan's estimate is about 50–60 calls, roughly $2–3.
+### Results (held-out, Muse LIVE, muse-spark-1.3, temperature 0, seed 1; one run each, scored by offline replay)
+
+| Condition | Questions scored | Failed | Span P | Span R | Token F1 | No-answer correct | Page recall | Evidence valid | Not in document | Cost | s / contract |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| A HYBRID (product) | 42 | 0 | 0.607 | 0.597 | 0.454 | 5/10 | 0.877 | 88/88 | 0 | $0.94 | 11.2 |
+| B HYBRID, no contents | 42 | 0 | 0.612 | 0.526 | 0.527 | 6/10 | 0.877 | 86/86 | 0 | $0.64 | 11.2 |
+| C WHOLE on parsed PDF | 42 | 0 | 0.649 | 0.649 | 0.479 | 8/10 | 1.0 | 102/102 | 0 | $0.70 | 5.5 |
+| T WHOLE on CUAD text | 40 | 10 (2 timeouts) | 0.781 | 0.814 | 0.522 | 6/7 | – | 44/44 | 0 | $0.26 | 16.1 |
+
+The 8 questions whose gold span is not in our parsed PDF are left out of A/B/C. T fails 2 contracts (60 s timeouts, no retry by the manifest), so its denominator differs and it is not directly comparable.
+
+By category, condition A (precision / recall):
+- Parties 0.91 / 0.72
+- Governing Law 0.88 / 0.78
+- Expiration Date 0.60 / 0.43
+- Agreement Date 0.25 / 0.30
+- Termination For Convenience 0 / 0. Its "no answer" was correct 4 times out of 9.
+
+What this shows, and what it does not:
+- **Every quote the model gave was real.** 0 quotes are absent from the document, and all cited elements contain their quotes. The server check holds.
+- **WHOLE read the parsed PDFs better than HYBRID and cost less** (C $0.70 vs A $0.94). The map of a long contract and the second round cost more than they save at this context size. HYBRID's page recall is 0.88, so some answer pages were never read.
+  - This differs from the earlier held-out manufacturing documents, where HYBRID used far fewer tokens.
+  - The choice of default should be revisited with this measurement. It has not been changed here.
+- **B vs A:** without the author's contents, recall is lower (0.53 vs 0.60) and the cost is lower.
+- **T vs C:** our PDF parsing costs recall (0.81 vs 0.65, on different denominators).
+- **Agreement Date and Expiration Date are low partly because of the matching rule.** The gold span is short ("7th day of September, 1999") and the model quotes the whole line, which can fall under Jaccard 0.5. Token F1 and a person's sample review would tell the two causes apart. This is not evaluated.
+- **One run, 10 contracts:** differences of a few points are within noise. Variance needs repeated runs (another ~$2.3 per repeat).
 - **Limits:**
   - CUAD has been public since 2021, so the model may have seen it in training.
   - English contracts say nothing about manufacturing complaints, photos, charts or Korean documents.
@@ -111,7 +137,7 @@ Truths were written by hand from the generators, and each locator was checked on
 |---|---|---|---|
 | Parser: coverage, merged header, cells, captions, duplicate photo, chart data and workbook mismatch, scan needs vision, instruction in a caption flagged | 28/28 | 12/12 | OFFLINE_REAL_CODE |
 | Vision: request recorded, `NOT_CONFIGURED`, no result, same on re-read | 5/5 | – | OFFLINE_REAL_CODE |
-| Model extraction: value, unit, locator, CONFLICT, MISSING, NEEDS_CONFIRMATION, image–caption link, wrong confirmations | NOT_RUN | NOT_RUN | no saved trace |
+| Model extraction (Muse LIVE, HYBRID, one run): value, unit, locator, CONFLICT, MISSING, NEEDS_CONFIRMATION, image–caption link | 33/33 | 17/17 | LIVE, replayed; **0 wrong confirmations**; $0.05 |
 
 Earlier LIVE checks (`intake_live.json`, `holdout_live.json`) saved scores, not raw replies, so they cannot be replayed. They stay as reported LIVE summaries.
 

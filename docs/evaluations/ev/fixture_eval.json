@@ -11,16 +11,11 @@
     "validation": "0/0"
    },
    "extraction": {
-    "dev": "0/0",
-    "validation": "0/0"
+    "dev": "33/33",
+    "validation": "17/17"
    }
   },
-  "extraction_not_run": [
-   "complaint",
-   "complaint+supplement",
-   "live_complaint",
-   "live_complaint+supplement"
-  ],
+  "extraction_not_run": [],
   "wrong_confirmations": 0,
   "network_attempts": 0,
   "model_calls": 0,
@@ -29,13 +24,17 @@
    "whether a question to the customer is well worded (human review)"
   ],
   "run": {
-   "code_sha": "949e1de9a8f189bb5e403db7cd34457e437f40eb+dirty",
+   "code_sha": "bda39ca5750b7ccc61ce6df32ef320557ebb7899+dirty",
    "parser_version": "docparse-3",
    "evaluator": "scripts.fixture_eval",
    "evaluator_sha256": "7ba75e3a3acb54bd",
+   "sampling": {
+    "temperature": 0.0,
+    "seed": 1
+   },
    "python": "3.12.8",
    "command": "python -m scripts.fixture_eval",
-   "at": "2026-11-02T01:06:31+00:00"
+   "at": "2026-11-02T02:29:45+00:00"
   }
  },
  "rows": [
@@ -165,29 +164,155 @@
    "part": "extraction",
    "case": "complaint",
    "split": "dev",
-   "run_mode": "NOT_RUN",
-   "why": "no saved extraction trace (earlier LIVE checks kept scores, not raw replies)"
+   "run_mode": "LIVE",
+   "status": "OK",
+   "trace": "LIVE-2026-11-02T022628+0000.jsonl",
+   "read_mode": "HYBRID",
+   "usage": {
+    "completion_tokens": 1960,
+    "prompt_tokens": 3575,
+    "total_tokens": 5535,
+    "completion_tokens_details": {
+     "reasoning_tokens": 681
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    }
+   },
+   "checks": {
+    "customer_ref status": true,
+    "customer_ref value": true,
+    "customer_ref locator": true,
+    "lot status": true,
+    "lot value": true,
+    "lot locator": true,
+    "defective_qty status": true,
+    "defective_qty value": true,
+    "defective_qty locator": true,
+    "qty_unit status": true,
+    "qty_unit value": true,
+    "qty_unit locator": true,
+    "part_number status": true,
+    "part_number value": true,
+    "part_number locator": true,
+    "delivery_date status": true,
+    "delivery_date value": true,
+    "delivery_date locator": true,
+    "found_date status": true,
+    "found_date value": true,
+    "found_date locator": true,
+    "inspected_qty status": true,
+    "reply_deadline status": true,
+    "reply_deadline value": true,
+    "reply_deadline locator": true,
+    "customer_cause_claim status": true,
+    "customer_cause_claim value": true,
+    "customer_cause_claim locator": true,
+    "link pdf:p1:img1": true
+   },
+   "passed": 29,
+   "of": 29,
+   "wrong_confirmations": 0,
+   "failed": []
   },
   {
    "part": "extraction",
    "case": "complaint+supplement",
    "split": "dev",
-   "run_mode": "NOT_RUN",
-   "why": "no saved extraction trace (earlier LIVE checks kept scores, not raw replies)"
+   "run_mode": "LIVE",
+   "status": "OK",
+   "trace": "LIVE-2026-11-02T022628+0000.jsonl",
+   "read_mode": "HYBRID",
+   "usage": {
+    "completion_tokens": 2094,
+    "prompt_tokens": 4942,
+    "total_tokens": 7036,
+    "completion_tokens_details": {
+     "reasoning_tokens": 416
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    }
+   },
+   "checks": {
+    "lot status": true,
+    "inspected_qty status": true,
+    "inspected_qty value": true,
+    "inspected_qty locator": true
+   },
+   "passed": 4,
+   "of": 4,
+   "wrong_confirmations": 0,
+   "failed": []
   },
   {
    "part": "extraction",
    "case": "live_complaint",
    "split": "validation",
-   "run_mode": "NOT_RUN",
-   "why": "no saved extraction trace (earlier LIVE checks kept scores, not raw replies)"
+   "run_mode": "LIVE",
+   "status": "OK",
+   "trace": "LIVE-2026-11-02T022628+0000.jsonl",
+   "read_mode": "HYBRID",
+   "usage": {
+    "completion_tokens": 1801,
+    "prompt_tokens": 3144,
+    "total_tokens": 4945,
+    "completion_tokens_details": {
+     "reasoning_tokens": 558
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    }
+   },
+   "checks": {
+    "customer_ref status": true,
+    "customer_ref value": true,
+    "customer_ref locator": true,
+    "lot status": true,
+    "lot value": true,
+    "lot locator": true,
+    "defective_qty status": true,
+    "defective_qty value": true,
+    "defective_qty locator": true,
+    "inspected_qty status": true,
+    "reply_deadline status": true,
+    "reply_deadline value": true,
+    "reply_deadline locator": true
+   },
+   "passed": 13,
+   "of": 13,
+   "wrong_confirmations": 0,
+   "failed": []
   },
   {
    "part": "extraction",
    "case": "live_complaint+supplement",
    "split": "validation",
-   "run_mode": "NOT_RUN",
-   "why": "no saved extraction trace (earlier LIVE checks kept scores, not raw replies)"
+   "run_mode": "LIVE",
+   "status": "OK",
+   "trace": "LIVE-2026-11-02T022628+0000.jsonl",
+   "read_mode": "HYBRID",
+   "usage": {
+    "completion_tokens": 1937,
+    "prompt_tokens": 3820,
+    "total_tokens": 5757,
+    "completion_tokens_details": {
+     "reasoning_tokens": 551
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    }
+   },
+   "checks": {
+    "lot status": true,
+    "inspected_qty status": true,
+    "inspected_qty value": true,
+    "inspected_qty locator": true
+   },
+   "passed": 4,
+   "of": 4,
+   "wrong_confirmations": 0,
+   "failed": []
   }
  ]
 }

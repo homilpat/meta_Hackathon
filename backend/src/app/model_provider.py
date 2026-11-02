@@ -63,6 +63,9 @@ class MetaProvider:
     model = MODEL
     url = URL
     external = True  # leaves the site: only data approved for external processing may be in the payload
+    # The CONFIDENTIAL / data-origin backstop below. Only an evaluation on a public dataset turns it off
+    # (scripts/cuad_eval.py, user 2026-11-02); the secret check always runs.
+    restricted_check = True
 
     # muse-spark reasons before it answers: 1500 and 4096 tokens both cut a LIVE investigation report off
     def __init__(self, key: str, timeout: float = 60.0, max_tokens: int = 8192, opener=urlopen):
@@ -87,7 +90,7 @@ class MetaProvider:
         text = body.decode("utf-8")
         if (self._key and self._key in text) or SECRET_PATTERN.search(text):
             raise EgressBlocked("secret-like content in outbound payload")
-        if self.external and RESTRICTED_PATTERN.search(text):
+        if self.external and self.restricted_check and RESTRICTED_PATTERN.search(text):
             raise EgressBlocked("data not approved for external processing in outbound payload")
         request = Request(self.url, data=body, method="POST", headers={
             "Authorization": f"Bearer {self._key}", "Content-Type": "application/json"})

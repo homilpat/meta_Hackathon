@@ -131,13 +131,17 @@
   "model_calls": 0,
   "trace": "heldout-C-TEST_DOUBLE-2026-11-02T004942+0000.jsonl",
   "scored": {
-   "code_sha": "949e1de9a8f189bb5e403db7cd34457e437f40eb+dirty",
+   "code_sha": "bda39ca5750b7ccc61ce6df32ef320557ebb7899+dirty",
    "parser_version": "docparse-3",
    "evaluator": "scripts.cuad_eval",
-   "evaluator_sha256": "0d8e02df6aa64fec",
+   "evaluator_sha256": "ba39be1fd4a1dc32",
+   "sampling": {
+    "temperature": 0.0,
+    "seed": 1
+   },
    "python": "3.12.8",
    "command": "python -m scripts.cuad_eval score",
-   "at": "2026-11-02T01:05:39+00:00"
+   "at": "2026-11-02T02:29:41+00:00"
   }
  },
  "rows": [

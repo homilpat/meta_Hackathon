@@ -88,3 +88,17 @@ def test_only_a_real_provider_is_wrapped_and_the_switch_takes_on_or_off(tmp_path
     with pytest.raises(HTTPException):
         limits.cast("MODEL_RESPONSE_REUSE", "MAYBE")
     assert limits.cast("MODEL_TEMPERATURE", "0") == 0.0
+
+
+def test_the_confidential_backstop_stays_on_unless_an_evaluation_turns_it_off_for_public_data():
+    from app.model_provider import EgressBlocked
+
+    sent = []
+    p = provider(sent)
+    with pytest.raises(EgressBlocked):
+        p.chat([{"role": "user", "content": "CONFIDENTIAL TREATMENT REQUESTED"}], [])
+    p.restricted_check = False  # what scripts/cuad_eval.py does for the public CUAD contracts only
+    p.chat([{"role": "user", "content": "CONFIDENTIAL TREATMENT REQUESTED"}], [])
+    with pytest.raises(EgressBlocked):  # the secret check never turns off
+        p.chat([{"role": "user", "content": "Bearer abcdefghijklmnop"}], [])
+    assert len(sent) == 1 and MetaProvider.restricted_check is True

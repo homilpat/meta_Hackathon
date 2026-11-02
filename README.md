@@ -1,14 +1,16 @@
-# QualityOps AI — evidence-governed PCB quality investigation
+# QualityOps AI — evidence-governed quality investigation
 
 Built from 2026-10-27 KST for the Meta Global AI Developer Hackathon. All manufacturing data in this repository is
-**fictional and generated** (SYNTHETIC, `SELF_GENERATED` licence). There are no measured quality or business results.
+**fictional and generated** (SYNTHETIC, `SELF_GENERATED` licence). There are no measured factory-quality improvements or business results. Document extraction and agent evaluations are reported separately below.
 
 ## What it does
 
-QualityOps AI is an **evidence-governed, human-controlled manufacturing quality investigation** demo for a synthetic PCB/SMT line. A statistical alarm is not treated as a confirmed defect, a hypothesis is not a confirmed cause, and an AI proposal is not a human approval. Project work and test evidence are tracked in the [work log](HACKATHON_WORK_LOG.md).
+QualityOps AI is an **evidence-governed, human-controlled manufacturing quality investigation** demo for a synthetic PCB/SMT line. A statistical alarm is not treated as a confirmed defect, a hypothesis is not a confirmed cause, and an AI proposal is not a human approval. Customer-document intake and supplier/audit requests feed the same controlled case workflow; the manufacturing demonstration remains a synthetic PCB/SMT line. Project work and test evidence are tracked in the [work log](HACKATHON_WORK_LOG.md).
 
 | Capability | Implemented behavior |
 |---|---|
+| Document intake | Agent-chat PDF/DOCX intake, structured values with source locators, missing/conflicting fields, human-confirmed case creation or linking; XLSX/CSV supplements |
+| Requests and responsibility | Supplier/audit requests, versioned replies, human accept/revise/reject, owner handover and existing Queue/audit integration; no external portal or mail delivery |
 | Data and SPC | Versioned SPI/AOI/verification and repair data; source-row provenance and data-quality checks; X-bar/R, Western Electric rules and Cpk on a synthetic SMT line |
 | D0–D3 | Human triage (NCR_ONLY / FULL_8D / EMERGENCY_FULL_8D), team assignment, evidence-linked 5W2H/IS–IS NOT, urgent containment and independently verified action events |
 | D4 | 6M/fishbone, 5-Why, hypotheses, controlled experiments and independent human cause decisions; SHAP or precedent alone cannot confirm a cause |
@@ -20,6 +22,17 @@ QualityOps AI is an **evidence-governed, human-controlled manufacturing quality 
 | Audit and verification | ClaimValidator, policy-driven approval, least-privilege tools, immutable evidence/document references, audit checks and backend/frontend/integration CI |
 
 **Boundaries:** All production-style records and operational outcomes here are SYNTHETIC/SIMULATED; a logged “executed” action represents a simulated workflow event, not a physical factory operation. The demo uses role switching via an `X-User` header, not production authentication. A final 8D report requires the appropriate closed case; the NCR_ONLY route can produce its own closure report. Model predictions, explanations and prior cases are evidence for investigation, not independent proof of causation.
+
+## Current snapshot — 2026-11-02
+
+Code baseline: [cea4ac5](https://github.com/homilpat/meta_Hackathon/commit/cea4ac5da99585f884ee81c54c436977316f7af0);
+[CI succeeded](https://github.com/homilpat/meta_Hackathon/actions/runs/41414680156).
+The commit records 397 backend tests. This documentation refresh does not claim a new local test run.
+
+- **Implemented and checked:** file intake → draft review → human-confirmed case → existing D0 gates; supplier/audit request and reply review; responsibility/handover. See [v5.8 verification](docs/implementation/V58_VERIFICATION.md).
+- **LIVE measured:** Muse document extraction and the read-only investigation loop. Connectivity is verified; reliable completion is a separate measured question.
+- **Not implemented:** specialist defect-vision model (`NOT_CONFIGURED`), mail integration, unattended case creation, external supplier accounts, production authentication.
+- **Limits:** DOCX uses structural locators and is not rendered; PDF tables are reconstructed; masked inputs lose semantic information. This is not a production QMS or a validated manufacturing deployment.
 
 ## Repository layout
 
@@ -90,6 +103,37 @@ limits, signals and per-lot Cpk as CALCULATED claims, and the containment plan p
 unshipped panels plus a QA decision on the shipped ones. A signal is a statistical cue: it is not a defect finding
 and not a cause. The replay stands in for a live event feed such as IPC-CFX, which is not implemented.
 
+## Document intake, reading policy and request review
+
+In the Agent chat, attach PDF/DOCX files (XLSX/CSV can supply tabular evidence). Analysis produces a source-linked
+draft with missing/conflicting values. A person resolves open items and confirms either a new case or a link to
+an accessible existing case. Uploading or analysing alone creates no case. New cases start at D0; customer
+reports are not internal verification, and no SPI/AOI/shipment data is invented. See [case hand-off](docs/implementation/IN3_CASE_HANDOFF.md).
+
+The server parses text, tables, figures and chart data; Muse interprets the document and links context.
+The default reading policy is **WHOLE_FIRST**: read all parsed elements when they fit the model input and any
+configured per-call cost cap, otherwise use navigation reading (`HYBRID` in code). Navigation sends selected
+elements and a document map, then reads requested parts within the round limit. This differs from the
+server-parser-plus-model division of responsibilities. The choice and coverage are recorded.
+See [operating limits and policy](docs/implementation/LIMITS.md).
+
+DOCX chart caches are compared with stored embedded-workbook values; mismatches are shown for human review.
+PDF chart pictures are not trusted numeric sources. Scans may be transcribed when the file's processing route
+allows it, and their values require confirmation. The specialist vision adapter is present but returns
+`NOT_CONFIGURED`: document understanding is not validated defect detection.
+See [document/vision boundary](docs/implementation/MM_VISION_BOUNDARY.md).
+
+Supplier/audit cases reuse the case workflow: register a request, upload a versioned reply, review item-level
+evidence, then accept, ask for revision or reject as a person. Reply acceptance does not confirm a cause,
+prove effectiveness or close a case. Handover keeps the previous owner responsible until acceptance; tasks use
+the existing Queue. External replies are uploaded by an internal owner; nothing is emailed outside.
+See [requests and responsibility](docs/implementation/RW_REQUESTS_RESPONSIBILITY.md).
+
+Uploads do not authorise raw external processing. The implemented routes are RAW (synthetic fixture or approved
+file), MASKED (tokenised values, no images) and LOCAL (configured in-house provider; no real local model installed
+here). Masking reduces meaning and is not a proof of anonymisation or production confidentiality.
+See [egress and spreadsheet details](docs/implementation/EGRESS_SHEETS_TABLES.md).
+
 ## One synthetic case end to end, with DOCX/PDF export (G10)
 
 ```sh
@@ -129,13 +173,42 @@ From `backend/`:
 - `python -m scripts.meta_smoke` — minimal structured-response check.
 - `python -m scripts.meta_investigate_smoke` — synthetic-case, read-only investigation and report validation.
 
-**As of 2026-10-31, real Meta `muse-spark-1.3` calls have succeeded**, including the structured smoke, an Agent-First draft/validation hand-off and the hybrid planner. See the [LIVE run log](docs/evaluations/META_LIVE_LOG.md), which also records failed calls. The standalone investigation sometimes produces a final report that fails its strict schema; the server refuses it instead of accepting unsupported content. Do not interpret LIVE connectivity as a 100% report success rate.
+**Real Meta `muse-spark-1.3` calls have succeeded**, including the structured smoke, an Agent-First draft/validation hand-off and the hybrid planner. See the [LIVE run log](docs/evaluations/META_LIVE_LOG.md), which also records failed calls. The standalone investigation sometimes produces a final report that fails its strict schema; the server refuses it instead of accepting unsupported content. Do not interpret LIVE connectivity as a 100% report success rate.
 
-The hybrid planner uses the model as an intent classifier (one strict-JSON call over a server-generated situation card); the tools for each intent are a fixed server workflow, so the same request runs the same tools LIVE or offline. An investigation adds one summary call at `reasoning_effort=minimal` (LIVE: about 9 s end to end). Intent accuracy is measured with `python -m scripts.intent_eval` (LIVE 30/30 incl. 5 held-out, see the LIVE log). When the goal is ambiguous it asks a clarifying question; if no key is available it uses a deterministic server planner. The agent does not approve documents, execute plant actions, confirm causes or close a case.
+The hybrid planner uses the model as an intent classifier (one strict-JSON call over a server-generated situation card); the tools for each intent are a fixed server workflow, so the same request runs the same tools LIVE or offline. The fixed chat investigation workflow adds a summary call at `reasoning_effort=minimal` (LIVE: about 9 s end to end). Intent accuracy is measured with `python -m scripts.intent_eval` (LIVE 30/30 incl. 5 held-out, see the LIVE log). When the goal is ambiguous it asks a clarifying question; if no key is available it uses a deterministic server planner. The agent does not approve documents, execute plant actions, confirm causes or close a case.
 
-Only SYNTHETIC and APPROVED_FOR_EXTERNAL content is eligible for outbound model calls. Egress filtering and role/case-scope checks enforce the demo's data-handling rules. Never use real factory or personal data without a separate production security and governance design.
+Case investigation tools retain their SYNTHETIC/APPROVED_FOR_EXTERNAL checks. File intake additionally has the RAW/MASKED/LOCAL routes described above; a masked call is still an external call. Never use real factory or personal data without a separate production security and governance design.
 
 ## Evaluation (scripts run from `backend/`)
+
+[Evaluation report and limitations](docs/evaluations/EV_LOCAL_EVAL.md) distinguish offline server checks, recorded
+LIVE responses and new model collection. Scoring saved traces is free/local: **0 network connections, 0 model
+calls, no LLM judge**. New LIVE collection can cost money and requires an explicit opt-in, key and confirmed budget.
+
+| Evaluation | Recorded result | Meaning / limit |
+|---|---|---|
+| CUAD held-out subset, one run | Navigation span recall 0.632; full parsed-document recall 0.719 | 10 English legal contracts; not a manufacturing benchmark or official full-CUAD score |
+| Synthetic file fixtures | Parser 40/40 checks; LIVE extraction 33/33 dev and 17/17 validation checks | Small functional fixtures; no general accuracy or defect-vision claim |
+| AgentEvals paired workflow checks | 16/16 variants: 14 fixed-server, 2 model-loop TEST_DOUBLE | Verifies branches, arguments, state and safe hand-off; not autonomous-model success |
+| LIVE investigation loop | 22/32 successful runs; mean pass^1 0.688, pass^4 0.25 | 8 tasks × 4 runs; scenario/design gaps and calculation-evidence errors remain |
+
+pass^4 measures all-four success consistency per task, averaged across the eight tasks; it is not “at least one
+success in four attempts”. These are custom tests inspired by τ-bench/BFCL, not official benchmark scores.
+The server refused the recorded invalid calculation reports. Rejection safety does not imply high task completion.
+Some recorded runs have a `+dirty` source stamp; their hashes/versions and limitations are retained in the reports.
+
+```sh
+python -m scripts.cuad_eval score       # requires separately prepared saved traces
+python -m scripts.fixture_eval
+python -m scripts.agent_eval
+python -m scripts.loop_eval score      # requires saved investigation traces
+```
+
+Raw traces and CUAD data are git-ignored. Scores are committed under [docs/evaluations/ev/](docs/evaluations/ev/);
+without local traces, replay may report NOT_RUN rather than reproduce a LIVE run. Data preparation and paid
+collection commands are documented separately in the evaluation report. The following older evaluations measure
+other parts of the product:
+
 
 - `python -m scripts.eval_s7` → [docs/evaluations/EVAL_RESULTS.md](docs/evaluations/EVAL_RESULTS.md): deterministic checks on 30 held-out
   synthetic cases (revision impact precision/recall, unsupported template claims, validator recall on seeded bad

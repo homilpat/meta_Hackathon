@@ -9,7 +9,7 @@ New Muse LIVE calls are **off by default**. They run only when all three of thes
 
 A key on its own never starts a paid call.
 
-**LIVE collection on 2026-11-02:** a budget of $3 was confirmed by the user (the upper end of the plan's estimate). The run spent **$2.32** (corrected costs; see the results): CUAD held-out A/B/C/T, the fixture extraction, and one probe confirming that api.meta.ai accepts temperature 0 and a seed. Each condition ran once, so run-to-run change is **not measured yet**. The investigation loop with LIVE is still NOT_RUN.
+**LIVE collection on 2026-11-02:** a budget of $3 was confirmed by the user (the upper end of the plan's estimate). The run spent **$2.32** (corrected costs; see the results): CUAD held-out A/B/C/T, the fixture extraction, and one probe confirming that api.meta.ai accepts temperature 0 and a seed. This was the first collection snapshot. Subsequent sections report repeat runs, reading-policy changes and the LIVE investigation loop; those later results supersede the initial NOT_RUN/variance status.
 
 | Mode | Meaning |
 |---|---|
@@ -296,17 +296,17 @@ Earlier LIVE checks (`intake_live.json`, `holdout_live.json`) saved scores, not 
 | model loop (TEST_DOUBLE): tool error recorded ok=false, uncited evidence is not VALIDATED | 2 | 2/2 |
 
 - **FIXED_SERVER (14/14)** shows that the server rules branch correctly. It is not evidence of autonomous planning.
-- **MODEL_LOOP with LIVE: NOT_RUN.**
+- **This agent_eval suite uses TEST_DOUBLE for MODEL_LOOP.** Separate LIVE loop results are in C2 below; 16/16 is not a LIVE model score.
 - **Not evaluated:** whether the wording of a reply or a proposed investigation makes sense. That needs fixed-rubric human review of a sample.
 
 ### C2. The investigation loop with Muse LIVE (the model picks the tools), 2026-11-02, third budget $5
 
-- **Command:** `python -m scripts.loop_eval plan | collect --live | score`.
+- **Commands (sequential, not a shell pipe):** `python -m scripts.loop_eval plan`, then `python -m scripts.loop_eval collect --live` (explicit budget/key required), then `python -m scripts.loop_eval score`.
 - **Plan:** 8 tasks (4 pairs: one tool result changed) × 4 runs, fixed in `ev/loop_plan.json` before the runs.
 - **Methods:**
   - τ-bench (Yao et al., ICLR 2025): the final state is compared with the goal in code, and pass^k = C(c,k)/C(n,k).
   - BFCL (Patil et al., ICML 2025): each tool call is checked against the tool's definition.
-  - AgentEvals superset match for the required first tool.
+  - AgentEvals superset match for the presence of the required summary tool. This does not assert that it was the first call; first-call ordering remains an evaluation gap.
   - The server's `validate_report`.
   - Every cited id must come from a successful tool result in the same run.
   - No LLM judge.
@@ -369,4 +369,4 @@ The HTTP E2E (`scripts/e2e_http.py`, real uvicorn, starting from real PDF/DOCX f
 | EV-FR-04 | existing routes | the table above |
 | EV-FR-05 | `scripts/evalkit.py` (code SHA, parser and evaluator versions, command, mode, budget, no-network count) | `test_eval_ev.py` (LIVE gate, no network) |
 
-The only product change is that `intake_extract.extract(..., task=None)` and `doc_select.select(..., labels=None)` take an evaluation task. The default is exactly the product's intake task (tested), so the measured reading is the real one.
+The initial EV0–EV3 product integration change was that `intake_extract.extract(..., task=None)` and `doc_select.select(..., labels=None)` take an evaluation task. The default is exactly the product's intake task (tested), so the measured reading is the real one. Later sections document subsequent product changes (reading policy/map, caching, provider and investigation schema/settings); this initial statement is not a description of the entire later diff.

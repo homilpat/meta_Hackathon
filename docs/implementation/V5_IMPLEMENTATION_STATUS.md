@@ -1,4 +1,32 @@
-# v5 implementation status
+# Implementation status
+
+## Current summary — 2026-11-02
+
+Baseline: `cea4ac5`, [CI success](https://github.com/homilpat/meta_Hackathon/actions/runs/41414680156).
+This refresh reads committed code and reports; it is not a new local verification run.
+
+| Area | Current recorded status | Evidence / limits |
+|---|---|---|
+| G0–G10 and Agent-First | Existing implementation retained | Historical checks below; latest commit records 397 backend tests |
+| Document intake / D0 hand-off | Implemented and checked | [V58 verification](V58_VERIFICATION.md), [IN3](IN3_CASE_HANDOFF.md); person confirms creation/link; no invented measurements |
+| Supplier/audit requests and handover | Implemented and checked | [RW](RW_REQUESTS_RESPONSIBILITY.md); reply acceptance separate from domain approval |
+| Parsing, charts, scans, egress | Implemented with limits | [Follow-ups](EGRESS_SHEETS_TABLES.md); structural DOCX locators, no DOCX rendering; local-model endpoint only tested with a fake |
+| Reading policy | WHOLE_FIRST default | [LIMITS](LIMITS.md); navigation when full input does not fit; no universal page threshold |
+| Meta LIVE | Connected and measured, not fully reliable | [EV report](../evaluations/EV_LOCAL_EVAL.md); document extraction and 32-run investigation evaluation |
+| Evaluation | Free offline scoring; paid LIVE collection opt-in | [EV report](../evaluations/EV_LOCAL_EVAL.md); AgentEvals variants 16/16, LIVE loop 22/32, pass^4 0.25 |
+| Roadmap | NOT_IMPLEMENTED | Specialist defect-vision model, mail, unattended case creation, external supplier portal, production authentication |
+
+**Open issues:** calculation/evidence-id mismatch in the model loop; human-verdict-removal scenario still exposes
+records through another tool; instruction-warning/report placement can trigger a certainty-rule refusal.
+These are recorded in the evaluation report; no fix or re-measurement is claimed here. Some result stamps include
+`+dirty`, limiting exact source reproduction. Successful CI is distinct from these LIVE quality measurements.
+
+## Historical phase snapshots
+
+All dated tables and status blocks below describe their original phase. In particular, old
+`BLOCKED_NO_CREDENTIALS`, 247-test totals and “LIVE not verified” statements are historical, superseded by the
+current summary above and the later LIVE reports. Historical measurements are preserved rather than relabelled.
+
 
 G0–G4 were pushed to `origin/main` at `4dbb03d` (2026-10-28; the earlier "Nothing is pushed" note predates that push).
 v5.5 MONOREPO FINAL (root spec; older v5.5 FINAL now in `docs/archive/`) supersedes the v5 spec files for status and order:
@@ -90,7 +118,7 @@ other was refused for schema mismatch. See `docs/evaluations/META_LIVE_LOG.md`.
   `v5.5-g8.3`); other values (model scores) are reported as `NOT_RECOMPUTED`. Regex text rules catch surface patterns only; not every false sentence is caught.
 - Experience Memory: no recurrence data in the S5 bank, so bank precedents are never KNOWN; closed cases are
   `NOT_YET_OBSERVED` (no follow-up window). Search glossary `backend/src/app/glossary.py` (ko/ja/zh/en wording → canonical term) is hand-written; no embeddings.
-- Meta LIVE: still BLOCKED_NO_CREDENTIALS. The hybrid tools are exercised with the TEST_DOUBLE only.
+- Historical G8 limit: Meta LIVE was BLOCKED_NO_CREDENTIALS and hybrid tools used TEST_DOUBLE only at that phase. This is superseded by the current summary and later LIVE reports.
 - NCR template is now `v5.g5` (one statistic per SPC claim; `v5.g4` added 5W2H / IS-IS NOT claims); stored versions show the template they were built with.
 - Affected objects are a snapshot taken when the process context is recorded; contexts recorded before this
   change have LOT/PANEL objects only.

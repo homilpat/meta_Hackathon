@@ -21,8 +21,9 @@ Statement types kept apart: `CUSTOMER_REPORTED` (고객 보고), `AI_OBSERVATION
 ## Charts
 
 DOCX charts: series, categories and values from the chart part (`source: CHART_CACHE`, total and max computed by the
-server); an embedded workbook is detected (`workbook_present`) but not opened, so cache-versus-workbook differences
-are **not compared** (stated, not hidden). Charts inside a PDF are pictures (`charts: IMAGE_ONLY`): a number read off
+server); the follow-up implementation opens embedded-workbook stored values and compares each series with the cache,
+showing MATCH / MISMATCH / NO_WORKBOOK. Both values are retained on mismatch for human review; no macros or formulas
+are executed. See [follow-ups](EGRESS_SHEETS_TABLES.md) and `tests/test_intake_sheets.py`. Charts inside a PDF are pictures (`charts: IMAGE_ONLY`): a number read off
 one is refused as a value source (UNVERIFIED); Muse may describe the trend (AI_OBSERVATION, ambiguous when unclear).
 
 ## Checks (`tests/test_vision_mm.py`, 4)

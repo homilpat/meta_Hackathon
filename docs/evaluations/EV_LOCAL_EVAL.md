@@ -183,6 +183,23 @@ Per contract (20 contracts):
   - The two contracts where HYBRID lost heavily are the clearer signal, and page recall (0.79 vs 1.0, the same in both runs) shows HYBRID never read some answer pages.
 - **Budget:** the second $5 budget has spent $3.98 (heldout_long A and C twice, plus AUTO by reuse).
 
+### WHOLE_FIRST under a per-call cost cap (reference for the owner; the default stays off)
+
+The cap stays as decided on 2026-11-01: off by default, the context window is the limit, and the owner sets an amount from the budget. With it off, WHOLE_FIRST reads all 20 contracts whole, which equals condition C.
+
+What a cap would do: `python -m scripts.policy_curve`, offline. It uses the server's own decision for each cap and the recorded result on the chosen path (heldout_long: the mean of 2 runs).
+
+| Cap per call | heldout: contracts going HYBRID | Recall | Cost | heldout_long: going HYBRID | Recall | Cost |
+|---|---|---|---|---|---|---|
+| off (default) | 0 | 0.719 | $0.70 | 0 | 0.658 | $1.29 |
+| $0.15 | 1 | 0.719 | $0.60 | 2 | 0.671 | $1.07 |
+| $0.10 | 2 | 0.632 | $0.54 | 6 | 0.605 | $0.81 |
+| $0.08 | 3 | 0.614 | $0.58 | 7 | 0.605 | $0.78 |
+
+- At $0.15 per call, only the longest contracts (above 100 pages) go HYBRID. Recall is unchanged and cost falls by 14–17%.
+- At $0.10 and below, recall drops by 5–9 points.
+- Caps of $0.06 and lower would also cut HYBRID's own calls, so the recorded runs no longer apply and they are not shown.
+
 ### Why HYBRID missed: the two contracts where it lost heavily (offline, from the saved traces)
 
 | Contract | What HYBRID read | Lost | Cause |

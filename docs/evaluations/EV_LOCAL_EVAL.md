@@ -166,6 +166,23 @@ Per contract (20 contracts):
   - The default (HYBRID) is unchanged until the owner decides.
 - **Limits:** 20 contracts and one run each. AUTO's ratios were fit on heldout, and heldout_long is the out-of-sample check.
 
+### Run-to-run change (repeat plan fixed in the manifest before run 2: heldout_long, A and C, 2 runs each)
+
+`python -m scripts.cuad_eval compare heldout_long A|C`. Both runs used temperature 0 and seed 1, and the same code and inputs.
+
+| Condition | Span P (run 1 / 2) | Span R (run 1 / 2) | Token F1 | Questions whose quotes changed | Cost of run 2 |
+|---|---|---|---|---|---|
+| A HYBRID | 0.786 / 0.774 | 0.579 / **0.632** | 0.519 / 0.602 | **10 / 50** | $0.70 |
+| C WHOLE | 0.714 / 0.658 | 0.658 / 0.658 | 0.455 / 0.455 | **9 / 50** | $1.29 |
+
+- **Temperature 0 and a fixed seed do not make Muse repeat itself.** About 1 question in 5 got different quotes on an identical request.
+  - This is why the product stores answers (`model_responses`): the same document never gets a second, different answer.
+  - It is also why one run cannot settle small differences.
+- **Recall moves by up to 5 points between runs in A.** The mean gap between WHOLE and HYBRID on long contracts (0.658 vs 0.605 recall) is about the size of that run-to-run change.
+  - Two runs are not enough to call it real.
+  - The two contracts where HYBRID lost heavily are the clearer signal, and page recall (0.79 vs 1.0, the same in both runs) shows HYBRID never read some answer pages.
+- **Budget:** the second $5 budget has spent $3.98 (heldout_long A and C twice, plus AUTO by reuse).
+
 ## B. Synthetic manufacturing fixtures (EV-FR-02): `scripts/fixture_eval.py`
 
 Truths were written by hand from the generators, and each locator was checked once against the parser. This is **not a manufacturing benchmark**.

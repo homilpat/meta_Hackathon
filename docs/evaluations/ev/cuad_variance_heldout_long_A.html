@@ -1,0 +1,77 @@
+<!doctype html><meta charset='utf-8'><title>cuad_variance_heldout_long_A</title><style>body{font:13px system-ui;margin:16px}td,th{border:1px solid #ccc;padding:2px 6px;vertical-align:top}table{border-collapse:collapse}pre{white-space:pre-wrap}</style><h1>cuad_variance_heldout_long_A</h1><pre>{
+ &quot;split&quot;: &quot;heldout_long&quot;,
+ &quot;condition&quot;: &quot;A&quot;,
+ &quot;runs&quot;: [
+  &quot;cuad_heldout_long_A_LIVE.json&quot;,
+  &quot;cuad_heldout_long_A_LIVE_r2.json&quot;
+ ],
+ &quot;metrics&quot;: {
+  &quot;span_precision&quot;: {
+   &quot;runs&quot;: [
+    0.7857,
+    0.7742
+   ],
+   &quot;mean&quot;: 0.7799,
+   &quot;max_minus_min&quot;: 0.0115
+  },
+  &quot;span_recall&quot;: {
+   &quot;runs&quot;: [
+    0.5789,
+    0.6316
+   ],
+   &quot;mean&quot;: 0.6053,
+   &quot;max_minus_min&quot;: 0.0527
+  },
+  &quot;contained_recall&quot;: {
+   &quot;runs&quot;: [
+    0.6053,
+    0.6579
+   ],
+   &quot;mean&quot;: 0.6316,
+   &quot;max_minus_min&quot;: 0.0526
+  },
+  &quot;token_f1_answerable&quot;: {
+   &quot;runs&quot;: [
+    0.5187,
+    0.6021
+   ],
+   &quot;mean&quot;: 0.5604,
+   &quot;max_minus_min&quot;: 0.0834
+  },
+  &quot;page_recall&quot;: {
+   &quot;runs&quot;: [
+    0.7895,
+    0.7895
+   ],
+   &quot;mean&quot;: 0.7895,
+   &quot;max_minus_min&quot;: 0.0
+  }
+ },
+ &quot;questions&quot;: 50,
+ &quot;questions_with_changed_quotes&quot;: 10,
+ &quot;share_changed&quot;: 0.2,
+ &quot;plan&quot;: 2,
+ &quot;sampling&quot;: [
+  {
+   &quot;temperature&quot;: 0.0,
+   &quot;seed&quot;: 1
+  },
+  {
+   &quot;temperature&quot;: 0.0,
+   &quot;seed&quot;: 1
+  }
+ ],
+ &quot;scored&quot;: {
+  &quot;code_sha&quot;: &quot;aad3069d125050fb5e2e53af11f107b5179538e4+dirty&quot;,
+  &quot;parser_version&quot;: &quot;docparse-3&quot;,
+  &quot;evaluator&quot;: &quot;scripts.cuad_eval&quot;,
+  &quot;evaluator_sha256&quot;: &quot;fd3b730c542d11a3&quot;,
+  &quot;sampling&quot;: {
+   &quot;temperature&quot;: 0.0,
+   &quot;seed&quot;: 1
+  },
+  &quot;python&quot;: &quot;3.12.8&quot;,
+  &quot;command&quot;: &quot;python -m scripts.cuad_eval compare heldout_long A&quot;,
+  &quot;at&quot;: &quot;2026-11-02T04:42:56+00:00&quot;
+ }
+}</pre><table><tr><th>question</th><th>category</th><th>same_quotes</th><th>per_run_quotes</th><th>tp_per_run</th></tr><tr><td>c92227514f57__parties</td><td>Parties</td><td>false</td><td>[1, 3]</td><td>[1, 1]</td></tr><tr><td>c92227514f57__agreement_date</td><td>Agreement Date</td><td>true</td><td>[0, 0]</td><td>[0, 0]</td></tr><tr><td>c92227514f57__governing_law</td><td>Governing Law</td><td>true</td><td>[3, 3]</td><td>[1, 1]</td></tr><tr><td>c92227514f57__expiration_date</td><td>Expiration Date</td><td>false</td><td>[0, 2]</td><td>[0, 1]</td></tr><tr><td>c92227514f57__termination_for_convenience</td><td>Termination For Convenience</td><td>true</td><td>[0, 0]</td><td>[0, 0]</td></tr><tr><td>412f6a035ef9__parties</td><td>Parties</td><td>true</td><td>[2, 2]</td><td>[4, 4]</td></tr><tr><td>412f6a035ef9__agreement_date</td><td>Agreement Date</td><td>true</td><td>[1, 1]</td><td>[0, 0]</td></tr><tr><td>412f6a035ef9__governing_law</td><td>Governing Law</td><td>true</td><td>[5, 5]</td><td>[1, 1]</td></tr><tr><td>412f6a035ef9__expiration_date</td><td>Expiration Date</td><td>true</td><td>[0, 0]</td><td>[0, 0]</td></tr><tr><td>412f6a035ef9__termination_for_convenience</td><td>Termination For Convenience</td><td>true</td><td>[0, 0]</td><td>[0, 0]</td></tr><tr><td>0437c16c2d1c__parties</td><td>Parties</td><td>true</td><td>[2, 2]</td><td>[3, 3]</td></tr><tr><td>0437c16c2d1c__agreement_date</td><td>Agreement Date</td><td>true</td><td>[1, 1]</td><td>[1, 1]</td></tr><tr><td>0437c16c2d1c__governing_law</td><td>Governing Law</td><td>false</td><td>[0, 3]</td><td>[0, 1]</td></tr><tr><td>0437c16c2d1c__expiration_date</td><td>Expiration Date</td><td>true</td><td>[0, 0]</td><td>[0, 0]</td></tr><tr><td>0437c16c2d1c__termination_for_convenience</td><td>Termination For Convenience</td><td>true</td><td>[2, 2]</td><td>[0, 0]</td></tr><tr><td>e1ba4f416436__parties</td><td>Parties</td><td>true</td><td>[2, 2]</td><td>[3, 3]</td></tr><tr><td>e1ba4f416436__agreement_date</td><td>Agreement Date</td><td>true</td><td>[1, 1]</td><td>[0, 0]</td></tr><tr><td>e1ba4f416436__governing_law</td><td>Governing Law</td><td>false</td><td>[3, 0]</td><td>[1, 0]</td></tr><tr><td>e1ba4f416436__expiration_date</td><td>Expiration Date</td><td>true</td><td>[2, 2]</td><td>[1, 1]</td></tr><tr><td>e1ba4f416436__termination_for_convenience</td><td>Termination For Convenience</td><td>true</td><td>[2, 2]</td><td>[1, 1]</td></tr><tr><td>3e241e193dc4__parties</td><td>Parties</td><td>true</td><td>[4, 4]</td><td>[4, 4]</td></tr><tr><td>3e241e193dc4__agreement_date</td><td>Agreement Date</td><td>true</td><td>[1, 1]</td><td>[0, 0]</td></tr><tr><td>3e241e193dc4__governing_law</td><td>Governing Law</td><td>true</td><td>[2, 2]</td><td>[1, 1]</td></tr><tr><td>3e241e193dc4__expiration_date</td><td>Expiration Date</td><td>true</td><td>[2, 2]</td><td>[1, 1]</td></tr><tr><td>3e241e193dc4__termination_for_convenience</td><td>Termination For Convenience</td><td>true</td><td>[3, 3]</td><td>[0, 0]</td></tr><tr><td>93a7191ff012__parties</td><td>Parties</td><td>false</td><td>[3, 2]</td><td>[4, 2]</td></tr><tr><td>93a7191ff012__agreement_date</td><td>Agreement Date</td><td>true</td><td>[1, 1]</td><td>[1, 1]</td></tr><tr><td>93a7191ff012__governing_law</td><td>Governing Law</td><td>false</td><td>[0, 3]</td><td>[0, 1]</td></tr><tr><td>93a7191ff012__expiration_date</td><td>Expiration Date</td><td>true</td><td>[2, 2]</td><td>[1, 1]</td></tr><tr><td>93a7191ff012__termination_for_convenience</td><td>Termination For Convenience</td><td>true</td><td>[1, 1]</td><td>[1, 1]</td></tr><tr><td>7eb54db0558f__parties</td><td>Parties</td><td>true</td><td>[4, 4]</td><td>[4, 4]</td></tr><tr><td>7eb54db0558f__agreement_date</td><td>Agreement Date</td><td>true</td><td>[2, 2]</td><td>[1, 1]</td></tr><tr><td>7eb54db0558f__governing_law</td><td>Governing Law</td><td>true</td><td>[3, 3]</td><td>[1, 1]</td></tr><tr><td>7eb54db0558f__expiration_date</td><td>Expiration Date</td><td>true</td><td>[0, 0]</td><td>[0, 0]</td></tr><tr><td>7eb54db0558f__termination_for_convenience</td><td>Termination For Convenience</td><td>true</td><td>[0, 0]</td><td>[0, 0]</td></tr><tr><td>a4a5f4121b48__parties</td><td>Parties</td><td>true</td><td>[3, 3]</td><td>[8, 8]</td></tr><tr><td>a4a5f4121b48__agreement_date</td><td>Agreement Date</td><td>false</td><td>[0, 1]</td><td>[0, 0]</td></tr><tr><td>a4a5f4121b48__governing_law</td><td>Governing Law</td><td>true</td><td>[2, 2]</td><td>[1, 1]</td></tr><tr><td>a4a5f4121b48__expiration_date</td><td>Expiration Date</td><td>true</td><td>[0, 0]</td><td>[0, 0]</td></tr><tr><td>a4a5f4121b48__termination_for_convenience</td><td>Termination For Convenience</td><td>false</td><td>[3, 2]</td><td>[1, 1]</td></tr><tr><td>af0c46173614__parties</td><td>Parties</td><td>false</td><td>[4, 5]</td><td>[3, 4]</td></tr><tr><td>af0c46173614__agreement_date</td><td>Agreement Date</td><td>true</td><td>[1, 1]</td><td>[1, 1]</td></tr><tr><td>af0c46173614__governing_law</td><td>Governing Law</td><td>true</td><td>[1, 1]</td><td>[1, 1]</td></tr><tr><td>af0c46173614__expiration_date</td><td>Expiration Date</td><td>true</td><td>[0, 0]</td><td>[0, 0]</td></tr><tr><td>af0c46173614__termination_for_convenience</td><td>Termination For Convenience</td><td>true</td><td>[0, 0]</td><td>[0, 0]</td></tr><tr><td>4ae6fb819cc7__parties</td><td>Parties</td><td>true</td><td>[2, 2]</td><td>[4, 4]</td></tr><tr><td>4ae6fb819cc7__agreement_date</td><td>Agreement Date</td><td>true</td><td>[1, 1]</td><td>[0, 0]</td></tr><tr><td>4ae6fb819cc7__governing_law</td><td>Governing Law</td><td>true</td><td>[1, 1]</td><td>[1, 1]</td></tr><tr><td>4ae6fb819cc7__expiration_date</td><td>Expiration Date</td><td>false</td><td>[2, 0]</td><td>[1, 0]</td></tr><tr><td>4ae6fb819cc7__termination_for_convenience</td><td>Termination For Convenience</td><td>true</td><td>[0, 0]</td><td>[0, 0]</td></tr></table>

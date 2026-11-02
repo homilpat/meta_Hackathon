@@ -1010,6 +1010,16 @@
    }
   ]
  },
+ "repeats": {
+  "plan": {
+   "heldout_long": {
+    "A": 2,
+    "C": 2
+   }
+  },
+  "fixed": "2026-11-02, before the second run",
+  "report": "per metric the mean and the difference between runs; share of questions whose valid quotes changed (python -m scripts.cuad_eval compare SPLIT CONDITION)"
+ },
  "limitations": [
   "CUAD has been public since 2021: the model may have seen these contracts in training",
   "a 23-contract subset of 5 of 41 categories, not CUAD's official result",
@@ -1055,16 +1065,16 @@
  },
  "gold_file_sha256": "3266b852f89452118519debc5705192fb3ffb6be29f00f6dac2c524853ff2466",
  "prepared": {
-  "code_sha": "fb4f03a30da363e02eafd9aec8e781b9706d2ec4+dirty",
+  "code_sha": "aad3069d125050fb5e2e53af11f107b5179538e4+dirty",
   "parser_version": "docparse-3",
   "evaluator": "scripts.cuad_eval",
-  "evaluator_sha256": "3def51cd4a5c3fdc",
+  "evaluator_sha256": "859d34264263d0cc",
   "sampling": {
    "temperature": 0.0,
    "seed": 1
   },
   "python": "3.12.8",
   "command": "python -m scripts.cuad_eval prepare",
-  "at": "2026-11-02T03:59:07+00:00"
+  "at": "2026-11-02T04:34:32+00:00"
  }
 }

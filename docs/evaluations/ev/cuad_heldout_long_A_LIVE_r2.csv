@@ -1,0 +1,51 @@
+question,contract,category,status,gold_spans,aligned,pred_passages,tp,fp,fn,gold_contained,token_f1,no_answer_gold,no_answer_pred,uncertain,spans_returned,spans_valid,spans_not_in_document,gold_pages_read,gold_pages_located,first_round_read
+c92227514f57__parties,c92227514f57,Parties,OK,3,False,3,1,1,2,1,0.303,False,False,True,3,3,0,1,1,1
+c92227514f57__agreement_date,c92227514f57,Agreement Date,OK,0,True,0,0,0,0,0,1.0,True,True,False,0,0,0,0,0,
+c92227514f57__governing_law,c92227514f57,Governing Law,OK,2,False,2,1,1,1,1,0.3942,False,False,False,3,3,0,0,1,
+c92227514f57__expiration_date,c92227514f57,Expiration Date,OK,1,True,1,1,0,0,1,0.9655,False,False,True,2,2,0,1,1,1
+c92227514f57__termination_for_convenience,c92227514f57,Termination For Convenience,OK,0,True,0,0,0,0,0,1.0,True,True,True,0,0,0,0,0,
+412f6a035ef9__parties,412f6a035ef9,Parties,OK,5,False,2,4,0,1,4,0.7143,False,False,False,2,2,0,4,4,1
+412f6a035ef9__agreement_date,412f6a035ef9,Agreement Date,OK,1,True,1,0,1,1,0,0.0,False,False,False,1,1,0,1,1,1
+412f6a035ef9__governing_law,412f6a035ef9,Governing Law,OK,1,False,1,1,0,0,0,0.9492,False,False,True,5,5,0,0,0,
+412f6a035ef9__expiration_date,412f6a035ef9,Expiration Date,OK,1,True,0,0,0,1,0,0.0,False,True,True,0,0,0,1,1,1
+412f6a035ef9__termination_for_convenience,412f6a035ef9,Termination For Convenience,OK,0,True,0,0,0,0,0,1.0,True,True,True,0,0,0,0,0,
+0437c16c2d1c__parties,0437c16c2d1c,Parties,OK,5,True,2,3,0,2,3,0.7059,False,False,False,2,2,0,3,5,1
+0437c16c2d1c__agreement_date,0437c16c2d1c,Agreement Date,OK,1,True,1,1,0,0,1,0.8571,False,False,False,1,1,0,1,1,1
+0437c16c2d1c__governing_law,0437c16c2d1c,Governing Law,OK,1,True,1,1,0,0,1,0.9725,False,False,False,3,3,0,1,1,2
+0437c16c2d1c__expiration_date,0437c16c2d1c,Expiration Date,OK,1,False,0,0,0,1,0,0.0,False,True,False,0,0,0,0,0,
+0437c16c2d1c__termination_for_convenience,0437c16c2d1c,Termination For Convenience,OK,3,True,1,0,1,3,0,0.2018,False,False,False,2,2,0,0,3,
+e1ba4f416436__parties,e1ba4f416436,Parties,OK,5,False,2,3,0,2,3,0.4516,False,False,False,2,2,0,3,4,1
+e1ba4f416436__agreement_date,e1ba4f416436,Agreement Date,OK,1,True,1,0,1,1,1,0.24,False,False,True,1,1,0,1,1,2
+e1ba4f416436__governing_law,e1ba4f416436,Governing Law,OK,1,True,0,0,0,1,0,0.0,False,True,True,0,0,0,0,1,
+e1ba4f416436__expiration_date,e1ba4f416436,Expiration Date,OK,1,False,1,1,0,0,0,0.8406,False,False,True,2,2,0,0,0,
+e1ba4f416436__termination_for_convenience,e1ba4f416436,Termination For Convenience,OK,1,False,1,1,0,0,0,0.9032,False,False,True,2,2,0,0,0,
+3e241e193dc4__parties,3e241e193dc4,Parties,OK,4,True,1,4,0,0,4,0.2791,False,False,False,4,4,0,4,4,1
+3e241e193dc4__agreement_date,3e241e193dc4,Agreement Date,OK,1,True,1,0,1,1,1,0.24,False,False,False,1,1,0,1,1,1
+3e241e193dc4__governing_law,3e241e193dc4,Governing Law,OK,1,True,1,1,0,0,1,0.8125,False,False,False,2,2,0,1,1,1
+3e241e193dc4__expiration_date,3e241e193dc4,Expiration Date,OK,1,False,1,1,0,0,0,0.7887,False,False,True,2,2,0,0,0,
+3e241e193dc4__termination_for_convenience,3e241e193dc4,Termination For Convenience,OK,2,False,1,0,1,2,1,0.557,False,False,True,3,3,0,1,1,1
+93a7191ff012__parties,93a7191ff012,Parties,OK,5,False,2,2,0,3,4,0.5,False,False,False,2,2,0,4,4,1
+93a7191ff012__agreement_date,93a7191ff012,Agreement Date,OK,1,True,1,1,0,0,1,1.0,False,False,False,1,1,0,1,1,1
+93a7191ff012__governing_law,93a7191ff012,Governing Law,OK,1,True,1,1,0,0,1,0.9725,False,False,True,3,3,0,1,1,2
+93a7191ff012__expiration_date,93a7191ff012,Expiration Date,OK,1,False,1,1,0,0,0,0.9677,False,False,True,2,2,0,0,0,
+93a7191ff012__termination_for_convenience,93a7191ff012,Termination For Convenience,OK,1,False,1,1,0,0,0,0.64,False,False,True,1,1,0,0,0,
+7eb54db0558f__parties,7eb54db0558f,Parties,OK,5,False,3,4,0,1,4,0.3273,False,False,False,4,4,0,2,4,1
+7eb54db0558f__agreement_date,7eb54db0558f,Agreement Date,OK,1,True,2,1,1,0,1,0.2609,False,False,False,2,2,0,1,1,1
+7eb54db0558f__governing_law,7eb54db0558f,Governing Law,OK,1,True,1,1,0,0,1,0.9512,False,False,True,3,3,0,1,1,1
+7eb54db0558f__expiration_date,7eb54db0558f,Expiration Date,OK,0,True,0,0,0,0,0,1.0,True,True,True,0,0,0,0,0,
+7eb54db0558f__termination_for_convenience,7eb54db0558f,Termination For Convenience,OK,0,True,0,0,0,0,0,1.0,True,True,True,0,0,0,0,0,
+a4a5f4121b48__parties,a4a5f4121b48,Parties,OK,10,False,1,8,0,2,8,0.575,False,False,False,3,3,0,8,8,1
+a4a5f4121b48__agreement_date,a4a5f4121b48,Agreement Date,OK,0,True,1,0,1,0,0,0.0,True,False,True,1,1,0,0,0,
+a4a5f4121b48__governing_law,a4a5f4121b48,Governing Law,OK,1,True,1,1,0,0,0,0.9474,False,False,False,2,2,0,1,1,1
+a4a5f4121b48__expiration_date,a4a5f4121b48,Expiration Date,OK,1,False,0,0,0,1,0,0.0,False,True,True,0,0,0,0,0,
+a4a5f4121b48__termination_for_convenience,a4a5f4121b48,Termination For Convenience,OK,2,True,1,1,0,1,2,0.9752,False,False,True,2,2,0,2,2,2
+af0c46173614__parties,af0c46173614,Parties,OK,8,False,3,4,1,4,4,0.4528,False,False,False,5,5,0,6,7,1
+af0c46173614__agreement_date,af0c46173614,Agreement Date,OK,1,True,1,1,0,0,1,1.0,False,False,False,1,1,0,1,1,1
+af0c46173614__governing_law,af0c46173614,Governing Law,OK,1,True,1,1,0,0,1,0.8947,False,False,False,1,1,0,1,1,1
+af0c46173614__expiration_date,af0c46173614,Expiration Date,OK,2,True,0,0,0,2,0,0.0,False,True,False,0,0,0,2,2,1
+af0c46173614__termination_for_convenience,af0c46173614,Termination For Convenience,OK,0,True,0,0,0,0,0,1.0,True,True,False,0,0,0,0,0,
+4ae6fb819cc7__parties,4ae6fb819cc7,Parties,OK,4,True,2,4,0,0,3,0.8,False,False,False,2,2,0,3,4,1
+4ae6fb819cc7__agreement_date,4ae6fb819cc7,Agreement Date,OK,1,True,1,0,1,1,0,0.4444,False,False,False,1,1,0,0,1,
+4ae6fb819cc7__governing_law,4ae6fb819cc7,Governing Law,OK,1,True,1,1,0,0,1,0.9302,False,False,False,1,1,0,1,1,2
+4ae6fb819cc7__expiration_date,4ae6fb819cc7,Expiration Date,OK,1,False,0,0,0,1,0,0.0,False,True,False,0,0,0,0,0,
+4ae6fb819cc7__termination_for_convenience,4ae6fb819cc7,Termination For Convenience,OK,0,True,0,0,0,0,0,1.0,True,True,False,0,0,0,0,0,

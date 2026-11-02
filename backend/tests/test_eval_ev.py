@@ -167,3 +167,9 @@ def test_each_pair_changes_the_next_action_as_expected(scenario, tmp_path):
 def test_parser_version_is_recorded_with_every_run():
     info = evalkit.run_info("scripts.cuad_eval")
     assert info["parser_version"] == docparse.PARSER_VERSION and info["evaluator_sha256"] and info["code_sha"]
+
+
+def test_a_run_beyond_the_fixed_repeat_plan_is_refused_before_any_call(capsys):
+    assert cuad_eval.collect(["--split", "heldout_long", "--condition", "A", "--live", "--run", "3"]) == 2
+    assert cuad_eval.collect(["--split", "heldout", "--condition", "A", "--live", "--run", "2"]) == 2
+    assert "repeat plan" in capsys.readouterr().out and cuad_eval.REPEATS["heldout_long"] == {"A": 2, "C": 2}

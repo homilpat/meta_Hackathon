@@ -47,6 +47,9 @@ SOURCES = {
 # 2026-11-02 to measure where AUTO switches to HYBRID (the first held-out set had only 2 contracts above 34 pages)
 SPLITS = {"dev": ("train_separate_questions.json", 3, "seed"), "heldout": ("test.json", 10, "seed"),
           "heldout_long": ("test.json", 10, "longest")}
+# Repeated LIVE runs, fixed before run 2 (spec §26.5; user 2026-11-02): split -> condition -> runs. compare reports
+# per metric the mean and the difference between runs, and the share of questions whose quoted answer changed.
+REPEATS = {"heldout_long": {"A": 2, "C": 2}}
 SEED = 20261102
 MIN_PAGES = 10  # the plan's rule (CUAD_EVAL_PLAN.md): long enough that finding the part matters
 CATEGORIES = ["Parties", "Agreement Date", "Governing Law", "Expiration Date", "Termination For Convenience"]
@@ -213,6 +216,9 @@ def prepare(args: list[str]) -> int:
             "heldout_long": "official test split: the 10 eligible contracts with the most pages that are not in "
                             "heldout (ties by title); out of sample for AUTO's measured token ratios"},
         "retries": "none: a failed call is a failed question, counted", "subset": {},
+        "repeats": {"plan": REPEATS, "fixed": "2026-11-02, before the second run",
+                    "report": "per metric the mean and the difference between runs; share of questions whose "
+                              "valid quotes changed (python -m scripts.cuad_eval compare SPLIT CONDITION)"},
         "limitations": [
             "CUAD has been public since 2021: the model may have seen these contracts in training",
             "a 23-contract subset of 5 of 41 categories, not CUAD's official result",
@@ -413,6 +419,10 @@ def run_one(provider, row: dict, condition: str, manifest: dict) -> dict:
 
 def collect(args: list[str]) -> int:
     split, condition = args[args.index("--split") + 1], args[args.index("--condition") + 1]
+    run = int(args[args.index("--run") + 1]) if "--run" in args else 1
+    if run > REPEATS.get(split, {}).get(condition, 1):
+        print(f"NOT_RUN: run {run} of {split}/{condition} is not in the fixed repeat plan (REPEATS)")
+        return 2
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     rows = manifest["subset"][split][:int(args[args.index("--limit") + 1])] if "--limit" in args \
         else manifest["subset"][split]
@@ -431,11 +441,12 @@ def collect(args: list[str]) -> int:
         provider.restricted_check = False
         if "--reuse" in args:
             provider = ReuseTraces(provider, split)
-    out = CUAD_DIR / "traces" / f"{split}-{condition}-{provider.mode}-{evalkit.now().replace(':', '')}.jsonl"
+    tag = f"-r{run}" if run > 1 else ""
+    out = CUAD_DIR / "traces" / f"{split}-{condition}-{provider.mode}{tag}-{evalkit.now().replace(':', '')}.jsonl"
     out.parent.mkdir(parents=True, exist_ok=True)
     spent = 0.0
     with open(out, "w", encoding="utf-8") as f:
-        f.write(json.dumps({"header": evalkit.run_info("scripts.cuad_eval", split=split, condition=condition,
+        f.write(json.dumps({"header": evalkit.run_info("scripts.cuad_eval", split=split, condition=condition, run=run,
                                                        run_mode=provider.mode, model=provider.model,
                                                        egress_exception=None if budget is None else
                                                        "CONFIDENTIAL-word backstop off: public CC BY dataset",
@@ -572,17 +583,64 @@ def score(args: list[str]) -> int:
             header, rows, records = score_trace(p, manifest, gold)
             summary = {**aggregate(rows, records, header), "network_attempts": len(attempts),
                        "model_calls": 0, "trace": p.name, "scored": evalkit.run_info("scripts.cuad_eval")}
-            out = evalkit.write_report(f"cuad_{header['split']}_{header['condition']}_{header['run_mode']}", summary,
-                                       rows)  # one report per split, condition and mode: the newest trace wins
+            run = f"_r{header['run']}" if header.get("run", 1) > 1 else ""
+            out = evalkit.write_report(f"cuad_{header['split']}_{header['condition']}_{header['run_mode']}{run}",
+                                       summary, rows)  # one report per split, condition, mode and run
             a = summary["all"]
             print(p.name, summary["run_mode"], "P", a["span_precision"], "R", a["span_recall"], "noans",
                   f"{a['no_answer_correct']}/{a['no_answer_questions']}", "->", out)
     return 0
 
 
+def compare(args: list[str]) -> int:
+    """Run-to-run change of one split and condition, from the scored reports and the saved traces (offline)."""
+    split, condition = args[0], args[1]
+    reps = sorted(EVAL_DIR.glob(f"ev/cuad_{split}_{condition}_LIVE*.json"))
+    if len(reps) < 2:
+        print("NOT_RUN: fewer than two scored LIVE runs")
+        return 2
+    runs = [json.loads(r.read_text(encoding="utf-8")) for r in reps]
+    keys = ("span_precision", "span_recall", "contained_recall", "token_f1_answerable", "page_recall")
+    metrics = {k: {"runs": [r["summary"]["all"][k] for r in runs]} for k in keys}
+    for m in metrics.values():
+        v = [x for x in m["runs"] if x is not None]
+        m |= {"mean": round(sum(v) / len(v), 4), "max_minus_min": round(max(v) - min(v), 4)} if v else {}
+    traces = [CUAD_DIR / "traces" / r["summary"]["trace"] for r in runs]
+    recs = [{json.loads(x)["id"]: json.loads(x) for x in t.read_text(encoding="utf-8").splitlines()[1:]}
+            for t in traces]
+    man = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    rows_by_id = {r["id"]: r for r in man["subset"][split]}
+    source = CONDITIONS[condition][0]
+    rows, changed = [], 0
+    for cid, row in rows_by_id.items():
+        files = files_of(row, source)
+        quoted = []
+        for rec in recs:
+            r = rec.get(cid) or {}
+            quoted.append({key(q["category"]): sorted(spaces(x["excerpt"]) for x in valid_spans(
+                r.get("raw"), files, key(q["category"]))[0]) for q in row["questions"]})
+        for q in row["questions"]:
+            k = key(q["category"])
+            same = all(qt[k] == quoted[0][k] for qt in quoted)
+            changed += not same
+            rows.append({"question": f"{cid}__{k}", "category": q["category"], "same_quotes": same,
+                         "per_run_quotes": [len(qt[k]) for qt in quoted],
+                         "tp_per_run": [next((x["tp"] for x in r["rows"] if x["question"] == f"{cid}__{k}"), None)
+                                        for r in runs]})
+    summary = {"split": split, "condition": condition, "runs": [r.name for r in reps], "metrics": metrics,
+               "questions": len(rows), "questions_with_changed_quotes": changed,
+               "share_changed": round(changed / max(1, len(rows)), 4), "plan": REPEATS.get(split, {}).get(condition),
+               "sampling": [r["summary"]["collected"].get("sampling") for r in runs],
+               "scored": evalkit.run_info("scripts.cuad_eval")}
+    print(evalkit.write_report(f"cuad_variance_{split}_{condition}", summary, rows))
+    print(json.dumps({k: m for k, m in metrics.items()}), "changed", f"{changed}/{len(rows)}")
+    return 0
+
+
 def main() -> int:
     cmd, *args = sys.argv[1:] or ["help"]
-    return {"prepare": prepare, "collect": collect, "score": score}.get(cmd, lambda _: print(__doc__) or 2)(args)
+    return {"prepare": prepare, "collect": collect, "score": score, "compare": compare}.get(
+        cmd, lambda _: print(__doc__) or 2)(args)
 
 
 if __name__ == "__main__":

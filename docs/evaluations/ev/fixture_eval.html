@@ -1,0 +1,39 @@
+<!doctype html><meta charset='utf-8'><title>fixture_eval</title><style>body{font:13px system-ui;margin:16px}td,th{border:1px solid #ccc;padding:2px 6px;vertical-align:top}table{border-collapse:collapse}pre{white-space:pre-wrap}</style><h1>fixture_eval</h1><pre>{
+ &quot;what&quot;: &quot;SYNTHETIC functional fixtures, not a manufacturing benchmark and never combined with CUAD&quot;,
+ &quot;by_part&quot;: {
+  &quot;parse&quot;: {
+   &quot;dev&quot;: &quot;28/28&quot;,
+   &quot;validation&quot;: &quot;12/12&quot;
+  },
+  &quot;vision&quot;: {
+   &quot;dev&quot;: &quot;5/5&quot;,
+   &quot;validation&quot;: &quot;0/0&quot;
+  },
+  &quot;extraction&quot;: {
+   &quot;dev&quot;: &quot;0/0&quot;,
+   &quot;validation&quot;: &quot;0/0&quot;
+  }
+ },
+ &quot;extraction_not_run&quot;: [
+  &quot;complaint&quot;,
+  &quot;complaint+supplement&quot;,
+  &quot;live_complaint&quot;,
+  &quot;live_complaint+supplement&quot;
+ ],
+ &quot;wrong_confirmations&quot;: 0,
+ &quot;network_attempts&quot;: 0,
+ &quot;model_calls&quot;: 0,
+ &quot;not_evaluated&quot;: [
+  &quot;what an image shows (no vision model; NOT_CONFIGURED is the expected answer)&quot;,
+  &quot;whether a question to the customer is well worded (human review)&quot;
+ ],
+ &quot;run&quot;: {
+  &quot;code_sha&quot;: &quot;949e1de9a8f189bb5e403db7cd34457e437f40eb+dirty&quot;,
+  &quot;parser_version&quot;: &quot;docparse-3&quot;,
+  &quot;evaluator&quot;: &quot;scripts.fixture_eval&quot;,
+  &quot;evaluator_sha256&quot;: &quot;7ba75e3a3acb54bd&quot;,
+  &quot;python&quot;: &quot;3.12.8&quot;,
+  &quot;command&quot;: &quot;python -m scripts.fixture_eval&quot;,
+  &quot;at&quot;: &quot;2026-11-02T01:06:31+00:00&quot;
+ }
+}</pre><table><tr><th>part</th><th>case</th><th>split</th><th>run_mode</th><th>checks</th><th>passed</th><th>of</th><th>failed</th><th>why</th></tr><tr><td>parse</td><td>complaint_HM-CC-2026-0417.pdf</td><td>dev</td><td>OFFLINE_REAL_CODE</td><td>{&quot;coverage.tables&quot;: true, &quot;coverage.charts&quot;: true, &quot;coverage.scan&quot;: true, &quot;coverage.scan_pages&quot;: true, &quot;cell pdf:p1:t1:r2:c1&quot;: true, &quot;cell pdf:p1:t1:r2:c3&quot;: true, &quot;cell pdf:p1:t1:r2:c4&quot;: true, &quot;cell pdf:p1:t1:r1:c3&quot;: true, &quot;caption pdf:p1:img1&quot;: true, &quot;caption pdf:p2:img1&quot;: true, &quot;scan pdf:p3:scan needs vision&quot;: true, &quot;injection flagged pdf:p1:l16&quot;: true}</td><td>12</td><td>12</td><td>[]</td><td></td></tr><tr><td>parse</td><td>supplement_HM-CC-2026-0417.docx</td><td>dev</td><td>OFFLINE_REAL_CODE</td><td>{&quot;coverage.tables&quot;: true, &quot;coverage.charts&quot;: true, &quot;coverage.scan&quot;: true, &quot;cell docx:t1:r3:c1&quot;: true, &quot;cell docx:t1:r3:c2&quot;: true, &quot;cell docx:t1:r3:c3&quot;: true, &quot;merged docx:t1:r1:c1&quot;: true, &quot;caption docx:img1&quot;: true, &quot;caption docx:chart1&quot;: true, &quot;duplicate docx:img2&quot;: true, &quot;chart docx:chart1.values&quot;: true, &quot;chart docx:chart1.total&quot;: true, &quot;chart docx:chart1.source&quot;: true}</td><td>13</td><td>13</td><td>[]</td><td></td></tr><tr><td>parse</td><td>chart_workbook_mismatch.docx</td><td>dev</td><td>OFFLINE_REAL_CODE</td><td>{&quot;coverage.charts&quot;: true, &quot;chart docx:chart1.values&quot;: true, &quot;chart docx:chart1.workbook_values&quot;: true}</td><td>3</td><td>3</td><td>[]</td><td></td></tr><tr><td>parse</td><td>live_complaint_DS-QN-2026-0099.pdf</td><td>validation</td><td>OFFLINE_REAL_CODE</td><td>{&quot;coverage.scan&quot;: true, &quot;coverage.scan_pages&quot;: true, &quot;cell pdf:p1:t1:r2:c1&quot;: true, &quot;cell pdf:p1:t1:r2:c3&quot;: true, &quot;caption pdf:p1:img1&quot;: true}</td><td>5</td><td>5</td><td>[]</td><td></td></tr><tr><td>parse</td><td>live_supplement_DS-QN-2026-0099.docx</td><td>validation</td><td>OFFLINE_REAL_CODE</td><td>{&quot;coverage.tables&quot;: true, &quot;cell docx:t1:r2:c1&quot;: true, &quot;cell docx:t1:r2:c2&quot;: true}</td><td>3</td><td>3</td><td>[]</td><td></td></tr><tr><td>parse</td><td>live_scan_DS-QN-2026-0099.pdf</td><td>validation</td><td>OFFLINE_REAL_CODE</td><td>{&quot;coverage.text&quot;: true, &quot;coverage.scan&quot;: true, &quot;coverage.scan_pages&quot;: true, &quot;scan pdf:p1:scan needs vision&quot;: true}</td><td>4</td><td>4</td><td>[]</td><td></td></tr><tr><td>vision</td><td>complaint_HM-CC-2026-0417.pdf</td><td>dev</td><td>OFFLINE_REAL_CODE</td><td>{&quot;request accepted (201)&quot;: true, &quot;status NOT_CONFIGURED&quot;: true, &quot;no result&quot;: true, &quot;no result type&quot;: true, &quot;re-read the same&quot;: true}</td><td>5</td><td>5</td><td>[]</td><td></td></tr><tr><td>extraction</td><td>complaint</td><td>dev</td><td>NOT_RUN</td><td></td><td></td><td></td><td></td><td>no saved extraction trace (earlier LIVE checks kept scores, not raw replies)</td></tr><tr><td>extraction</td><td>complaint+supplement</td><td>dev</td><td>NOT_RUN</td><td></td><td></td><td></td><td></td><td>no saved extraction trace (earlier LIVE checks kept scores, not raw replies)</td></tr><tr><td>extraction</td><td>live_complaint</td><td>validation</td><td>NOT_RUN</td><td></td><td></td><td></td><td></td><td>no saved extraction trace (earlier LIVE checks kept scores, not raw replies)</td></tr><tr><td>extraction</td><td>live_complaint+supplement</td><td>validation</td><td>NOT_RUN</td><td></td><td></td><td></td><td></td><td>no saved extraction trace (earlier LIVE checks kept scores, not raw replies)</td></tr></table>

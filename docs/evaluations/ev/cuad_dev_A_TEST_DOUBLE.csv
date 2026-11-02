@@ -1,0 +1,16 @@
+question,contract,category,status,gold_spans,aligned,pred_passages,tp,fp,fn,token_f1,no_answer_gold,no_answer_pred,uncertain,spans_returned,spans_valid,spans_not_in_document,gold_pages_read,gold_pages_located,first_round_read
+d39bf71d3da2__parties,d39bf71d3da2,Parties,OK,8,False,1,0,1,8,0.0656,False,False,False,1,1,0,6,6,1
+d39bf71d3da2__agreement_date,d39bf71d3da2,Agreement Date,OK,1,True,1,0,1,1,0.0,False,False,False,1,1,0,1,1,1
+d39bf71d3da2__governing_law,d39bf71d3da2,Governing Law,OK,1,True,1,0,1,1,0.2667,False,False,False,1,1,0,1,1,1
+d39bf71d3da2__expiration_date,d39bf71d3da2,Expiration Date,OK,1,False,1,0,1,1,0.7123,False,False,False,1,1,0,0,0,
+d39bf71d3da2__termination_for_convenience,d39bf71d3da2,Termination For Convenience,OK,0,True,1,0,1,0,0.0,True,False,False,1,1,0,0,0,
+20fc9465057b__parties,20fc9465057b,Parties,OK,6,False,1,0,1,6,0.0,False,False,False,1,1,0,5,5,1
+20fc9465057b__agreement_date,20fc9465057b,Agreement Date,OK,1,True,1,0,1,1,0.3,False,False,False,1,1,0,1,1,1
+20fc9465057b__governing_law,20fc9465057b,Governing Law,OK,1,True,1,0,1,1,0.5614,False,False,False,1,1,0,1,1,1
+20fc9465057b__expiration_date,20fc9465057b,Expiration Date,OK,1,False,1,1,0,0,0.8444,False,False,False,1,1,0,0,0,
+20fc9465057b__termination_for_convenience,20fc9465057b,Termination For Convenience,OK,0,True,1,0,1,0,0.0,True,False,False,1,1,0,0,0,
+1295b04db7d8__parties,1295b04db7d8,Parties,OK,5,True,1,0,1,5,0.0,False,False,False,1,1,0,2,5,1
+1295b04db7d8__agreement_date,1295b04db7d8,Agreement Date,OK,0,True,1,0,1,0,0.0,True,False,False,1,1,0,0,0,
+1295b04db7d8__governing_law,1295b04db7d8,Governing Law,OK,1,True,1,0,1,1,0.16,False,False,False,1,1,0,0,1,
+1295b04db7d8__expiration_date,1295b04db7d8,Expiration Date,OK,0,True,1,0,1,0,0.0,True,False,False,1,1,0,0,0,
+1295b04db7d8__termination_for_convenience,1295b04db7d8,Termination For Convenience,OK,2,True,1,2,0,0,0.5455,False,False,False,1,1,0,2,2,1

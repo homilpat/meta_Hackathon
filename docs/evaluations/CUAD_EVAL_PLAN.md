@@ -1,6 +1,6 @@
 # Plan: measuring the document reading on real documents (CUAD)
 
-Status: **PLANNED, not run.** Planned for 2026-11-02 on request.
+Status: implemented as `backend/scripts/cuad_eval.py` (spec §26.7); results and what is NOT_RUN in [EV_LOCAL_EVAL.md](EV_LOCAL_EVAL.md).
 
 ## Why
 

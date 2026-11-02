@@ -145,7 +145,7 @@ def mask_map(m: dict, masker) -> dict:
 
 
 def merge(raw: dict, more: dict, info: dict, more_info: dict) -> None:
-    for k in ("fields", "transcriptions", "links", "questions", "documents"):
+    for k in {*raw, *more} - {"need"}:  # every list the task's schema returns
         raw[k] = [*raw.get(k, []), *more.get(k, [])]
     for k in ("prompt_tokens", "completion_tokens", "total_tokens"):
         if k in more_info["usage"]:
@@ -165,36 +165,51 @@ def rest_of(files: list[dict], sent: list[dict]) -> list[dict]:
     return out
 
 
-def whole(provider: ModelProvider, files: list[dict], protected: str) -> tuple[dict, list[dict], dict]:
+def whole(provider: ModelProvider, files: list[dict], protected: str, task: dict | None = None
+          ) -> tuple[dict, list[dict], dict]:
     """Every element is read: one call when the documents fit the model's input, otherwise consecutive pieces."""
-    raw, withheld, info = extract_once(provider, files, protected)
+    raw, withheld, info = extract_once(provider, files, protected, task=task)
     info["pieces"] = 1
     rest = rest_of(files, info["files"])
     while rest:
-        more, _, more_info = extract_once(provider, rest, protected)
+        more, _, more_info = extract_once(provider, rest, protected, task=task)
         merge(raw, more, info, more_info)
         info["pieces"] += 1
         rest = rest_of(rest, more_info["files"])
     return raw, withheld, info
 
 
-def hybrid(provider: ModelProvider, files: list[dict], protected: str) -> tuple[dict, list[dict], dict]:
+def intake_task() -> dict:
+    """What an extraction reads for: the intake fields. An evaluation (scripts/cuad_eval.py) passes its own task to
+    measure this same reading on other questions; the product always uses this one."""
+    return {"prompt": EXTRACT_PROMPT, "schema": EXTRACT_SCHEMA, "fields": FIELDS, "labels": None,
+            "keys": ("documents", "fields", "links", "questions"),
+            "missing": lambda raw, files: [k for k, v in draft(raw, files)["fields"].items()
+                                           if v["status"] == "MISSING"],
+            "map": None}
+
+
+def hybrid(provider: ModelProvider, files: list[dict], protected: str, task: dict | None = None
+           ) -> tuple[dict, list[dict], dict]:
     """Round 1: the server's selection plus each document's map. Later rounds: the parts the model asked for
     (only parts the map lists, not sent before, at most HYBRID_MAX_PARTS_PER_ROUND), for fields still missing."""
     from app import doc_map, doc_select
 
+    task = task or intake_task()
     maps = {f["file_id"]: doc_map.build(f["elements"], f.get("coverage", {})) for f in files}
+    if task["map"]:  # an evaluation's ablation, e.g. the map without the author's contents
+        maps = {k: task["map"](m) for k, m in maps.items()}
     sent: set[tuple[int, str]] = set()
     chunk = []
     for f in files:
-        ids, _ = doc_select.select(f["elements"], FIELDS)
+        ids, _ = doc_select.select(f["elements"], task["fields"], labels=task["labels"])
         sent.update((f["file_id"], i) for i in ids)
         chunk.append({**f, "elements": [e for e in f["elements"] if e["id"] in set(ids)],
                       "images": {k: v for k, v in f.get("images", {}).items() if k in set(ids)}})
-    raw, withheld, info = extract_once(provider, chunk, protected, maps=maps)
+    raw, withheld, info = extract_once(provider, chunk, protected, maps=maps, task=task)
     info["rounds"] = [{"round": 1, "sent": len(sent), "asked": []}]
     for r in range(2, limits.get("EXTRACT_MAX_ROUNDS") + 1):
-        missing = [k for k, v in draft(raw, files)["fields"].items() if v["status"] == "MISSING"]
+        missing = task["missing"](raw, files)
         asked = [(int(n.get("file_id", -1)), str(n.get("part", ""))) for n in raw.get("need", [])]
         by_id = {f["file_id"]: f for f in files}
         parts = [(fid, part) for fid, part in dict.fromkeys(asked) if fid in by_id
@@ -210,7 +225,7 @@ def hybrid(provider: ModelProvider, files: list[dict], protected: str) -> tuple[
         if not missing or not chunk:
             break
         try:
-            more, _, more_info = extract_once(provider, chunk, protected, only=missing, maps=maps)
+            more, _, more_info = extract_once(provider, chunk, protected, only=missing, maps=maps, task=task)
         except ProviderError as exc:  # earlier rounds stand; say why no more was read
             info["rounds"].append({"round": r, "error": str(exc)})
             break
@@ -221,31 +236,33 @@ def hybrid(provider: ModelProvider, files: list[dict], protected: str) -> tuple[
     info["mode"] = "HYBRID"
     total = sum(len(f["elements"]) for f in files)
     info["unread"] = {"elements": total - len(sent), "of": total,  # what a person may choose to have read in full
-                      "missing": [k for k, v in draft(raw, files)["fields"].items() if v["status"] == "MISSING"]}
+                      "missing": task["missing"](raw, files)}
     return raw, withheld, info
 
 
 def extract(provider: ModelProvider, files: list[dict], protected: str = "MASK",
-            mode: str | None = None) -> tuple[dict, list[dict], dict]:
+            mode: str | None = None, task: dict | None = None) -> tuple[dict, list[dict], dict]:
     """(model output with tokens mapped back, withheld files, what was sent). EXTRACT_MODE WHOLE (default) reads
     every element; HYBRID sends the server's selection and a map, and the model asks for missing parts. Raises
     ProviderError when the first call fails."""
     if (mode or limits.get("EXTRACT_MODE")) == "HYBRID":
-        return hybrid(provider, files, protected)
-    raw, withheld, info = whole(provider, files, protected)
+        return hybrid(provider, files, protected, task)
+    raw, withheld, info = whole(provider, files, protected, task)
     info["mode"] = "WHOLE"
     return raw, withheld, info
 
 
 def extract_once(provider: ModelProvider, files: list[dict], protected: str = "MASK",
-                 only: list[str] | None = None, maps: dict | None = None) -> tuple[dict, list[dict], dict]:
+                 only: list[str] | None = None, maps: dict | None = None, task: dict | None = None
+                 ) -> tuple[dict, list[dict], dict]:
     """One model call over the given (already selected) elements, with the documents' maps in hybrid mode."""
     from app.egress import MASK_NOTE, Masker, masked_payload_record
 
+    task = task or intake_task()
     masker = Masker()
-    system = EXTRACT_PROMPT + ("\n" + MASK_NOTE if protected == "MASK" else "") + (
+    system = task["prompt"] + ("\n" + MASK_NOTE if protected == "MASK" else "") + (
         f"\nOnly these fields are still needed: {', '.join(only)}. Return the others empty." if only else "")
-    reserve = limits.estimate_tokens(system) + limits.estimate_tokens(json.dumps(EXTRACT_SCHEMA))
+    reserve = limits.estimate_tokens(system) + limits.estimate_tokens(json.dumps(task["schema"]))
     parts, withheld, sent = model_input(files, protected, masker, reserve)
     if not parts:
         raise ProviderError("no file is cleared for external processing")
@@ -254,15 +271,15 @@ def extract_once(provider: ModelProvider, files: list[dict], protected: str = "M
         shown = {fid: m if how.get(fid) == "RAW" else mask_map(m, masker) for fid, m in maps.items() if fid in how}
         parts.append({"type": "text", "text": json.dumps({"maps": shown}, ensure_ascii=False)})
     masked = any(s["sent"] == "MASKED" for s in sent)
-    system = EXTRACT_PROMPT + ("\n" + MASK_NOTE if masked else "") + ("\n" + HYBRID_NOTE if maps else "") + (
+    system = task["prompt"] + ("\n" + MASK_NOTE if masked else "") + ("\n" + HYBRID_NOTE if maps else "") + (
         f"\nOnly these fields are still needed: {', '.join(only)}. Return the others empty." if only else "")
     reply = provider.chat([{"role": "system", "content": system},
-                           {"role": "user", "content": parts}], [], response_format=EXTRACT_SCHEMA,
+                           {"role": "user", "content": parts}], [], response_format=task["schema"],
                           reasoning_effort=effort())
     msg = reply["message"]
     try:
         out = json.loads(msg.get("content") or "")
-        assert all(k in out for k in ("documents", "fields", "links", "questions"))
+        assert all(k in out for k in task["keys"])
         out.setdefault("transcriptions", [])
         out.setdefault("need", [])
     except (ValueError, AssertionError, TypeError) as exc:

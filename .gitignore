@@ -15,3 +15,6 @@ artifacts/
 synthetic-pcb.json
 
 .serena/
+
+# Downloaded evaluation data and traces (scripts/evalkit.py): never committed
+.eval_data/

@@ -1,0 +1,193 @@
+{
+ "summary": {
+  "what": "SYNTHETIC functional fixtures, not a manufacturing benchmark and never combined with CUAD",
+  "by_part": {
+   "parse": {
+    "dev": "28/28",
+    "validation": "12/12"
+   },
+   "vision": {
+    "dev": "5/5",
+    "validation": "0/0"
+   },
+   "extraction": {
+    "dev": "0/0",
+    "validation": "0/0"
+   }
+  },
+  "extraction_not_run": [
+   "complaint",
+   "complaint+supplement",
+   "live_complaint",
+   "live_complaint+supplement"
+  ],
+  "wrong_confirmations": 0,
+  "network_attempts": 0,
+  "model_calls": 0,
+  "not_evaluated": [
+   "what an image shows (no vision model; NOT_CONFIGURED is the expected answer)",
+   "whether a question to the customer is well worded (human review)"
+  ],
+  "run": {
+   "code_sha": "949e1de9a8f189bb5e403db7cd34457e437f40eb+dirty",
+   "parser_version": "docparse-3",
+   "evaluator": "scripts.fixture_eval",
+   "evaluator_sha256": "7ba75e3a3acb54bd",
+   "python": "3.12.8",
+   "command": "python -m scripts.fixture_eval",
+   "at": "2026-11-02T01:06:31+00:00"
+  }
+ },
+ "rows": [
+  {
+   "part": "parse",
+   "case": "complaint_HM-CC-2026-0417.pdf",
+   "split": "dev",
+   "run_mode": "OFFLINE_REAL_CODE",
+   "checks": {
+    "coverage.tables": true,
+    "coverage.charts": true,
+    "coverage.scan": true,
+    "coverage.scan_pages": true,
+    "cell pdf:p1:t1:r2:c1": true,
+    "cell pdf:p1:t1:r2:c3": true,
+    "cell pdf:p1:t1:r2:c4": true,
+    "cell pdf:p1:t1:r1:c3": true,
+    "caption pdf:p1:img1": true,
+    "caption pdf:p2:img1": true,
+    "scan pdf:p3:scan needs vision": true,
+    "injection flagged pdf:p1:l16": true
+   },
+   "passed": 12,
+   "of": 12,
+   "failed": []
+  },
+  {
+   "part": "parse",
+   "case": "supplement_HM-CC-2026-0417.docx",
+   "split": "dev",
+   "run_mode": "OFFLINE_REAL_CODE",
+   "checks": {
+    "coverage.tables": true,
+    "coverage.charts": true,
+    "coverage.scan": true,
+    "cell docx:t1:r3:c1": true,
+    "cell docx:t1:r3:c2": true,
+    "cell docx:t1:r3:c3": true,
+    "merged docx:t1:r1:c1": true,
+    "caption docx:img1": true,
+    "caption docx:chart1": true,
+    "duplicate docx:img2": true,
+    "chart docx:chart1.values": true,
+    "chart docx:chart1.total": true,
+    "chart docx:chart1.source": true
+   },
+   "passed": 13,
+   "of": 13,
+   "failed": []
+  },
+  {
+   "part": "parse",
+   "case": "chart_workbook_mismatch.docx",
+   "split": "dev",
+   "run_mode": "OFFLINE_REAL_CODE",
+   "checks": {
+    "coverage.charts": true,
+    "chart docx:chart1.values": true,
+    "chart docx:chart1.workbook_values": true
+   },
+   "passed": 3,
+   "of": 3,
+   "failed": []
+  },
+  {
+   "part": "parse",
+   "case": "live_complaint_DS-QN-2026-0099.pdf",
+   "split": "validation",
+   "run_mode": "OFFLINE_REAL_CODE",
+   "checks": {
+    "coverage.scan": true,
+    "coverage.scan_pages": true,
+    "cell pdf:p1:t1:r2:c1": true,
+    "cell pdf:p1:t1:r2:c3": true,
+    "caption pdf:p1:img1": true
+   },
+   "passed": 5,
+   "of": 5,
+   "failed": []
+  },
+  {
+   "part": "parse",
+   "case": "live_supplement_DS-QN-2026-0099.docx",
+   "split": "validation",
+   "run_mode": "OFFLINE_REAL_CODE",
+   "checks": {
+    "coverage.tables": true,
+    "cell docx:t1:r2:c1": true,
+    "cell docx:t1:r2:c2": true
+   },
+   "passed": 3,
+   "of": 3,
+   "failed": []
+  },
+  {
+   "part": "parse",
+   "case": "live_scan_DS-QN-2026-0099.pdf",
+   "split": "validation",
+   "run_mode": "OFFLINE_REAL_CODE",
+   "checks": {
+    "coverage.text": true,
+    "coverage.scan": true,
+    "coverage.scan_pages": true,
+    "scan pdf:p1:scan needs vision": true
+   },
+   "passed": 4,
+   "of": 4,
+   "failed": []
+  },
+  {
+   "part": "vision",
+   "case": "complaint_HM-CC-2026-0417.pdf",
+   "split": "dev",
+   "run_mode": "OFFLINE_REAL_CODE",
+   "checks": {
+    "request accepted (201)": true,
+    "status NOT_CONFIGURED": true,
+    "no result": true,
+    "no result type": true,
+    "re-read the same": true
+   },
+   "passed": 5,
+   "of": 5,
+   "failed": []
+  },
+  {
+   "part": "extraction",
+   "case": "complaint",
+   "split": "dev",
+   "run_mode": "NOT_RUN",
+   "why": "no saved extraction trace (earlier LIVE checks kept scores, not raw replies)"
+  },
+  {
+   "part": "extraction",
+   "case": "complaint+supplement",
+   "split": "dev",
+   "run_mode": "NOT_RUN",
+   "why": "no saved extraction trace (earlier LIVE checks kept scores, not raw replies)"
+  },
+  {
+   "part": "extraction",
+   "case": "live_complaint",
+   "split": "validation",
+   "run_mode": "NOT_RUN",
+   "why": "no saved extraction trace (earlier LIVE checks kept scores, not raw replies)"
+  },
+  {
+   "part": "extraction",
+   "case": "live_complaint+supplement",
+   "split": "validation",
+   "run_mode": "NOT_RUN",
+   "why": "no saved extraction trace (earlier LIVE checks kept scores, not raw replies)"
+  }
+ ]
+}

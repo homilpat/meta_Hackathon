@@ -71,16 +71,16 @@ def around(elements: list[dict], i: int) -> list[str]:
     return ids
 
 
-def ranked(elements: list[dict], field: str) -> list[int]:
+def ranked(elements: list[dict], field: str, labels: dict[str, str] | None = None) -> list[int]:
     """Indexes of the elements that share a label term with the field: by BM25 score, a table cell before a plain
     line with the same score (its row and column come with it), the earliest on a tie."""
-    scores = bm25(FIELD_LABELS[field], [e.get("text", "") for e in elements])
+    scores = bm25((labels or FIELD_LABELS)[field], [e.get("text", "") for e in elements])
     hits = [(sc, i) for i, (sc, _) in enumerate(scores) if sc > 0]
     return [i for _, i in sorted(hits, key=lambda h: (-h[0], elements[h[1]]["kind"] != "cell", h[1]))]
 
 
 def select(elements: list[dict], fields: list[str], skip_hits: dict[str, int] | None = None,
-           base: bool = True) -> tuple[list[str], dict]:
+           base: bool = True, labels: dict[str, str] | None = None) -> tuple[list[str], dict]:
     """(element ids to send, in document order; report). skip_hits[field] = how many of its best hits earlier
     rounds already used, so this round takes the next one."""
     skip_hits = skip_hits or {}
@@ -94,12 +94,12 @@ def select(elements: list[dict], fields: list[str], skip_hits: dict[str, int] | 
                 why.setdefault(e["id"], "context")
     used: dict[str, str | None] = {}
     for f in fields:
-        order = ranked(elements, f)
+        order = ranked(elements, f, labels)
         k = skip_hits.get(f, 0)
         used[f] = elements[order[k]]["id"] if k < len(order) else None
         if k < len(order):
             for eid in around(elements, order[k]):
                 why.setdefault(eid, f"field:{f}")
     chosen = [e["id"] for e in elements if e["id"] in why]
-    return chosen, {"labels_version": LABELS_VERSION, "selected": len(chosen), "total": len(elements),
+    return chosen, {"labels_version": LABELS_VERSION if labels is None else "task", "selected": len(chosen), "total": len(elements),
                     "hits": used, "reasons": {r: sum(v == r for v in why.values()) for r in set(why.values())}}

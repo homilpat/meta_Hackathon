@@ -24,7 +24,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["httpx>=0.28,<1", "pytest>=8,<10", "ruff>=0.11,<1"]
+# agentevals: free, MIT, deterministic trajectory matchers for the local evaluation (spec §26.4); no LLM judge used
+dev = ["httpx>=0.28,<1", "pytest>=8,<10", "ruff>=0.11,<1", "agentevals==0.0.9"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

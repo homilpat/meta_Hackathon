@@ -10,7 +10,7 @@ man = json.loads(cuad_eval.MANIFEST.read_text(encoding="utf-8"))
 for split in ("heldout", "heldout_long"):
     t = {}
     for c in "AC":
-        p = sorted(glob.glob(str(cuad_eval.CUAD_DIR / "traces" / f"{split}-{c}-LIVE-2*.jsonl")))[-1]
+        p = max(glob.glob(str(cuad_eval.CUAD_DIR / "traces" / f"{split}-{c}-LIVE-2*.jsonl")))
         t[c] = {json.loads(x)["id"]: json.loads(x) for x in Path(p).read_text(encoding="utf-8").splitlines()[1:]}
     rep = {c: {q["question"]: q for q in json.loads(Path(f"../docs/evaluations/ev/cuad_{split}_{c}_LIVE.json")
                                                      .read_text(encoding="utf-8"))["rows"]} for c in "AC"}
@@ -38,6 +38,6 @@ for split in ("heldout", "heldout_long"):
             hits["self_route_at_most"] += rep["C"][k]["tp"] if q["category"] in missing else rep["A"][k]["tp"]
         trig += bool(missing)
     print(f"{split}: fallback triggered in {trig}/10 contracts (some category with no valid quote after navigation)")
-    print("  cost  A %.3f  C %.3f  self-route >= %.3f" % (cost["A"], cost["C"], cost["self_route_at_least"]))
-    print("  recall A %.3f  C %.3f  self-route <= %.3f" % (hits["A"] / gold, hits["C"] / gold,
+    print("  cost  A {:.3f}  C {:.3f}  self-route >= {:.3f}".format(cost["A"], cost["C"], cost["self_route_at_least"]))
+    print("  recall A {:.3f}  C {:.3f}  self-route <= {:.3f}".format(hits["A"] / gold, hits["C"] / gold,
                                                           hits["self_route_at_most"] / gold))

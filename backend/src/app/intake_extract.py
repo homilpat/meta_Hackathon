@@ -284,7 +284,7 @@ def extract_once(provider: ModelProvider, files: list[dict], protected: str = "M
         out.setdefault("need", [])
     except (ValueError, AssertionError, TypeError) as exc:
         raise ProviderError(f"extraction is not valid JSON ({type(exc).__name__})") from None
-    info = {"files": sent, "provider_mode": provider.mode, "usage": reply.get("usage") or {},
+    info = {"files": sent, "provider_mode": provider.mode, "usage": dict(reply.get("usage") or {}),  # merge() adds to it
             "estimated_input_tokens": reserve + sum(limits.estimate_tokens(p["text"]) for p in parts
                                                     if p["type"] == "text")
             + limits.get("IMAGE_TOKENS") * sum(p["type"] == "image_url" for p in parts),

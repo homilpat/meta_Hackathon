@@ -9,7 +9,7 @@ New Muse LIVE calls are **off by default**. They run only when all three of thes
 
 A key on its own never starts a paid call.
 
-**LIVE collection on 2026-11-02:** a budget of $3 was confirmed by the user (the upper end of the plan's estimate). The run spent **$2.32**: CUAD held-out A/B/C/T, the fixture extraction, and one probe confirming that api.meta.ai accepts temperature 0 and a seed. Each condition ran once, so run-to-run change is **not measured yet**. The investigation loop with LIVE is still NOT_RUN.
+**LIVE collection on 2026-11-02:** a budget of $3 was confirmed by the user (the upper end of the plan's estimate). The run spent **$2.32** (corrected costs; see the results): CUAD held-out A/B/C/T, the fixture extraction, and one probe confirming that api.meta.ai accepts temperature 0 and a seed. Each condition ran once, so run-to-run change is **not measured yet**. The investigation loop with LIVE is still NOT_RUN.
 
 | Mode | Meaning |
 |---|---|
@@ -99,31 +99,36 @@ All four go through the product's `intake_extract` with a CUAD task; the reading
 
 ### Results (held-out, Muse LIVE, muse-spark-1.3, temperature 0, seed 1; one run each, scored by offline replay)
 
-| Condition | Questions scored | Failed | Span P | Span R | Token F1 | No-answer correct | Page recall | Evidence valid | Not in document | Cost | s / contract |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| A HYBRID (product) | 42 | 0 | 0.607 | 0.597 | 0.454 | 5/10 | 0.877 | 88/88 | 0 | $0.94 | 11.2 |
-| B HYBRID, no contents | 42 | 0 | 0.612 | 0.526 | 0.527 | 6/10 | 0.877 | 86/86 | 0 | $0.64 | 11.2 |
-| C WHOLE on parsed PDF | 42 | 0 | 0.649 | 0.649 | 0.479 | 8/10 | 1.0 | 102/102 | 0 | $0.70 | 5.5 |
-| T WHOLE on CUAD text | 40 | 10 (2 timeouts) | 0.781 | 0.814 | 0.522 | 6/7 | – | 44/44 | 0 | $0.26 | 16.1 |
+Scores corrected on 2026-11-02 from the same traces, with no new calls. Two scoring bugs were fixed:
+- **Cost:** merging HYBRID's two rounds added round 2's usage onto the recorded reply of round 1, so the reports doubled it ($0.94 and $0.64 before). Fixed in `intake_extract.extract_once`.
+- **Spacing:** our PDF parser keeps the files' no-break spaces, and the official rule splits on plain spaces only, so exact quotes did not match. Whitespace is now normalised before matching.
 
-The 8 questions whose gold span is not in our parsed PDF are left out of A/B/C. T fails 2 contracts (60 s timeouts, no retry by the manifest), so its denominator differs and it is not directly comparable.
+| Condition | Questions | Failed | Span P | Span R | Gold inside a quote | No-answer correct | Page recall | Not in document | Prompt / completion tokens | Cost |
+|---|---|---|---|---|---|---|---|---|---|---|
+| A HYBRID (product) | 42 | 0 | 0.643 | 0.632 | 0.684 | 5/10 | 0.877 | 0 | 473k / 26k | $0.70 |
+| B HYBRID, no contents | 42 | 0 | 0.714 | 0.614 | 0.684 | 6/10 | 0.877 | 0 | 283k / 28k | $0.47 |
+| C WHOLE on parsed PDF | 42 | 0 | 0.695 | 0.719 | 0.860 | 8/10 | 1.0 | 0 | 527k / 9k | $0.70 |
+| T WHOLE on CUAD text | 40 | 10 (2 timeouts) | 0.781 | 0.814 | 0.914 | 6/7 | – | 0 | 186k / 7k | $0.26 |
 
-By category, condition A (precision / recall):
-- Parties 0.91 / 0.72
-- Governing Law 0.88 / 0.78
-- Expiration Date 0.60 / 0.43
-- Agreement Date 0.25 / 0.30
-- Termination For Convenience 0 / 0. Its "no answer" was correct 4 times out of 9.
+How to read the columns:
+- **Span P/R** use the official matching rule (Jaccard ≥ 0.5), applied to the model's own single output.
+- **Gold inside a quote** is looser: the gold span appears within a quoted passage, for example a whole line around a date.
+- The 8 questions whose gold span is not in our parsed PDF are left out of A/B/C.
+- T fails 2 contracts (60 s timeouts, no retry by the manifest), so its denominator differs.
 
 What this shows, and what it does not:
-- **Every quote the model gave was real.** 0 quotes are absent from the document, and all cited elements contain their quotes. The server check holds.
-- **WHOLE read the parsed PDFs better than HYBRID and cost less** (C $0.70 vs A $0.94). The map of a long contract and the second round cost more than they save at this context size. HYBRID's page recall is 0.88, so some answer pages were never read.
-  - This differs from the earlier held-out manufacturing documents, where HYBRID used far fewer tokens.
-  - The choice of default should be revisited with this measurement. It has not been changed here.
-- **B vs A:** without the author's contents, recall is lower (0.53 vs 0.60) and the cost is lower.
-- **T vs C:** our PDF parsing costs recall (0.81 vs 0.65, on different denominators).
-- **Agreement Date and Expiration Date are low partly because of the matching rule.** The gold span is short ("7th day of September, 1999") and the model quotes the whole line, which can fall under Jaccard 0.5. Token F1 and a person's sample review would tell the two causes apart. This is not evaluated.
-- **One run, 10 contracts:** differences of a few points are within noise. Variance needs repeated runs (another ~$2.3 per repeat).
+- **Every quote the model gave was real.** 0 quotes are absent from the document, and every cited element holds its quote.
+- **Cost:**
+  - HYBRID A costs the same as WHOLE C ($0.70). It sends 10% fewer prompt tokens, but makes two calls and writes 3× the completion tokens (reasoning twice), which are priced 3.4× input.
+  - B is cheapest ($0.47).
+  - On contracts of 10–106 pages, the server's selection plus the map saves little input. It saved most on the earlier manufacturing documents.
+- **Accuracy:**
+  - WHOLE reads more (page recall 1.0 vs 0.88) and finds more (R 0.72 vs 0.63).
+  - HYBRID never read some answer pages.
+  - Whether to keep HYBRID as the default is the owner's decision; it is unchanged here.
+- **Agreement Date** is low by the official rule (A 0.30) because the model quotes the whole sentence around a short gold date. By "gold inside a quote" it is 0.60 in A and 0.80 in C.
+- **Termination For Convenience** is the hardest category: a legal reading of whether a party may end the contract without cause. It scores 0–0.5. A person's sample review is needed (not evaluated).
+- **One run, 10 contracts:** differences of a few points are within noise. Variance needs repeated runs (about $2.1 per repeat).
 - **Limits:**
   - CUAD has been public since 2021, so the model may have seen it in training.
   - English contracts say nothing about manufacturing complaints, photos, charts or Korean documents.

@@ -107,7 +107,14 @@ def jaccard(gt: str, pred: str) -> float:
     return len(g & p) / len(g | p)
 
 
+def spaces(s: str) -> str:
+    """Any run of whitespace as one plain space. The gold uses plain spaces; our PDF parser keeps the file's
+    no-break spaces (U+00A0), and evaluate.py splits on " " only, so an exact quote would otherwise not match."""
+    return " ".join(s.split())
+
+
 def match(ans: str, pred: str, category: str) -> bool:
+    ans, pred = spaces(ans), spaces(pred)
     return jaccard(ans, pred) >= 0.5 or (category == "Parties" and ans in pred)
 
 
@@ -459,6 +466,8 @@ def score_trace(path: Path, manifest: dict, gold: dict) -> tuple[dict, list[dict
                 "question": f"{row['id']}__{field}", "contract": row["id"], "category": cat, "status": status,
                 "gold_spans": len(answers), "aligned": all(p is not False for p in pages) if source == "pdf" else None,
                 "pred_passages": len(preds), "tp": tp, "fp": fp, "fn": fn,
+                # looser than the official rule: the gold span appears inside a quote (a whole line around a date)
+                "gold_contained": sum(any(spaces(g).lower() in spaces(x).lower() for x in preds) for g in answers),
                 "token_f1": round(token_f1(" ".join(answers), " ".join(preds)), 4),
                 "no_answer_gold": not answers, "no_answer_pred": not preds,
                 "uncertain": any(a.get("uncertain") for a in (raw or {}).get("answers", [])
@@ -482,7 +491,9 @@ def aggregate(rows: list[dict], records: list[dict], header: dict) -> dict:
                 "span_precision": round(tp / (tp + fp), 4) if tp + fp else None, "span_recall": round(
                     tp / (tp + fn), 4) if tp + fn else None, "tp": tp, "fp": fp, "fn": fn,
                 "token_f1_answerable": round(sum(r["token_f1"] for r in ans) / len(ans), 4) if ans else None,
-                "answerable": len(ans), "no_answer_correct": sum(r["no_answer_pred"] for r in na),
+                "answerable": len(ans), "contained_recall": round(sum(r["gold_contained"] for r in rs)
+                                                                   / max(1, sum(r["gold_spans"] for r in rs)), 4),
+                "no_answer_correct": sum(r["no_answer_pred"] for r in na),
                 "no_answer_questions": len(na),
                 "page_recall": round(sum(r["gold_pages_read"] for r in rs) / located, 4) if located else None,
                 "gold_pages_located": located}

@@ -41,6 +41,28 @@ def test_official_matching_rule_counts_tp_fp_fn_like_evaluate_py():
     assert cuad_eval.tp_fp_fn([], ["anything"], "Expiration Date") == (0, 1, 0)  # no answer, one given
     assert cuad_eval.tp_fp_fn([], [], "Expiration Date") == (0, 0, 0)
     assert cuad_eval.token_f1("", "") == 1.0 and cuad_eval.token_f1("a b c", "") == 0.0
+    nbsp = "the laws of the State of New York"  # how our PDF parser spaces some files
+    assert cuad_eval.tp_fp_fn(["the laws of the State of New York"], [nbsp], "Governing Law") == (1, 0, 0)
+
+
+def test_merging_rounds_never_changes_a_recorded_reply():
+    t = cuad_eval.task(QUESTIONS)
+
+    class TwoRounds(cuad_eval.Bm25Double):
+        n = 0
+
+        def chat(self, messages, tools, response_format=None, reasoning_effort=None):
+            out = super().chat(messages, tools, response_format, reasoning_effort)
+            self.n += 1
+            body = json.loads(out["message"]["content"])
+            if self.n == 1:  # ask for page 2 and answer nothing yet
+                body = {"answers": [], "need": [{"file_id": 1, "part": "p3", "why": "schedule"}]}
+            return {"message": {"content": json.dumps(body)}, "usage": {"prompt_tokens": 100, "completion_tokens": 10}}
+
+    rec = cuad_eval.Recorder(TwoRounds(t))
+    _, _, info = intake_extract.extract(rec, contract(), "RAW", "HYBRID", t)
+    assert len(rec.calls) == 2 and info["usage"]["prompt_tokens"] == 200
+    assert [c["usage"]["prompt_tokens"] for c in rec.calls] == [100, 100]  # each call keeps its own usage
 
 
 def contract() -> list[dict]:
@@ -48,7 +70,8 @@ def contract() -> list[dict]:
         {"id": f"pdf:p{p}:l{i}", "kind": "text", "page": p, "text": t} for p, i, t in [
             (1, 1, "MASTER SUPPLY AGREEMENT"), (1, 2, "This Agreement is made between Acme Corp. and Beta LLC."),
             (2, 1, "12. Governing Law. This Agreement shall be governed by the laws of the State of New York."),
-            (2, 2, "13. Term. The initial term expires on December 31, 2030.")]]}]
+            (2, 2, "13. Term. The initial term expires on December 31, 2030."),
+            (3, 1, "Schedule A lists the delivery addresses.")]]}]
     return files
 
 

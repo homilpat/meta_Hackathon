@@ -1,0 +1,731 @@
+{
+ "summary": {
+  "split": "heldout_long2",
+  "condition": "A",
+  "runs": [
+   "cuad_heldout_long2_A_LIVE.json",
+   "cuad_heldout_long2_A_LIVE_r2.json"
+  ],
+  "metrics": {
+   "span_precision": {
+    "runs": [
+     0.6875,
+     0.6857
+    ],
+    "mean": 0.6866,
+    "max_minus_min": 0.0018
+   },
+   "span_recall": {
+    "runs": [
+     0.4889,
+     0.5333
+    ],
+    "mean": 0.5111,
+    "max_minus_min": 0.0444
+   },
+   "contained_recall": {
+    "runs": [
+     0.6,
+     0.6444
+    ],
+    "mean": 0.6222,
+    "max_minus_min": 0.0444
+   },
+   "token_f1_answerable": {
+    "runs": [
+     0.5151,
+     0.6249
+    ],
+    "mean": 0.57,
+    "max_minus_min": 0.1098
+   },
+   "page_recall": {
+    "runs": [
+     0.9556,
+     0.9556
+    ],
+    "mean": 0.9556,
+    "max_minus_min": 0.0
+   }
+  },
+  "questions": 50,
+  "questions_with_changed_quotes": 13,
+  "share_changed": 0.26,
+  "plan": 2,
+  "sampling": [
+   {
+    "temperature": 0.0,
+    "seed": 1
+   },
+   {
+    "temperature": 0.0,
+    "seed": 1
+   }
+  ],
+  "scored": {
+   "code_sha": "84b723226cab997ff113fa7d2903b27bc9ddcd32+dirty",
+   "parser_version": "docparse-4",
+   "evaluator": "scripts.cuad_eval",
+   "evaluator_sha256": "4618495b817a0e31",
+   "sampling": {
+    "temperature": 0.0,
+    "seed": 1
+   },
+   "python": "3.12.8",
+   "command": "python -m scripts.cuad_eval compare heldout_long2 A",
+   "at": "2026-11-02T06:11:35+00:00"
+  }
+ },
+ "rows": [
+  {
+   "question": "805de3405af8__parties",
+   "category": "Parties",
+   "same_quotes": true,
+   "per_run_quotes": [
+    3,
+    3
+   ],
+   "tp_per_run": [
+    2,
+    2
+   ]
+  },
+  {
+   "question": "805de3405af8__agreement_date",
+   "category": "Agreement Date",
+   "same_quotes": false,
+   "per_run_quotes": [
+    3,
+    3
+   ],
+   "tp_per_run": [
+    1,
+    0
+   ]
+  },
+  {
+   "question": "805de3405af8__governing_law",
+   "category": "Governing Law",
+   "same_quotes": true,
+   "per_run_quotes": [
+    3,
+    3
+   ],
+   "tp_per_run": [
+    1,
+    1
+   ]
+  },
+  {
+   "question": "805de3405af8__expiration_date",
+   "category": "Expiration Date",
+   "same_quotes": false,
+   "per_run_quotes": [
+    1,
+    0
+   ],
+   "tp_per_run": [
+    1,
+    0
+   ]
+  },
+  {
+   "question": "805de3405af8__termination_for_convenience",
+   "category": "Termination For Convenience",
+   "same_quotes": false,
+   "per_run_quotes": [
+    1,
+    0
+   ],
+   "tp_per_run": [
+    0,
+    0
+   ]
+  },
+  {
+   "question": "62ad27e757eb__parties",
+   "category": "Parties",
+   "same_quotes": true,
+   "per_run_quotes": [
+    3,
+    3
+   ],
+   "tp_per_run": [
+    3,
+    3
+   ]
+  },
+  {
+   "question": "62ad27e757eb__agreement_date",
+   "category": "Agreement Date",
+   "same_quotes": true,
+   "per_run_quotes": [
+    1,
+    1
+   ],
+   "tp_per_run": [
+    0,
+    0
+   ]
+  },
+  {
+   "question": "62ad27e757eb__governing_law",
+   "category": "Governing Law",
+   "same_quotes": true,
+   "per_run_quotes": [
+    2,
+    2
+   ],
+   "tp_per_run": [
+    1,
+    1
+   ]
+  },
+  {
+   "question": "62ad27e757eb__expiration_date",
+   "category": "Expiration Date",
+   "same_quotes": true,
+   "per_run_quotes": [
+    0,
+    0
+   ],
+   "tp_per_run": [
+    0,
+    0
+   ]
+  },
+  {
+   "question": "62ad27e757eb__termination_for_convenience",
+   "category": "Termination For Convenience",
+   "same_quotes": true,
+   "per_run_quotes": [
+    0,
+    0
+   ],
+   "tp_per_run": [
+    0,
+    0
+   ]
+  },
+  {
+   "question": "917704f7f60e__parties",
+   "category": "Parties",
+   "same_quotes": true,
+   "per_run_quotes": [
+    2,
+    2
+   ],
+   "tp_per_run": [
+    2,
+    2
+   ]
+  },
+  {
+   "question": "917704f7f60e__agreement_date",
+   "category": "Agreement Date",
+   "same_quotes": true,
+   "per_run_quotes": [
+    1,
+    1
+   ],
+   "tp_per_run": [
+    0,
+    0
+   ]
+  },
+  {
+   "question": "917704f7f60e__governing_law",
+   "category": "Governing Law",
+   "same_quotes": false,
+   "per_run_quotes": [
+    1,
+    3
+   ],
+   "tp_per_run": [
+    0,
+    1
+   ]
+  },
+  {
+   "question": "917704f7f60e__expiration_date",
+   "category": "Expiration Date",
+   "same_quotes": true,
+   "per_run_quotes": [
+    0,
+    0
+   ],
+   "tp_per_run": [
+    0,
+    0
+   ]
+  },
+  {
+   "question": "917704f7f60e__termination_for_convenience",
+   "category": "Termination For Convenience",
+   "same_quotes": true,
+   "per_run_quotes": [
+    1,
+    1
+   ],
+   "tp_per_run": [
+    1,
+    1
+   ]
+  },
+  {
+   "question": "17a372af5ef6__parties",
+   "category": "Parties",
+   "same_quotes": true,
+   "per_run_quotes": [
+    3,
+    3
+   ],
+   "tp_per_run": [
+    3,
+    3
+   ]
+  },
+  {
+   "question": "17a372af5ef6__agreement_date",
+   "category": "Agreement Date",
+   "same_quotes": true,
+   "per_run_quotes": [
+    1,
+    1
+   ],
+   "tp_per_run": [
+    1,
+    1
+   ]
+  },
+  {
+   "question": "17a372af5ef6__governing_law",
+   "category": "Governing Law",
+   "same_quotes": true,
+   "per_run_quotes": [
+    2,
+    2
+   ],
+   "tp_per_run": [
+    1,
+    1
+   ]
+  },
+  {
+   "question": "17a372af5ef6__expiration_date",
+   "category": "Expiration Date",
+   "same_quotes": true,
+   "per_run_quotes": [
+    0,
+    0
+   ],
+   "tp_per_run": [
+    0,
+    0
+   ]
+  },
+  {
+   "question": "17a372af5ef6__termination_for_convenience",
+   "category": "Termination For Convenience",
+   "same_quotes": false,
+   "per_run_quotes": [
+    3,
+    0
+   ],
+   "tp_per_run": [
+    0,
+    0
+   ]
+  },
+  {
+   "question": "83b9e77bca01__parties",
+   "category": "Parties",
+   "same_quotes": true,
+   "per_run_quotes": [
+    5,
+    5
+   ],
+   "tp_per_run": [
+    4,
+    4
+   ]
+  },
+  {
+   "question": "83b9e77bca01__agreement_date",
+   "category": "Agreement Date",
+   "same_quotes": true,
+   "per_run_quotes": [
+    1,
+    1
+   ],
+   "tp_per_run": [
+    0,
+    0
+   ]
+  },
+  {
+   "question": "83b9e77bca01__governing_law",
+   "category": "Governing Law",
+   "same_quotes": false,
+   "per_run_quotes": [
+    0,
+    1
+   ],
+   "tp_per_run": [
+    0,
+    0
+   ]
+  },
+  {
+   "question": "83b9e77bca01__expiration_date",
+   "category": "Expiration Date",
+   "same_quotes": true,
+   "per_run_quotes": [
+    2,
+    2
+   ],
+   "tp_per_run": [
+    1,
+    1
+   ]
+  },
+  {
+   "question": "83b9e77bca01__termination_for_convenience",
+   "category": "Termination For Convenience",
+   "same_quotes": true,
+   "per_run_quotes": [
+    0,
+    0
+   ],
+   "tp_per_run": [
+    0,
+    0
+   ]
+  },
+  {
+   "question": "4bef9e55002e__parties",
+   "category": "Parties",
+   "same_quotes": true,
+   "per_run_quotes": [
+    4,
+    4
+   ],
+   "tp_per_run": [
+    5,
+    5
+   ]
+  },
+  {
+   "question": "4bef9e55002e__agreement_date",
+   "category": "Agreement Date",
+   "same_quotes": false,
+   "per_run_quotes": [
+    2,
+    2
+   ],
+   "tp_per_run": [
+    1,
+    1
+   ]
+  },
+  {
+   "question": "4bef9e55002e__governing_law",
+   "category": "Governing Law",
+   "same_quotes": false,
+   "per_run_quotes": [
+    1,
+    2
+   ],
+   "tp_per_run": [
+    1,
+    0
+   ]
+  },
+  {
+   "question": "4bef9e55002e__expiration_date",
+   "category": "Expiration Date",
+   "same_quotes": true,
+   "per_run_quotes": [
+    1,
+    1
+   ],
+   "tp_per_run": [
+    1,
+    1
+   ]
+  },
+  {
+   "question": "4bef9e55002e__termination_for_convenience",
+   "category": "Termination For Convenience",
+   "same_quotes": false,
+   "per_run_quotes": [
+    0,
+    5
+   ],
+   "tp_per_run": [
+    0,
+    0
+   ]
+  },
+  {
+   "question": "ca6c7bcb140e__parties",
+   "category": "Parties",
+   "same_quotes": true,
+   "per_run_quotes": [
+    2,
+    2
+   ],
+   "tp_per_run": [
+    3,
+    3
+   ]
+  },
+  {
+   "question": "ca6c7bcb140e__agreement_date",
+   "category": "Agreement Date",
+   "same_quotes": true,
+   "per_run_quotes": [
+    1,
+    1
+   ],
+   "tp_per_run": [
+    1,
+    1
+   ]
+  },
+  {
+   "question": "ca6c7bcb140e__governing_law",
+   "category": "Governing Law",
+   "same_quotes": true,
+   "per_run_quotes": [
+    3,
+    3
+   ],
+   "tp_per_run": [
+    1,
+    1
+   ]
+  },
+  {
+   "question": "ca6c7bcb140e__expiration_date",
+   "category": "Expiration Date",
+   "same_quotes": false,
+   "per_run_quotes": [
+    0,
+    3
+   ],
+   "tp_per_run": [
+    0,
+    1
+   ]
+  },
+  {
+   "question": "ca6c7bcb140e__termination_for_convenience",
+   "category": "Termination For Convenience",
+   "same_quotes": true,
+   "per_run_quotes": [
+    0,
+    0
+   ],
+   "tp_per_run": [
+    0,
+    0
+   ]
+  },
+  {
+   "question": "14a9449b4e81__parties",
+   "category": "Parties",
+   "same_quotes": false,
+   "per_run_quotes": [
+    5,
+    4
+   ],
+   "tp_per_run": [
+    7,
+    7
+   ]
+  },
+  {
+   "question": "14a9449b4e81__agreement_date",
+   "category": "Agreement Date",
+   "same_quotes": true,
+   "per_run_quotes": [
+    0,
+    0
+   ],
+   "tp_per_run": [
+    0,
+    0
+   ]
+  },
+  {
+   "question": "14a9449b4e81__governing_law",
+   "category": "Governing Law",
+   "same_quotes": true,
+   "per_run_quotes": [
+    2,
+    2
+   ],
+   "tp_per_run": [
+    1,
+    1
+   ]
+  },
+  {
+   "question": "14a9449b4e81__expiration_date",
+   "category": "Expiration Date",
+   "same_quotes": true,
+   "per_run_quotes": [
+    0,
+    0
+   ],
+   "tp_per_run": [
+    0,
+    0
+   ]
+  },
+  {
+   "question": "14a9449b4e81__termination_for_convenience",
+   "category": "Termination For Convenience",
+   "same_quotes": true,
+   "per_run_quotes": [
+    0,
+    0
+   ],
+   "tp_per_run": [
+    0,
+    0
+   ]
+  },
+  {
+   "question": "ee5f47075015__parties",
+   "category": "Parties",
+   "same_quotes": true,
+   "per_run_quotes": [
+    4,
+    4
+   ],
+   "tp_per_run": [
+    4,
+    4
+   ]
+  },
+  {
+   "question": "ee5f47075015__agreement_date",
+   "category": "Agreement Date",
+   "same_quotes": true,
+   "per_run_quotes": [
+    1,
+    1
+   ],
+   "tp_per_run": [
+    0,
+    0
+   ]
+  },
+  {
+   "question": "ee5f47075015__governing_law",
+   "category": "Governing Law",
+   "same_quotes": true,
+   "per_run_quotes": [
+    0,
+    0
+   ],
+   "tp_per_run": [
+    0,
+    0
+   ]
+  },
+  {
+   "question": "ee5f47075015__expiration_date",
+   "category": "Expiration Date",
+   "same_quotes": true,
+   "per_run_quotes": [
+    0,
+    0
+   ],
+   "tp_per_run": [
+    0,
+    0
+   ]
+  },
+  {
+   "question": "ee5f47075015__termination_for_convenience",
+   "category": "Termination For Convenience",
+   "same_quotes": false,
+   "per_run_quotes": [
+    2,
+    1
+   ],
+   "tp_per_run": [
+    1,
+    1
+   ]
+  },
+  {
+   "question": "4ee8a3f6293f__parties",
+   "category": "Parties",
+   "same_quotes": true,
+   "per_run_quotes": [
+    4,
+    4
+   ],
+   "tp_per_run": [
+    4,
+    4
+   ]
+  },
+  {
+   "question": "4ee8a3f6293f__agreement_date",
+   "category": "Agreement Date",
+   "same_quotes": true,
+   "per_run_quotes": [
+    1,
+    1
+   ],
+   "tp_per_run": [
+    0,
+    0
+   ]
+  },
+  {
+   "question": "4ee8a3f6293f__governing_law",
+   "category": "Governing Law",
+   "same_quotes": true,
+   "per_run_quotes": [
+    2,
+    2
+   ],
+   "tp_per_run": [
+    1,
+    1
+   ]
+  },
+  {
+   "question": "4ee8a3f6293f__expiration_date",
+   "category": "Expiration Date",
+   "same_quotes": false,
+   "per_run_quotes": [
+    0,
+    2
+   ],
+   "tp_per_run": [
+    0,
+    1
+   ]
+  },
+  {
+   "question": "4ee8a3f6293f__termination_for_convenience",
+   "category": "Termination For Convenience",
+   "same_quotes": true,
+   "per_run_quotes": [
+    0,
+    0
+   ],
+   "tp_per_run": [
+    0,
+    0
+   ]
+  }
+ ]
+}

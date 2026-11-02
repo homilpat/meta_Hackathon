@@ -216,6 +216,36 @@ What to improve in HYBRID if long documents are common (not done; each needs a L
 
 Saved HYBRID traces of contracts with such a contents page replay as STALE under `docparse-4`. Their results stand for the code they were collected with (code SHA in each trace).
 
+### Navigation fixes, before and after (plan A, 2026-11-02, spent $0.87)
+
+**Names.** The default policy is **hybrid (WHOLE_FIRST)**. The two ways it reads are:
+- **WHOLE (full reading):** every page.
+- **Navigation reading:** the server's selection, the document map, and the parts the model asks for. Code value `HYBRID`, kept so recorded traces stay valid.
+
+**Fixes,** both found in the miss analysis on heldout_long, which is therefore development data for them:
+1. The map's first line of a part skips page numbers and running headers, by the boilerplate rule the heading candidates already used.
+2. A requested page comes with the start of the next page, up to its first heading candidate, because clauses run over the page break.
+
+**Measured on heldout_long2,** the next 10 longest test contracts, never looked at (20–28 pages: the test split has no longer ones left). Navigation reading, run 1 before and run 2 after, both fixed in the repeat plan:
+
+| | Before | After |
+|---|---|---|
+| Span precision | 0.688 | 0.686 |
+| Span recall | 0.489 | 0.533 |
+| Gold inside a quote | 0.600 | 0.644 |
+| Token F1 (answerable) | 0.515 | 0.625 |
+| Page recall | 0.956 | 0.956 |
+| Cost | $0.44 | $0.43 |
+
+- The changes are in the right direction, but recall +4.4 and token F1 +11 are within the run-to-run change measured on heldout_long (recall up to 5, token F1 up to 8). **Not shown to be an improvement.**
+- These contracts are mid-length, and navigation reading already read 96% of the answer pages, so the fixes had little to act on. The long-contract misses they target are on heldout_long, which is development data.
+- Proving them needs new long documents, or several repeated runs (about $0.4 each here).
+
+**Literature on the split.** Li et al., EMNLP 2024, "Retrieval Augmented Generation or Long-Context LLMs?" (arXiv 2407.16833):
+- With enough resources, full context beats retrieval on average, and the two give the same answer on over 60% of queries (here 17 of 20 contracts).
+- Their Self-Route retrieves first and switches to full context when the model says the retrieved parts cannot answer. That is neither a page nor a token threshold.
+- No published standard per-call cap was found. In practice the cap is the context window or a budget, as decided here on 2026-11-01.
+
 ## B. Synthetic manufacturing fixtures (EV-FR-02): `scripts/fixture_eval.py`
 
 Truths were written by hand from the generators, and each locator was checked once against the parser. This is **not a manufacturing benchmark**.

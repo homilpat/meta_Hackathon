@@ -36,6 +36,13 @@
    "excluded_no_pdf": 1,
    "excluded_under_10_pages": 54,
    "eligible": 47
+  },
+  "heldout_long2": {
+   "file": "test.json",
+   "contracts": 102,
+   "excluded_no_pdf": 1,
+   "excluded_under_10_pages": 54,
+   "eligible": 47
   }
  },
  "subset_rule": {
@@ -43,7 +50,8 @@
   "contracts": {
    "dev": 3,
    "heldout": 10,
-   "heldout_long": 10
+   "heldout_long": 10,
+   "heldout_long2": 10
   },
   "min_pdf_pages": 10,
   "categories": [
@@ -56,7 +64,8 @@
   "how": "contracts of the split with a PDF in CUAD_v1.zip and at least min_pdf_pages pages, sorted by title, random.Random(seed).sample(...)",
   "dev": "train split; may be looked at while adjusting prompt or labels",
   "heldout": "official test split; never used for tuning; gold never enters model input or labels",
-  "heldout_long": "official test split: the 10 eligible contracts with the most pages that are not in heldout (ties by title); out of sample for AUTO's measured token ratios"
+  "heldout_long": "official test split: the 10 eligible contracts with the most pages that are not in heldout (ties by title); out of sample for AUTO's measured token ratios",
+  "heldout_long2": "the next 10 longest test contracts not used before: before/after the navigation fixes found on heldout_long (which is development data for them)"
  },
  "retries": "none: a failed call is a failed question, counted",
  "subset": {
@@ -1008,6 +1017,418 @@
      }
     ]
    }
+  ],
+  "heldout_long2": [
+   {
+    "id": "805de3405af8",
+    "title": "HEMISPHERX - Sales, Marketing, Distribution, and Supply Agreement",
+    "pdf": "CUAD_v1/full_contract_pdf/Part_III/Supply/HEMISPHERX - Sales, Marketing, Distribution, and Supply Agreement.PDF",
+    "pdf_sha256": "ba8d8c987145982b3bd71219b4cc78870e26323758cb0028d7bff24a821ad725",
+    "pages": 28,
+    "parsed_elements": 1041,
+    "text_sha256": "871238d0e146f01c49d2cccba73c8b8cbaee1d6e5181cdae8d241d0c897200d2",
+    "questions": [
+     {
+      "category": "Parties",
+      "gold_spans": 6,
+      "aligned_spans": 6,
+      "gold_sha256": "b33ae94ca522a0da"
+     },
+     {
+      "category": "Agreement Date",
+      "gold_spans": 1,
+      "aligned_spans": 1,
+      "gold_sha256": "d88c0a6cd2bbb71b"
+     },
+     {
+      "category": "Governing Law",
+      "gold_spans": 1,
+      "aligned_spans": 1,
+      "gold_sha256": "35ceeed653b85a88"
+     },
+     {
+      "category": "Expiration Date",
+      "gold_spans": 2,
+      "aligned_spans": 1,
+      "gold_sha256": "2ee69fdf335c955f"
+     },
+     {
+      "category": "Termination For Convenience",
+      "gold_spans": 0,
+      "aligned_spans": 0,
+      "gold_sha256": "4f53cda18c2baa0c"
+     }
+    ]
+   },
+   {
+    "id": "62ad27e757eb",
+    "title": "IMPCOTECHNOLOGIESINC_04_15_2003-EX-10.65-JOINT VENTURE AGREEMENT",
+    "pdf": "CUAD_v1/full_contract_pdf/Part_I/Joint Venture/IMPCOTECHNOLOGIESINC_04_15_2003-EX-10.65-JOINT VENTURE AGREEMENT.PDF",
+    "pdf_sha256": "af7d2ce10a3975c89cde687edfde131451332acfabe242699c08cd8051d7036d",
+    "pages": 28,
+    "parsed_elements": 811,
+    "text_sha256": "7b93d296763d8c74b8c7f623b0524464a5b0f79c03c9a0a9b74bba3b5d55ed66",
+    "questions": [
+     {
+      "category": "Parties",
+      "gold_spans": 6,
+      "aligned_spans": 3,
+      "gold_sha256": "b3ea59b9294c3385"
+     },
+     {
+      "category": "Agreement Date",
+      "gold_spans": 1,
+      "aligned_spans": 1,
+      "gold_sha256": "93da4cfef831a760"
+     },
+     {
+      "category": "Governing Law",
+      "gold_spans": 1,
+      "aligned_spans": 1,
+      "gold_sha256": "2d9ed955c3409fff"
+     },
+     {
+      "category": "Expiration Date",
+      "gold_spans": 1,
+      "aligned_spans": 1,
+      "gold_sha256": "d71d5e8b06e34e87"
+     },
+     {
+      "category": "Termination For Convenience",
+      "gold_spans": 0,
+      "aligned_spans": 0,
+      "gold_sha256": "4f53cda18c2baa0c"
+     }
+    ]
+   },
+   {
+    "id": "917704f7f60e",
+    "title": "PROFOUNDMEDICALCORP_08_29_2019-EX-4.5-SUPPLY AGREEMENT",
+    "pdf": "CUAD_v1/full_contract_pdf/Part_II/Supply/PROFOUNDMEDICALCORP_08_29_2019-EX-4.5-SUPPLY AGREEMENT.PDF",
+    "pdf_sha256": "6b17706d2e507b4a315fac2b915eff8e86c76fb22df1e240827d56a8ce465534",
+    "pages": 28,
+    "parsed_elements": 847,
+    "text_sha256": "68f39c0d1757881605a0c52e260b86aa0d23de970694a6397cf6654e0881405e",
+    "questions": [
+     {
+      "category": "Parties",
+      "gold_spans": 5,
+      "aligned_spans": 4,
+      "gold_sha256": "e2cb0bf57adde185"
+     },
+     {
+      "category": "Agreement Date",
+      "gold_spans": 1,
+      "aligned_spans": 1,
+      "gold_sha256": "76b542078c144459"
+     },
+     {
+      "category": "Governing Law",
+      "gold_spans": 1,
+      "aligned_spans": 1,
+      "gold_sha256": "ff195d8993f51e6e"
+     },
+     {
+      "category": "Expiration Date",
+      "gold_spans": 1,
+      "aligned_spans": 0,
+      "gold_sha256": "e4dbb9631311baba"
+     },
+     {
+      "category": "Termination For Convenience",
+      "gold_spans": 1,
+      "aligned_spans": 1,
+      "gold_sha256": "2fe423cafe269a22"
+     }
+    ]
+   },
+   {
+    "id": "17a372af5ef6",
+    "title": "SUCAMPOPHARMACEUTICALS,INC_11_04_2015-EX-10.2-STRATEGIC ALLIANCE AGREEMENT",
+    "pdf": "CUAD_v1/full_contract_pdf/Part_III/Strategic Alliance/SUCAMPOPHARMACEUTICALS,INC_11_04_2015-EX-10.2-STRATEGIC ALLIANCE AGREEMENT.PDF",
+    "pdf_sha256": "8c3d00fe05f4a709ff599a76ceb160c84b1cee8f882569733878f094bce756bb",
+    "pages": 27,
+    "parsed_elements": 839,
+    "text_sha256": "83c8a5b6a0ee219c184a90eaffec0cf930e7ed80e4f12ce342714bc745115934",
+    "questions": [
+     {
+      "category": "Parties",
+      "gold_spans": 7,
+      "aligned_spans": 6,
+      "gold_sha256": "b3e59a4ee6060e73"
+     },
+     {
+      "category": "Agreement Date",
+      "gold_spans": 1,
+      "aligned_spans": 1,
+      "gold_sha256": "f41eeda51276b820"
+     },
+     {
+      "category": "Governing Law",
+      "gold_spans": 1,
+      "aligned_spans": 1,
+      "gold_sha256": "861ee0ebc3a98cd6"
+     },
+     {
+      "category": "Expiration Date",
+      "gold_spans": 0,
+      "aligned_spans": 0,
+      "gold_sha256": "4f53cda18c2baa0c"
+     },
+     {
+      "category": "Termination For Convenience",
+      "gold_spans": 0,
+      "aligned_spans": 0,
+      "gold_sha256": "4f53cda18c2baa0c"
+     }
+    ]
+   },
+   {
+    "id": "83b9e77bca01",
+    "title": "GpaqAcquisitionHoldingsInc_20200123_S-4A_EX-10.8_11951679_EX-10.8_Service Agreement",
+    "pdf": "CUAD_v1/full_contract_pdf/Part_I/Service/GpaqAcquisitionHoldingsInc_20200123_S-4A_EX-10.8_11951679_EX-10.8_Service Agreement.pdf",
+    "pdf_sha256": "7837df24989af83a369b3f1e8cf7aaf8b2cb38d85faef493496dac19830debde",
+    "pages": 25,
+    "parsed_elements": 603,
+    "text_sha256": "9d8942925e1900a35876bf5398d788b28095ea16e207899b0e7d60afb9e44857",
+    "questions": [
+     {
+      "category": "Parties",
+      "gold_spans": 7,
+      "aligned_spans": 4,
+      "gold_sha256": "8c664d39732028ef"
+     },
+     {
+      "category": "Agreement Date",
+      "gold_spans": 1,
+      "aligned_spans": 1,
+      "gold_sha256": "fc9a9154b6c565e5"
+     },
+     {
+      "category": "Governing Law",
+      "gold_spans": 1,
+      "aligned_spans": 1,
+      "gold_sha256": "cc33eec334fd9d7f"
+     },
+     {
+      "category": "Expiration Date",
+      "gold_spans": 1,
+      "aligned_spans": 0,
+      "gold_sha256": "0cc5bb04be010e06"
+     },
+     {
+      "category": "Termination For Convenience",
+      "gold_spans": 0,
+      "aligned_spans": 0,
+      "gold_sha256": "4f53cda18c2baa0c"
+     }
+    ]
+   },
+   {
+    "id": "4bef9e55002e",
+    "title": "WestPharmaceuticalServicesInc_20200116_8-K_EX-10.1_11947529_EX-10.1_Supply Agreement",
+    "pdf": "CUAD_v1/full_contract_pdf/Part_I/Supply/WestPharmaceuticalServicesInc_20200116_8-K_EX-10.1_11947529_EX-10.1_Supply Agreement.pdf",
+    "pdf_sha256": "ea25e96ed00b46720b9faaacbce0369e8e9b77c61cb86777cedf87189226af6d",
+    "pages": 25,
+    "parsed_elements": 949,
+    "text_sha256": "7c991c9f55f81fd83a885f40cf89eb81f276897ee3ff068f0b7d689b6f88d495",
+    "questions": [
+     {
+      "category": "Parties",
+      "gold_spans": 6,
+      "aligned_spans": 5,
+      "gold_sha256": "3a7c4c12583c69dc"
+     },
+     {
+      "category": "Agreement Date",
+      "gold_spans": 1,
+      "aligned_spans": 1,
+      "gold_sha256": "97d4aac3e831c785"
+     },
+     {
+      "category": "Governing Law",
+      "gold_spans": 4,
+      "aligned_spans": 3,
+      "gold_sha256": "5d0af4abb5c91984"
+     },
+     {
+      "category": "Expiration Date",
+      "gold_spans": 1,
+      "aligned_spans": 1,
+      "gold_sha256": "dab3400eca49e354"
+     },
+     {
+      "category": "Termination For Convenience",
+      "gold_spans": 0,
+      "aligned_spans": 0,
+      "gold_sha256": "4f53cda18c2baa0c"
+     }
+    ]
+   },
+   {
+    "id": "ca6c7bcb140e",
+    "title": "GSITECHNOLOGYINC_11_16_2009-EX-10.2-INTELLECTUAL PROPERTY AGREEMENT between SONY ELECTRONICS INC. and GSI TECHNOLOGY, INC.",
+    "pdf": "CUAD_v1/full_contract_pdf/Part_III/IP/GSITECHNOLOGYINC_11_16_2009-EX-10.2-INTELLECTUAL PROPERTY AGREEMENT between SONY ELECTRONICS INC. and GSI TECHNOLOGY, INC..PDF",
+    "pdf_sha256": "7c4b73dfd928d6e5070a21760ec2260b8b5c86b1af8ef509e4bcb1f1b4f546d4",
+    "pages": 23,
+    "parsed_elements": 795,
+    "text_sha256": "e40e805afe1baf5218409bb2c0fa1bfb0b04a422757a5d6d312ebed0beed515a",
+    "questions": [
+     {
+      "category": "Parties",
+      "gold_spans": 5,
+      "aligned_spans": 4,
+      "gold_sha256": "1a090ffea8fc8b96"
+     },
+     {
+      "category": "Agreement Date",
+      "gold_spans": 1,
+      "aligned_spans": 1,
+      "gold_sha256": "330309bc26287a21"
+     },
+     {
+      "category": "Governing Law",
+      "gold_spans": 1,
+      "aligned_spans": 1,
+      "gold_sha256": "dcd57ec28bc9f189"
+     },
+     {
+      "category": "Expiration Date",
+      "gold_spans": 1,
+      "aligned_spans": 1,
+      "gold_sha256": "33739d7cb473fe01"
+     },
+     {
+      "category": "Termination For Convenience",
+      "gold_spans": 0,
+      "aligned_spans": 0,
+      "gold_sha256": "4f53cda18c2baa0c"
+     }
+    ]
+   },
+   {
+    "id": "14a9449b4e81",
+    "title": "AFSALABANCORPINC_08_01_1996-EX-1.1-AGENCY AGREEMENT",
+    "pdf": "CUAD_v1/full_contract_pdf/Part_III/Agency Agreements/AFSALABANCORPINC_08_01_1996-EX-1.1-AGENCY AGREEMENT.PDF",
+    "pdf_sha256": "0ba2cdfa65de559fbce607c14d8d56c7cc46a5fd61f10a3b30b08e426505a7f1",
+    "pages": 21,
+    "parsed_elements": 1596,
+    "text_sha256": "ba14c927c1ceb18f63958108bc80a98fb5de63a2071808f5873dfa9940109da9",
+    "questions": [
+     {
+      "category": "Parties",
+      "gold_spans": 10,
+      "aligned_spans": 10,
+      "gold_sha256": "c523010a50f0caa7"
+     },
+     {
+      "category": "Agreement Date",
+      "gold_spans": 1,
+      "aligned_spans": 1,
+      "gold_sha256": "056f6949842ab1d4"
+     },
+     {
+      "category": "Governing Law",
+      "gold_spans": 1,
+      "aligned_spans": 1,
+      "gold_sha256": "a88e2f28b22a189d"
+     },
+     {
+      "category": "Expiration Date",
+      "gold_spans": 0,
+      "aligned_spans": 0,
+      "gold_sha256": "4f53cda18c2baa0c"
+     },
+     {
+      "category": "Termination For Convenience",
+      "gold_spans": 4,
+      "aligned_spans": 4,
+      "gold_sha256": "b9d9b4fcfdad27a5"
+     }
+    ]
+   },
+   {
+    "id": "ee5f47075015",
+    "title": "INGEVITYCORP_05_16_2016-EX-10.5-INTELLECTUAL PROPERTY AGREEMENT",
+    "pdf": "CUAD_v1/full_contract_pdf/Part_II/IP/INGEVITYCORP_05_16_2016-EX-10.5-INTELLECTUAL PROPERTY AGREEMENT.PDF",
+    "pdf_sha256": "b3a8a5429ff36e1373e28f9ea63ad9cb83151b6f10c178d008661b129ead9a8d",
+    "pages": 20,
+    "parsed_elements": 549,
+    "text_sha256": "d7eaeae37b293bb0530fb5ff9a62692bd4946598905f1093a534589dd9a32af1",
+    "questions": [
+     {
+      "category": "Parties",
+      "gold_spans": 5,
+      "aligned_spans": 4,
+      "gold_sha256": "34292fbaf3f33f50"
+     },
+     {
+      "category": "Agreement Date",
+      "gold_spans": 1,
+      "aligned_spans": 1,
+      "gold_sha256": "92a1d1e1c00733ea"
+     },
+     {
+      "category": "Governing Law",
+      "gold_spans": 0,
+      "aligned_spans": 0,
+      "gold_sha256": "4f53cda18c2baa0c"
+     },
+     {
+      "category": "Expiration Date",
+      "gold_spans": 0,
+      "aligned_spans": 0,
+      "gold_sha256": "4f53cda18c2baa0c"
+     },
+     {
+      "category": "Termination For Convenience",
+      "gold_spans": 2,
+      "aligned_spans": 2,
+      "gold_sha256": "0952b5cd638e289a"
+     }
+    ]
+   },
+   {
+    "id": "4ee8a3f6293f",
+    "title": "USASYNTHETICFUELCORP_10_21_2010-EX-10.10-STRATEGIC ALLIANCE AGREEMENT",
+    "pdf": "CUAD_v1/full_contract_pdf/Part_III/Strategic Alliance/USASYNTHETICFUELCORP_10_21_2010-EX-10.10-STRATEGIC ALLIANCE AGREEMENT.PDF",
+    "pdf_sha256": "c6fc7bacef8be4812bcb9300556a635da0f7d7f8e85d3c40cbc53822260b7f85",
+    "pages": 20,
+    "parsed_elements": 518,
+    "text_sha256": "0fb8cd828f5c763b777f5eb8d80e5f92c46dbcd65a1cc5b3b911aae1c4ab9974",
+    "questions": [
+     {
+      "category": "Parties",
+      "gold_spans": 5,
+      "aligned_spans": 4,
+      "gold_sha256": "e1036afafba1ea5c"
+     },
+     {
+      "category": "Agreement Date",
+      "gold_spans": 1,
+      "aligned_spans": 1,
+      "gold_sha256": "5a5f6ac47133b35b"
+     },
+     {
+      "category": "Governing Law",
+      "gold_spans": 1,
+      "aligned_spans": 1,
+      "gold_sha256": "88113c4bcf14c69a"
+     },
+     {
+      "category": "Expiration Date",
+      "gold_spans": 1,
+      "aligned_spans": 1,
+      "gold_sha256": "79e7974d02c50b9c"
+     },
+     {
+      "category": "Termination For Convenience",
+      "gold_spans": 0,
+      "aligned_spans": 0,
+      "gold_sha256": "4f53cda18c2baa0c"
+     }
+    ]
+   }
   ]
  },
  "repeats": {
@@ -1015,6 +1436,9 @@
    "heldout_long": {
     "A": 2,
     "C": 2
+   },
+   "heldout_long2": {
+    "A": 2
    }
   },
   "fixed": "2026-11-02, before the second run",
@@ -1035,46 +1459,46 @@
   "Termination For Convenience": "Can a party terminate this  contract without cause (solely by giving a notice and allowing a waiting  period to expire)?"
  },
  "counts": {
-  "contracts": 23,
-  "questions": 115,
-  "no_answer_questions": 22,
+  "contracts": 33,
+  "questions": 165,
+  "no_answer_questions": 33,
   "by_category": {
    "Parties": {
-    "questions": 23,
+    "questions": 33,
     "no_answer": 0
    },
    "Agreement Date": {
-    "questions": 23,
+    "questions": 33,
     "no_answer": 3
    },
    "Governing Law": {
-    "questions": 23,
-    "no_answer": 1
-   },
-   "Expiration Date": {
-    "questions": 23,
+    "questions": 33,
     "no_answer": 2
    },
+   "Expiration Date": {
+    "questions": 33,
+    "no_answer": 5
+   },
    "Termination For Convenience": {
-    "questions": 23,
-    "no_answer": 16
+    "questions": 33,
+    "no_answer": 23
    }
   },
-  "gold_spans": 204,
-  "gold_spans_aligned_to_parsed_pdf": 168
+  "gold_spans": 303,
+  "gold_spans_aligned_to_parsed_pdf": 251
  },
- "gold_file_sha256": "3266b852f89452118519debc5705192fb3ffb6be29f00f6dac2c524853ff2466",
+ "gold_file_sha256": "d22a88beb87ab06b7f0a5f33a0106fa0fb3c4e356d9e04f81784bc39c5ae473a",
  "prepared": {
-  "code_sha": "aad3069d125050fb5e2e53af11f107b5179538e4+dirty",
-  "parser_version": "docparse-3",
+  "code_sha": "84b723226cab997ff113fa7d2903b27bc9ddcd32+dirty",
+  "parser_version": "docparse-4",
   "evaluator": "scripts.cuad_eval",
-  "evaluator_sha256": "859d34264263d0cc",
+  "evaluator_sha256": "4618495b817a0e31",
   "sampling": {
    "temperature": 0.0,
    "seed": 1
   },
   "python": "3.12.8",
   "command": "python -m scripts.cuad_eval prepare",
-  "at": "2026-11-02T04:34:32+00:00"
+  "at": "2026-11-02T06:03:30+00:00"
  }
 }

@@ -46,10 +46,11 @@ SOURCES = {
 # split -> (official file, contracts, how chosen). heldout_long: the longest test contracts not in heldout, added
 # 2026-11-02 to measure where AUTO switches to HYBRID (the first held-out set had only 2 contracts above 34 pages)
 SPLITS = {"dev": ("train_separate_questions.json", 3, "seed"), "heldout": ("test.json", 10, "seed"),
-          "heldout_long": ("test.json", 10, "longest")}
+          "heldout_long": ("test.json", 10, "longest"), "heldout_long2": ("test.json", 10, "longest")}
 # Repeated LIVE runs, fixed before run 2 (spec §26.5; user 2026-11-02): split -> condition -> runs. compare reports
 # per metric the mean and the difference between runs, and the share of questions whose quoted answer changed.
-REPEATS = {"heldout_long": {"A": 2, "C": 2}}
+REPEATS = {"heldout_long": {"A": 2, "C": 2},
+           "heldout_long2": {"A": 2}}  # run 1 before, run 2 after the navigation fixes (user 2026-11-02, plan A)
 SEED = 20261102
 MIN_PAGES = 10  # the plan's rule (CUAD_EVAL_PLAN.md): long enough that finding the part matters
 CATEGORIES = ["Parties", "Agreement Date", "Governing Law", "Expiration Date", "Termination For Convenience"]
@@ -214,7 +215,9 @@ def prepare(args: list[str]) -> int:
             "dev": "train split; may be looked at while adjusting prompt or labels",
             "heldout": "official test split; never used for tuning; gold never enters model input or labels",
             "heldout_long": "official test split: the 10 eligible contracts with the most pages that are not in "
-                            "heldout (ties by title); out of sample for AUTO's measured token ratios"},
+                            "heldout (ties by title); out of sample for AUTO's measured token ratios",
+            "heldout_long2": "the next 10 longest test contracts not used before: before/after the navigation "
+                             "fixes found on heldout_long (which is development data for them)"},
         "retries": "none: a failed call is a failed question, counted", "subset": {},
         "repeats": {"plan": REPEATS, "fixed": "2026-11-02, before the second run",
                     "report": "per metric the mean and the difference between runs; share of questions whose "

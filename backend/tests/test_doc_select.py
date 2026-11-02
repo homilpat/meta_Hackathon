@@ -46,7 +46,11 @@ def test_the_model_sees_the_map_and_gets_only_the_parts_it_asks_for(monkeypatch)
     first, second = sent_ids(p.seen[0]), sent_ids(p.seen[1])
     assert '"maps"' in p.seen[0]["messages"][1]["content"][-1]["text"]  # round 1 carries the map
     assert "map of each document" in p.seen[0]["messages"][0]["content"]  # the model is told it may ask
-    assert second and all(i.startswith("pdf:p115:") for i in second) and not first & second  # only what was asked
+    from app import doc_map
+
+    cont = {e["id"] for e in doc_map.continuation(els, "p115")}  # p116 up to its first heading candidate
+    assert second and all(i.startswith("pdf:p115:") or i in cont for i in second) and not first & second
+    assert cont <= first | second  # a clause running onto the next page comes with the asked page
     assert caught(els, first | second)["reply_deadline"]
     assert info["rounds"][1]["asked"] == ["1:p115"] and info["usage"]["prompt_tokens"] == 200
     assert "Only these fields are still needed" in p.seen[1]["messages"][0]["content"]
@@ -128,3 +132,19 @@ def test_whole_first_reads_all_when_it_fits_one_call_and_hybrid_beyond_the_owner
 
 def test_a_contents_page_spelled_with_no_break_spaces_is_found():
     assert docparse.TOC.match("TABLE OF CONTENTS") and docparse.TOC.match("Table of Contents")
+
+
+def test_the_map_skips_page_numbers_and_running_headers_and_a_page_brings_its_continuation():
+    from app import doc_map
+
+    els = [{"id": f"pdf:p{p}:l{i}", "kind": "text", "page": p, "text": t} for p, i, t in [
+        (1, 1, "-1-"), (1, 2, "ACME SUPPLY AGREEMENT"), (1, 3, "Confidential draft"),
+        (2, 1, "-2-"), (2, 2, "12. Governing Law. This Agreement is governed by the laws of the"), (2, 3, "Confidential draft"),
+        (3, 1, "-3-"), (3, 2, "State of New York, without regard to its conflict rules."), (3, 3, "13. Notices"),
+        (3, 4, "All notices are given in writing to the addresses below."), (3, 5, "Confidential draft")]]
+    m = doc_map.build(els, {})
+    assert [x["first"] for x in m["parts"]] == ["ACME SUPPLY AGREEMENT", "12. Governing Law. This Agreement is governed "
+                                                "by the laws of the", "State of New York, without regard to its "
+                                                "conflict rules."]
+    assert [e["id"] for e in doc_map.continuation(els, "p2")] == ["pdf:p3:l1", "pdf:p3:l2"]  # stops at "13. Notices"
+    assert doc_map.continuation(els, "s0") == [] and doc_map.continuation(els, "p3") == []

@@ -216,7 +216,9 @@ def hybrid(provider: ModelProvider, files: list[dict], protected: str, task: dic
                  and any(x["part"] == part for x in maps[fid]["parts"])][:limits.get("HYBRID_MAX_PARTS_PER_ROUND")]
         chunk = []
         for fid, part in parts:
-            new = [e for e in doc_map.elements_of(by_id[fid]["elements"], part) if (fid, e["id"]) not in sent]
+            els = by_id[fid]["elements"]
+            new = [e for e in doc_map.elements_of(els, part) + doc_map.continuation(els, part)
+                   if (fid, e["id"]) not in sent]
             sent.update((fid, e["id"]) for e in new)
             if new:
                 chunk.append({**by_id[fid], "elements": new,

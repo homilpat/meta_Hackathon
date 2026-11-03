@@ -131,3 +131,8 @@ table{font-size:13px}th{font-size:12px}td{padding:9px 10px}
 .page{width:100%;align-self:start}
 /* the agent page is one column: heading, conversation and composer share its edges and it widens with the screen */
 .agent-heading,.conversation,.composer{max-width:min(1240px,100%);width:100%;margin-left:auto;margin-right:auto}
+/* the sidebar lists cases like conversations: one case per Agent conversation (user 2026-11-04) */
+.case-list{display:flex;flex-direction:column;gap:2px;max-height:30vh;overflow-y:auto;margin-bottom:14px;scrollbar-width:thin;scrollbar-color:#344255 transparent}
+.case-list button{border:0;background:transparent;color:#aebac7;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 11px;border-radius:7px;text-align:left;font-size:12px;cursor:pointer}
+.case-list button:hover{background:#1a2a3d;color:white}.case-list button.active{background:#21403f;color:#6ee2d5}
+.case-list button small{font-size:10px;color:#7d8da0}.case-list .case-new{border:1px dashed #344255;color:#c9d2dc;justify-content:center;margin-bottom:6px}

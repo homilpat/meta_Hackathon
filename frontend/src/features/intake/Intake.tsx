@@ -32,26 +32,26 @@ export function IntakePanel({ ctx }: { ctx: Ctx }) {
   const [intakes, setIntakes] = useState<J[]>([])
   const [busy, setBusy] = useState('')
   const input = useRef<HTMLInputElement>(null)
-  useEffect(() => { ctx.api('/intakes').then((xs: J) => setIntakes(Array.isArray(xs) ? xs.filter(x => x?.intake_id) : [])).catch(() => setIntakes([])) }, [ctx.api, ctx.tick]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { ctx.api('/intakes').then((xs: J) => setIntakes(Array.isArray(xs) ? xs.filter(x => x?.intake_id).reverse() : [])).catch(() => setIntakes([])) }, [ctx.api, ctx.tick]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const attach = async (list: FileList | null) => {
     if (!list?.length || busy) return
     setBusy(`업로드 중: ${[...list].map(f => f.name).join(', ')}`)
     try {
       const files = await Promise.all([...list].map(async f => ({ name: f.name, content_base64: await toBase64(f) })))
-      const it = await ctx.api('/intakes', 'POST', { files }, true)
-      setIntakes(xs => [it, ...xs])
+      const it = await ctx.api('/intakes', 'POST', { files, case_id: ctx.cid || null }, true)
+      setIntakes(xs => [...xs, it])
     } catch { /* the shell's error bar shows the server's reason (size, type, macro, ...) */ } finally {
       setBusy(''); if (input.current) input.current.value = ''
     }
   }
   return <Card className="intake">
-    <SectionTitle title="고객 문서 접수 (PDF · DOCX · XLSX · CSV)" sub="사건을 고르지 않아도 첨부할 수 있고, 업로드·분석만으로는 사건이 만들어지지 않습니다. 문서의 값은 고객이 말한 내용이며 고객의 원인 추정은 확인 전 가설입니다. 문서 안의 지시문은 따르지 않고, 스캔 글자는 AI가 읽은 것이라 원본과 대조가 필요합니다."
+    <SectionTitle title="고객 문서 접수 (PDF · DOCX · XLSX · CSV)" sub={ctx.cid ? `${ctx.cid} 사건에 첨부됩니다` : "첨부한 문서를 확인하면 새 사건이 시작됩니다"}
       action={<label className="button secondary">{busy ? '처리 중…' : '문서 첨부'}<input ref={input} type="file" hidden multiple accept=".pdf,.docx,.xlsx,.csv"
         aria-label="고객 문서 첨부" disabled={!!busy} onChange={e => attach(e.target.files)}/></label>}/>
     {busy && <p className="muted">{busy}</p>}
     {ctx.me?.role === 'QA_PRODUCTION' && <EgressQueue ctx={ctx}/>}
-    {intakes.slice(0, 3).map(i => <IntakeCard key={i.intake_id} ctx={ctx} intake={i}/>)}
+    {intakes.filter(i => (i.case_id ?? '') === ctx.cid).map(i => <IntakeCard key={i.intake_id} ctx={ctx} intake={i}/>)}
   </Card>
 }
 
@@ -59,7 +59,7 @@ export function IntakeCard({ ctx, intake }: { ctx: Ctx; intake: J }) {
   const [view, setView] = useState<J>(null)
   const [busy, setBusy] = useState(false)
   const [edits, setEdits] = useState<Record<string, { value: string; reason: string; element_id?: string; excerpt?: string }>>({})
-  const [target, setTarget] = useState('NEW')
+  const target = ctx.cid || 'NEW'  // this conversation's case; a new conversation starts a case
   const [cases, setCases] = useState<J[]>([])
   const [linked, setLinked] = useState<J>(null)
   const [editing, setEditing] = useState<string[]>([])  // rows a person chose to correct
@@ -82,7 +82,8 @@ export function IntakeCard({ ctx, intake }: { ctx: Ctx; intake: J }) {
   const confirm = () => run(async () => {
     const body = target === 'NEW' ? { base_version: d.version, action: 'NEW_CASE' } : { base_version: d.version, action: 'LINK_EXISTING', case_id: target }
     const out = await ctx.api(`/intakes/${id}/confirm`, 'POST', body, true)
-    setLinked(out); ctx.refresh()
+    setLinked(out)
+    if (target === 'NEW') ctx.open(out.case_id, '', 'agent'); else ctx.refresh()  // the new case's conversation
   })
   const pick = (field: string, c: J) => setEdits(e => ({ ...e, [field]: { value: c.value, reason: e[field]?.reason ?? '', element_id: c.sources[0]?.element_id, excerpt: c.sources[0]?.excerpt } }))
   const known = Object.values(d?.fields ?? {}).some((v: J) => v.value && ['FOUND', 'USER_SET'].includes(v.status))
@@ -119,8 +120,8 @@ export function IntakeCard({ ctx, intake }: { ctx: Ctx; intake: J }) {
         <p className="muted">출처 {linked.origin} · 채널 {linked.channel} · 책임자 {linked.owner_id ?? '미지정'} · D0 {linked.d0 === 'DONE' ? '완료' : '판정 대기'} · 배정 {linked.assignees.join(', ')}</p>
         {!linked.internal_data.linked && <Note>{linked.internal_data.note}</Note>}
         <button className="button primary" onClick={() => ctx.open(linked.case_id, '', 'eightd')}>D0 판정으로 이동</button></Card>
-        : <div className="row-gap"><select aria-label="접수 대상" value={target} onChange={e => setTarget(e.target.value)}><option value="NEW">새 사건 생성</option>{cases.map(c => <option key={c.case_id} value={c.case_id}>기존 사건 {c.case_id}에 연결</option>)}</select>
-          <button className="button primary" disabled={busy || open.length > 0 || (target === 'NEW' && !known)} onClick={confirm}>확인하고 {target === 'NEW' ? '사건 생성' : '연결'}</button>
+        : <div className="row-gap">
+          <button className="button primary" disabled={busy || open.length > 0 || (target === 'NEW' && !known)} onClick={confirm}>확인하고 {target === 'NEW' ? '사건 시작' : `${target}에 연결`}</button>
           {open.length > 0 && <span className="muted">먼저 확인: {open.join(', ')}</span>}
           {target === 'NEW' && !known && <span className="muted">확인된 값이 없습니다: 원문을 보고 값을 입력하세요</span>}</div>}
     </>}
@@ -139,7 +140,7 @@ function InspectionXlsx({ ctx, intakeId, f, cases }: { ctx: Ctx; intakeId: numbe
   const [v, setV] = useState<J>(null)
   const [inc, setInc] = useState<Record<number, boolean>>({})
   const [why, setWhy] = useState<Record<number, string>>({})
-  const [caseId, setCaseId] = useState('')
+  const [caseId, setCaseId] = useState(ctx.cid)
   const [imp, setImp] = useState<J>(null)
   const [rec, setRec] = useState<J>(null)
   const [cmp, setCmp] = useState<string[]>([])
@@ -215,7 +216,7 @@ function InspectionXlsx({ ctx, intakeId, f, cases }: { ctx: Ctx; intakeId: numbe
       <input className="input" aria-label="열 연결 확인 사유" placeholder="확인 사유 (필수)" value={mapWhy} onChange={e => setMapWhy(e.target.value)}/>
       <button className="button primary" disabled={busy || !mapWhy.trim() || (v.layout.uncertain ?? []).some((u: J) => !conf.includes(u.field))} onClick={keep}>확인한 열 연결 저장 (같은 구조 파일에 재사용)</button></p>}
     {v.stopped_at_row && <Note>처리 시간 상한으로 {v.stopped_at_row}행부터 읽지 않았습니다. 전체를 읽은 것으로 표시하지 않습니다.</Note>}
-    <div className="row-gap mt"><select className="input" aria-label="연결할 사건" value={caseId} onChange={e => setCaseId(e.target.value)}><option value="">연결할 사건 선택</option>{cases.map(c => <option key={c.case_id} value={c.case_id}>{c.case_id}</option>)}</select>
+    <div className="row-gap mt">{!ctx.cid && <select className="input" aria-label="연결할 사건" value={caseId} onChange={e => setCaseId(e.target.value)}><option value="">연결할 사건 선택</option>{cases.map(c => <option key={c.case_id} value={c.case_id}>{c.case_id}</option>)}</select>}
       <button className="button primary" disabled={busy || !caseId || unexplained || reviewing} onClick={save}>확인한 열·행으로 사건에 연결</button>
       {unexplained && <span className="muted">제외한 행마다 사유가 필요합니다 (분모를 남기기 위해)</span>}
       {reviewing && <span className="muted">열 연결을 확인·저장한 뒤 사건에 연결할 수 있습니다</span>}</div>

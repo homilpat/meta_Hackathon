@@ -1145,6 +1145,8 @@ class IntakeRecord(Base):
     idem_key: Mapped[str] = mapped_column(String(80))
     channel: Mapped[str] = mapped_column(String(20))  # CHAT_UPLOAD (EMAIL later reuses the same pipeline)
     created_at: Mapped[str] = mapped_column(String(40))
+    # the case conversation it was uploaded in (none: a new case); a person's confirmation still decides the link
+    case_id: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
 
 
 class IntakeFile(Base):

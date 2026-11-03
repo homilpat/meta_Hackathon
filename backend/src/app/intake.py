@@ -22,10 +22,10 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app import docparse, egress, intake_extract, limits
-from app.db import IntakeExtraction, IntakeFile, IntakeParse, IntakeRecord
+from app.db import IntakeCaseLink, IntakeExtraction, IntakeFile, IntakeParse, IntakeRecord
 from app.fields import FreeText, OptionalText
 from app.model_provider import ModelProvider, ProviderError
-from app.workflow import Actor, now, require_role, run_idempotent
+from app.workflow import Actor, now, require_case, require_role, run_idempotent
 
 FIXTURE_DIR = Path(__file__).with_name("fixtures") / "intake"
 MAX_BYTES = limits.get("MAX_UPLOAD_BYTES")
@@ -114,6 +114,7 @@ class FileIn(BaseModel):
 
 class IntakeIn(BaseModel):
     files: list[FileIn] = Field(min_length=1, max_length=MAX_FILES)
+    case_id: str | None = None  # the case conversation it is uploaded in (user 2026-11-04: one case per conversation)
 
 
 def file_out(f: IntakeFile) -> dict:
@@ -124,8 +125,9 @@ def file_out(f: IntakeFile) -> dict:
 
 def intake_out(session: Session, r: IntakeRecord) -> dict:
     files = session.scalars(select(IntakeFile).where(IntakeFile.intake_id == r.id).order_by(IntakeFile.id)).all()
+    link = session.scalar(select(IntakeCaseLink).where(IntakeCaseLink.intake_id == r.id))
     return {"intake_id": r.id, "owner_id": r.owner_id, "channel": r.channel, "created_at": r.created_at,
-            "files": [file_out(f) for f in files]}
+            "case_id": link.case_id if link else r.case_id, "files": [file_out(f) for f in files]}
 
 
 def add_files(session: Session, intake_id: int, files: list[FileIn], actor: Actor) -> None:
@@ -493,7 +495,10 @@ def make_intake_router(sessions: sessionmaker, current_user, provider: ModelProv
         require_role(actor, "AUTHOR")
 
         def run(session: Session) -> tuple[int, dict]:
-            r = IntakeRecord(owner_id=actor.id, idem_key=key, channel="CHAT_UPLOAD", created_at=now())
+            if body.case_id:
+                require_case(session, body.case_id, actor)  # only a case this person may open
+            r = IntakeRecord(owner_id=actor.id, idem_key=key, channel="CHAT_UPLOAD", created_at=now(),
+                             case_id=body.case_id)
             session.add(r)
             session.flush()
             add_files(session, r.id, body.files, actor)

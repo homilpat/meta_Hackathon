@@ -38,6 +38,7 @@ export default function App() {
   const [user, setUser] = useState('alice')
   const [cases, setCases] = useState<J[]>([])
   const [cid, setCid] = useState('')
+  const [fresh, setFresh] = useState(false)  // "새 사건": an empty conversation until a document starts the case
   const [me, setMe] = useState<J>(null)
   const [provider, setProvider] = useState<J>(null)
   const [msg, setMsg] = useState('')
@@ -60,8 +61,8 @@ export default function App() {
   useEffect(() => { fetch('/provider').then(r => r.json()).then(setProvider).catch(() => setProvider(null)) }, [])
   useEffect(() => {
     api('/me').then(setMe).catch(() => setMe(null))
-    api('/cases').then((cs: J[]) => { setCases(cs); setCid(c => cs.some(x => x.case_id === c) ? c : cs[cs.length - 1]?.case_id ?? '') }).catch(() => setCases([]))
-  }, [api, tick])
+    api('/cases').then((cs: J[]) => { setCases(cs); setCid(c => fresh || cs.some(x => x.case_id === c) ? c : cs[cs.length - 1]?.case_id ?? '') }).catch(() => setCases([]))
+  }, [api, tick, fresh])
 
   const newCase = async (line: boolean) => {
     const id = `${line ? 'SMT' : 'PCB'}-${Date.now().toString(36).toUpperCase()}`
@@ -71,7 +72,8 @@ export default function App() {
     setCid(id); refresh()
   }
 
-  const open = useCallback((c: string, sel: string, screen = 'reports') => { setCid(c); setFocus(sel); setActive(screen); refresh() }, [refresh])
+  const open = useCallback((c: string, sel: string, screen = 'reports') => { setFresh(false); setCid(c); setFocus(sel); setActive(screen); refresh() }, [refresh])
+  const pick = (c: string) => { setFresh(!c); setCid(c); setFocus(''); setActive('agent') }  // one case per conversation
   const ctx: Ctx = { cid, me, api, refresh, tick, open, focus }
   const go = useCallback((view: string) => { setFocus(''); setActive(view) }, [])
   const screens: Record<string, ReactNode> = {
@@ -84,7 +86,9 @@ export default function App() {
   return <div className="app">
     <aside className="sidebar">
       <div className="brand"><div className="brand-mark"><span/><span/><span/></div><div><b>QualityOps</b><small>AI</small></div></div>
-      <label className="site-select"><span><small>현재 사건</small><select value={cid} onChange={e => setCid(e.target.value)}>{cases.map(c => <option key={c.case_id}>{c.case_id}</option>)}{!cases.length && <option value="">배정된 사건 없음</option>}</select></span></label>
+      <div className="case-list" aria-label="사건 목록"><button className={`case-new ${fresh ? 'active' : ''}`} onClick={() => pick('')}>+ 새 사건</button>
+        {[...cases].reverse().map(c => <button key={c.case_id} className={!fresh && cid === c.case_id ? 'active' : ''} aria-current={!fresh && cid === c.case_id ? 'true' : undefined}
+          onClick={() => pick(c.case_id)}><b>{c.case_id}</b><small>{c.status ?? ''}</small></button>)}</div>
       <nav aria-label="주 메뉴">{primary.map(n => <button key={n[0]} className={active === n[0] ? 'active' : ''} aria-current={active === n[0] ? 'page' : undefined} onClick={() => go(n[0])}><Icon name={n[2]}/><span>{n[1]}</span></button>)}
         <div className={`specialist ${showTools ? 'open' : ''}`}><button className="specialist-toggle" aria-expanded={showTools} aria-controls="specialist-items" onClick={() => setToolsOpen(!showTools)}><span>전문 도구 · 상세 화면</span><Icon name="chevron" size={13}/></button>
           {showTools && <div id="specialist-items" className="specialist-items">{specialist.map(n => <button key={n[0]} className={active === n[0] ? 'active' : ''} aria-current={active === n[0] ? 'page' : undefined} onClick={() => go(n[0])}><Icon name={n[2]}/><span>{n[1]}</span>{n[0] === 'investigation' && <i>AI</i>}</button>)}</div>}</div></nav>

@@ -60,9 +60,10 @@ export function Agent({ ctx, provider, go }: { ctx: Ctx; provider: J; go: (view:
         <button className="button secondary" onClick={() => go('eightd')}>D0~D8 진행</button><button className="button secondary" onClick={() => go('reports')}>문서 · 결재</button></div></Card>
       : <div className="conversation">
         <IntakePanel ctx={ctx}/>
-        {!ctx.cid && <Card><b>선택된 사건이 없습니다.</b><p className="muted">고객 문서를 첨부해 접수하거나, 사건을 만든 뒤 Agent에게 목표를 보내세요.</p></Card>}
+        {!ctx.cid && <Card><b>새 사건</b><p className="muted">고객 문서를 첨부하세요. 확인하면 사건이 시작되고 이 대화가 그 사건의 기록이 됩니다.</p></Card>}
         {ctx.cid && runs === null && <p className="muted">서버에서 이 사건의 Agent 기록을 불러오는 중…</p>}
-        {runs?.length === 0 && <Card><b>이 사건의 Agent 기록이 없습니다.</b><p className="muted">예시:</p><div className="row-gap">{EXAMPLES.map(x => <button key={x} className="button secondary" onClick={() => setGoal(x)}>{x}</button>)}</div></Card>}
+        {runs?.length === 0 && <Card><b>이 사건의 Agent 기록이 없습니다.</b><p className="muted">예시:</p><div className="row-gap">{EXAMPLES.map(x => <button key={x} className="button secondary" onClick={() => setGoal(x)}>{x}</button>)}</div>
+          <p className="muted mt">AI가 검사한 기록은 사건 확정 판정이 아닙니다.</p></Card>}
         {ordered.map(r => <div key={r.run_id}>
           <div className="message user-message"><div className="avatar user">{r.user_id[0].toUpperCase()}</div><div><span>{r.user_id} · {r.created_at?.slice(0, 19)}</span><p className="wrap">{r.goal}</p></div></div>
           <RunView run={r} ctx={ctx} busy={busy} onResume={resume(r)}/></div>)}
@@ -73,6 +74,6 @@ export function Agent({ ctx, provider, go }: { ctx: Ctx; provider: J; go: (view:
         placeholder={ctx.cid ? 'Agent에게 품질 관리 목표를 설명하세요… (Enter 전송, Shift+Enter 줄바꿈)' : '배정된 사건이 없습니다'}/>
       <div><span>현재 사건과 연결됨 · {ctx.cid || '-'} · 사용자 {ctx.me?.id ?? '-'} ({ctx.me?.role ?? '-'})</span>
         <button className="send" aria-label="메시지 전송" disabled={busy || !goal.trim() || !!down || !ctx.cid} onClick={send}><Icon name="arrow"/></button></div></div>
-      <p>{busy ? '서버가 실행 중입니다…' : 'Agent의 모든 도구 호출과 결과는 서버에 기록되며, 권한·승인 정책은 서버가 판단합니다.'}</p></div>
+      {busy && <p>서버가 실행 중입니다…</p>}</div>
   </main>
 }

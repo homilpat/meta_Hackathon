@@ -227,8 +227,12 @@ def _scope(e: ExperienceEntry, cur: dict, role: str) -> str | None:
     return None
 
 
-def retrieve(session: Session, case_id: str, role: str, q: str = "", k: int = 6) -> dict:
-    """Deterministic retrieval; the same call backs the UI, the API and the model's read-only tool."""
+def retrieve(session: Session, case_id: str, role: str, q: str = "", k: int = 6, include: frozenset = frozenset(),
+             with_misses: bool = False) -> dict:
+    """Deterministic retrieval; the same call backs the UI, the API and the model's read-only tool. include: entry
+    keys the AI judged to describe the same problem although they share no word with the query (they still pass
+    scope, access and the factor gate, and the mode comes from their records). with_misses: also return the entries
+    that passed scope and the factor gate but shared no word ("_text_missed"), for the AI to read."""
     cur = case_features(session, case_id)
     rejected: dict[str, int] = {}
     cands = []
@@ -240,6 +244,7 @@ def retrieve(session: Session, case_id: str, role: str, q: str = "", k: int = 6)
         else:
             cands.append(e)
     query = f"{q} {cur['text']}".strip()
+    misses: list[dict] = []
     scores = retrieval.bm25(query, [f"{e.symptom_text} {e.cause_text} {e.action_text}" for e in cands])
     matches = []
     for (score, terms), e in zip(scores, cands, strict=True):
@@ -248,8 +253,13 @@ def retrieve(session: Session, case_id: str, role: str, q: str = "", k: int = 6)
                                   ("aoi_pattern", f.get("aoi_pattern") in cur["aoi_patterns"]),
                                   ("equipment_condition", bool(set(f.get("equipment_conditions") or [])
                                                                 & set(cur["equipment_conditions"])))) if v]
-        if score <= 0 or not ({"spi_pattern", "equipment_condition"} & set(matched)):  # AOI FAIL alone is generic
+        if not ({"spi_pattern", "equipment_condition"} & set(matched)):  # AOI FAIL alone is generic
             rejected["NOT_SIMILAR"] = rejected.get("NOT_SIMILAR", 0) + 1
+            continue
+        if score <= 0 and e.entry_key not in include:  # the same conditions in other words: the AI may read these
+            rejected["NO_SHARED_WORD"] = rejected.get("NO_SHARED_WORD", 0) + 1
+            misses.append({"entry_key": e.entry_key, "symptom": e.symptom_text, "cause": e.cause_text,
+                           "action": e.action_text})
             continue
         checks = check(e, cur)
         recurrent = e.recurrence == "RECURRED"
@@ -304,7 +314,140 @@ def retrieve(session: Session, case_id: str, role: str, q: str = "", k: int = 6)
             "note": ("No relevant history: no historical remedy is offered; continue the evidence-based D0-D8 "
                      "investigation." if mode == "NO_RELEVANT_HISTORY" else
                      "Similarity is not causal proof; a prior response is reviewed, then D4/D5/D6 gates still apply."),
-            "data_origin": "SYNTHETIC"}
+            "data_origin": "SYNTHETIC", **({"_text_missed": misses} if with_misses else {})}
+
+
+# --- the AI's part (user decision 2026-11-03): wider search terms and a comparison the records check ----------
+# The server keeps scope, access, the factor gate and the mode. The model sees the case's structured factors and
+# the candidates' texts, never other cases' evidence ids; what it says about a condition is compared with the
+# server's own check of that condition, and a disagreement is shown, not followed.
+MAX_MISSES = 20  # DEFAULT: candidates the AI reads per retrieval (each passed scope, access and the factor gate)
+PICK_PROMPT = """The server found earlier quality cases whose structured conditions match the current case but whose
+text shares no word with it (other languages or shop-floor wording). Read each and list only those that describe
+the same problem as the current case, with a one-sentence reason. Leave out any you are not sure about."""
+
+
+def pick_schema(misses: list[dict]) -> dict:
+    return {"type": "json_schema", "json_schema": {"name": "experience_pick", "strict": True, "schema": {
+        "type": "object", "additionalProperties": False, "required": ["same_problem"],
+        "properties": {"same_problem": {"type": "array", "items": {
+            "type": "object", "additionalProperties": False, "required": ["entry_key", "reason"],
+            "properties": {"entry_key": {"type": "string", "enum": [m["entry_key"] for m in misses]},
+                           "reason": {"type": "string"}}}}}}}}
+
+
+REVIEW_PROMPT = """Compare the current quality case with each earlier case found by the server. For each, list which
+of its listed conditions hold now and which differ, using only the condition names given, and say whether the
+earlier response looks directly reusable (KNOWN) or only similar (ANALOGICAL), with a one-sentence note. The server
+decides with its own records; you only compare."""
+
+
+def review_schema(matches: list[dict]) -> dict:
+    keys = sorted({c["check"] for m in matches for c in m["applicability_checks"]}) or ["none"]
+    return {"type": "json_schema", "json_schema": {"name": "experience_review", "strict": True, "schema": {
+        "type": "object", "additionalProperties": False, "required": ["cases"],
+        "properties": {"cases": {"type": "array", "items": {
+            "type": "object", "additionalProperties": False,
+            "required": ["entry_key", "same", "different", "proposed_mode", "note"],
+            "properties": {"entry_key": {"type": "string", "enum": [m["entry_key"] for m in matches] or ["none"]},
+                           "same": {"type": "array", "items": {"type": "string", "enum": keys}},
+                           "different": {"type": "array", "items": {"type": "string", "enum": keys}},
+                           "proposed_mode": {"type": "string", "enum": ["KNOWN", "ANALOGICAL"]},
+                           "note": {"type": "string"}}}}}}}}
+
+
+def _ask(provider, prompt: str, payload: dict, schema: dict, protected: bool, masker):
+    from app.egress import MASK_NOTE
+
+    r = provider.chat([{"role": "system", "content": prompt + ("\n" + MASK_NOTE if protected else "")},
+                       {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}], [],
+                      response_format=schema)
+    return masker.unmask_obj(json.loads(r["message"].get("content") or "")), r.get("usage") or {}
+
+
+def ai_retrieve(session: Session, case_id: str, role: str, q: str, provider) -> dict:
+    """1. the AI reads the entries that match the case's conditions but share no word with it, and picks those that
+    describe the same problem (server ids only); 2. the server retrieves again with them, records deciding each
+    mode; 3. the AI compares each match, and the server checks that comparison against its own conditions.
+    Never raises for model problems; the rule result stands."""
+    from app.db import QualityCase
+    from app.egress import Masker
+    from app.inspection_layout import header_terms, languages, mask_header
+    from app.model_provider import ProviderError
+
+    base = retrieve(session, case_id, role, q, with_misses=True)
+    misses = base.pop("_text_missed")[:MAX_MISSES]
+    info = {"mode": provider.mode if provider else "OFFLINE", "model": getattr(provider, "model", None),
+            "read": [m["entry_key"] for m in misses], "picked": [], "reasons": {}, "review": None, "usage": [],
+            "status": "OFFLINE"}
+    if provider is None:
+        return {**base, "ai": info}
+    protected = session.get(QualityCase, case_id).data_origin != "SYNTHETIC"
+    masker = Masker()
+    cur = base["case_features"]
+    terms_ok = header_terms(languages([q, *cur["confirmed_causes"], *(m["symptom"] for m in misses)]))
+
+    def m(t):
+        return mask_header(t, terms_ok, masker) if protected else t
+    current = {"problem": m(q), **{k: cur[k] for k in ("spi_patterns", "aoi_patterns", "equipment_conditions",
+                                                       "process_type")},
+               "confirmed_causes": [m(t) for t in cur["confirmed_causes"]]}
+    out = base
+    if misses:
+        try:
+            reply, usage = _ask(provider, PICK_PROMPT, {"current": current, "earlier": [
+                {"entry_key": x["entry_key"], "symptom": m(x["symptom"]), "cause": m(x["cause"]),
+                 "action": m(x["action"])} for x in misses]}, pick_schema(misses), protected, masker)
+            info["usage"].append(usage)
+            known = {x["entry_key"] for x in misses}
+            picked = [r for r in reply.get("same_problem") or [] if isinstance(r, dict) and r.get("entry_key") in known]
+            info.update(picked=[r["entry_key"] for r in picked], status="OK",
+                        reasons={r["entry_key"]: str(r.get("reason", ""))[:300] for r in picked})
+        except (ProviderError, ValueError, KeyError, TypeError) as exc:
+            info.update(status="FAILED", error=type(exc).__name__)
+            return {**base, "ai": info}
+        out = retrieve(session, case_id, role, q, include=frozenset(info["picked"]))
+    else:
+        info["status"] = "OK"
+    for x in out["matches"]:
+        x["found_by"] = "AI_MATCH" if x["entry_key"] in info["picked"] else "RULES"
+        if x["found_by"] == "AI_MATCH":
+            x["ai_reason"] = info["reasons"][x["entry_key"]]
+    if out["matches"]:
+        cands = [{"entry_key": x["entry_key"], "symptom": m(x["symptom"]), "cause": m(x["cause"]),
+                  "action": m(x["action"]), "conditions": [{"check": c["check"], "prior": c["prior"]}
+                                                           for c in x["applicability_checks"]]}
+                 for x in out["matches"]]
+        try:
+            reply, usage = _ask(provider, REVIEW_PROMPT, {"current": current, "earlier": cands},
+                                review_schema(out["matches"]), protected, masker)
+            info["usage"].append(usage)
+            info["review"] = check_review(out["matches"], reply)
+        except (ProviderError, ValueError, KeyError, TypeError) as exc:
+            info["review"] = {"status": "FAILED", "error": type(exc).__name__}
+    return {**out, "ai": info}
+
+
+def check_review(matches: list[dict], reply: dict) -> dict:
+    """The AI's comparison against the server's own checks: kept per match, disagreements named, mode untouched."""
+    by = {x["entry_key"]: x for x in matches}
+    dropped = 0
+    for r in (reply.get("cases") if isinstance(reply, dict) else None) or []:
+        x = by.get(r.get("entry_key")) if isinstance(r, dict) else None
+        if x is None:
+            dropped += 1
+            continue
+        status = {c["check"]: c["status"] for c in x["applicability_checks"]}
+        same = [c for c in r.get("same") or [] if c in status]
+        diff = [c for c in r.get("different") or [] if c in status]
+        disagree = [f"{c}: AI 같음, 기록 {status[c]}" for c in same if status[c] != "PASS"] + \
+                   [f"{c}: AI 다름, 기록 PASS" for c in diff if status[c] == "PASS"]
+        if r.get("proposed_mode") == "KNOWN" and x["mode"] != "KNOWN":
+            disagree.append("AI는 KNOWN을 제안했지만 기록(효과·재발·적용 조건)상 ANALOGICAL입니다")
+        x["ai_review"] = {"same": same, "different": diff, "proposed_mode": r.get("proposed_mode"),
+                          "note": str(r.get("note", ""))[:300], "server_mode": x["mode"], "disagreements": disagree}
+    return {"status": "OK", "reviewed": sum("ai_review" in x for x in matches), "dropped": dropped,
+            "disagreements": sum(len(x.get("ai_review", {}).get("disagreements", [])) for x in matches)}
 
 
 # --- accumulation -------------------------------------------------------------------------------------
@@ -369,6 +512,7 @@ def revoke_case(session: Session, case_id: str, reason: str) -> list[str]:
 
 class RetrieveIn(BaseModel):
     q: str = Field(default="", max_length=500)  # optional free-text wording of the problem
+    ai: bool = False  # Meta widens the search terms and compares; the server's records still decide
 
 
 class DecisionIn(BaseModel):
@@ -398,7 +542,7 @@ def retrieval_out(r: ExperienceRetrieval) -> dict:
             **r.results}
 
 
-def make_experience_router(sessions: sessionmaker, current_user: Callable[..., Actor]) -> APIRouter:
+def make_experience_router(sessions: sessionmaker, current_user: Callable[..., Actor], provider=None) -> APIRouter:
     router = APIRouter()
     Who = Annotated[Actor, Depends(current_user)]
 
@@ -406,7 +550,9 @@ def make_experience_router(sessions: sessionmaker, current_user: Callable[..., A
     def run_retrieval(case_id: str, actor: Who, body: RetrieveIn | None = None) -> dict:
         with sessions.begin() as session:
             require_case(session, case_id, actor)
-            out = retrieve(session, case_id, actor.role, (body or RetrieveIn()).q)
+            b = body or RetrieveIn()
+            out = ai_retrieve(session, case_id, actor.role, b.q, provider) if b.ai else \
+                retrieve(session, case_id, actor.role, b.q)
             r = ExperienceRetrieval(case_id=case_id, query_text=out["query"], query_sha256=sha(out["case_features"]),
                                     mode=out["mode"], results=out, method_version=METHOD, actor_id=actor.id,
                                     created_at=now())

@@ -1,0 +1,103 @@
+{
+ "run_mode": "TEST_DOUBLE",
+ "model": "scripted",
+ "rules_alone": {
+  "found": [
+   "EVAL:K3",
+   "EVAL:K5"
+  ],
+  "recall": 2,
+  "relevant": 6,
+  "false_known": [],
+  "negative_kept": true,
+  "absent_leaked": [],
+  "modes": {
+   "EVAL:K5": "KNOWN",
+   "EVAL:K3": "KNOWN"
+  }
+ },
+ "with_ai": {
+  "found": [
+   "EVAL:K1",
+   "EVAL:K2",
+   "EVAL:K3",
+   "EVAL:K4",
+   "EVAL:K5",
+   "EVAL:N1"
+  ],
+  "recall": 6,
+  "relevant": 6,
+  "false_known": [],
+  "negative_kept": true,
+  "absent_leaked": [],
+  "modes": {
+   "EVAL:K5": "KNOWN",
+   "EVAL:K4": "KNOWN",
+   "EVAL:K1": "KNOWN",
+   "EVAL:K2": "KNOWN",
+   "EVAL:K3": "KNOWN",
+   "EVAL:N1": "ANALOGICAL"
+  }
+ },
+ "ai": {
+  "status": "OK",
+  "terms": [
+   "묻어나옴",
+   "마스크",
+   "ペースト塗布が薄い",
+   "starved",
+   "skimpy",
+   "LOT-77"
+  ],
+  "dropped_terms": [],
+  "review": {
+   "status": "OK",
+   "reviewed": 10,
+   "dropped": 0,
+   "disagreements": 4
+  }
+ },
+ "found_by_ai_terms": [
+  "EVAL:K1",
+  "EVAL:K2",
+  "EVAL:K4",
+  "EVAL:N1"
+ ],
+ "disagreements": {
+  "EXP:X02": [
+   "AI는 KNOWN을 제안했지만 기록(효과·재발·적용 조건)상 ANALOGICAL입니다"
+  ],
+  "EVAL:N1": [
+   "AI는 KNOWN을 제안했지만 기록(효과·재발·적용 조건)상 ANALOGICAL입니다"
+  ],
+  "HIST:H04:AOI_THRESHOLD_TUNE": [
+   "AI는 KNOWN을 제안했지만 기록(효과·재발·적용 조건)상 ANALOGICAL입니다"
+  ],
+  "HIST:H02:PRINTER_PRESSURE_ADJUST": [
+   "AI는 KNOWN을 제안했지만 기록(효과·재발·적용 조건)상 ANALOGICAL입니다"
+  ]
+ },
+ "cost_usd": 0.0,
+ "gold": {
+  "EVAL:K1": "KNOWN",
+  "EVAL:K2": "KNOWN",
+  "EVAL:K3": "KNOWN",
+  "EVAL:K4": "KNOWN",
+  "EVAL:K5": "KNOWN",
+  "EVAL:N1": "NEGATIVE",
+  "EVAL:D1": "ABSENT"
+ },
+ "run": {
+  "code_sha": "395a3147e03ace70952721ed7aaf8c9183965347+dirty",
+  "parser_version": "docparse-4",
+  "evaluator": "scripts.experience_eval",
+  "evaluator_sha256": "0a6ba64222c613c1",
+  "sampling": {
+   "temperature": 0.0,
+   "seed": 1
+  },
+  "python": "3.12.8",
+  "command": "python -m scripts.experience_eval --double",
+  "at": "2026-11-03T10:44:27+00:00"
+ }
+}

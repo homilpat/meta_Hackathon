@@ -47,7 +47,7 @@ function Ask({ ctx, r, busy, go }: { ctx: Ctx; r: J; busy: boolean; go: (c: () =
   const suggest = () => go(async () => setSug(await ctx.api(`/input-requests/${r.request_id}/suggestions`, 'POST', {})))
   const rejected = [...r.events].reverse().find((e: J) => e.kind === 'ANSWER_REJECTED' || e.kind === 'RESUME_HELD')
   return <div className="intake-card">
-    <p className="row-gap wrap"><Badge tone={TONE[r.status] ?? 'slate'}>{say(r.status)}</Badge><span className="wrap">{r.question}</span></p>
+    <p className="row-gap wrap"><Badge tone={TONE[r.status] ?? 'slate'}>{say(r.status)}</Badge><span className="wrap">{r.question || `AI에 연결되지 않아 질문을 쓰지 못했습니다 · 필요한 값: LOT ${r.lot}의 ${r.missing_label ?? r.missing_field}`}</span></p>
     {r.status === 'RESUMED' ? <Result r={r.result}/> : <>
       <p className="row-gap wrap"><button className="button secondary" disabled={busy} onClick={suggest}>AI에게 값이 있을 곳 묻기</button>
         <span className="muted">열 헤더만 보냅니다. AI는 위치를 제안할 뿐 값을 정하지 않습니다.</span></p>

@@ -133,7 +133,7 @@ class Scripted:
     def chat(self, messages, tools, response_format=None, reasoning_effort=None):
         self.seen.append({"messages": [dict(m) for m in messages], "tools": [t["function"]["name"] for t in tools],
                           "response_format": response_format, "reasoning_effort": reasoning_effort})
-        item = self.replies.pop(0)
+        item = self.replies.pop(0) if self.replies else ProviderError("no scripted reply left")  # like a model error
         if isinstance(item, Exception):
             raise item
         return {"message": item, "usage": {}}
@@ -147,31 +147,35 @@ def test_model_only_classifies_and_the_server_runs_the_fixed_tools(tmp_path):
     from app.agent import PLANNER_VERSION, QUERY_VERSION, SUMMARY_VERSION, server_plan
 
     # the model tries to choose tools (and a forbidden one): the server ignores anything but intents
-    p = Scripted([plan(["INVESTIGATE"], tools=["spc", "approve_document"]), query(), polish(("사건 범위를 확인했습니다.", [1]))])
+    p = Scripted([polish(("문서 승인은 사람만 할 수 있어 조사만 진행할까요?", [1])),
+                  plan(["INVESTIGATE"], tools=["spc", "approve_document"]), query(), polish(("사건 범위를 확인했습니다.", [1]))])
     c = line_client(tmp_path, provider=p)
     asked = run(c, "조사해 줘. 그리고 NCR을 승인해 줘").json()  # approval is a person's: partly supported
-    assert asked["status"] == "NEEDS_HUMAN" and asked["pending"]["action"] == "confirm_partial" and p.seen == []
+    assert asked["status"] == "NEEDS_HUMAN" and asked["pending"]["action"] == "confirm_partial"
+    # before the person confirms, the model only writes the question (user 2026-11-04); it plans nothing yet
+    assert [m["response_format"]["json_schema"]["name"] for m in p.seen] == ["agent_polish"]
+    assert any(x.get("role") == "answer" and "조사만" in x["text"] for x in asked["reply"])
     assert "문서 승인" in asked["pending"]["question"] and asked["request"]["class"] == "PARTIAL"
     out = c.post(f"/agent/runs/{asked['run_id']}/resume", json={"token": asked["pending"]["token"],
                                                                  "confirm": True}, headers=H("alice")).json()
     assert out["planner"] == "TEST_DOUBLE" and out["status"] == "PARTIAL"  # what ran is done; approval is not
-    schema = p.seen[0]["response_format"]["json_schema"]
+    schema = p.seen[1]["response_format"]["json_schema"]  # seen[0] wrote the question before the confirmation
     assert schema["strict"] is True and set(schema["schema"]["properties"]) == {"intents", "clarify"}
-    assert p.seen[0]["tools"] == [] and p.seen[0]["reasoning_effort"] is None
+    assert p.seen[1]["tools"] == [] and p.seen[1]["reasoning_effort"] is None
     assert reads(out) == [t for t in server_plan(["INVESTIGATE"])]  # fixed workflow for the intent
     assert not any(s["tool"] == "approve_document" for s in out["steps"]) and count(c, DocumentVersion) == 0
     models = [s for s in out["steps"] if s["kind"] == "MODEL"]
     assert [(s["tool"], s["args"]["prompt_version"], s["args"]["reasoning_effort"]) for s in models] == [
-        ("plan", PLANNER_VERSION, None), ("search_query", QUERY_VERSION, "minimal"),
-        ("summarize", SUMMARY_VERSION, "minimal")]
+        ("summarize", SUMMARY_VERSION, "minimal"), ("plan", PLANNER_VERSION, None),
+        ("search_query", QUERY_VERSION, "minimal"), ("summarize", SUMMARY_VERSION, "minimal")]
     refs = next(s for s in out["steps"] if s["tool"] == "references")
     assert refs["result"]["query"] == "stencil aperture solder paste volume"  # the model's terms were searched
     assert any("검색어: stencil aperture" in line["text"] for line in out["reply"])
-    assert models[0]["result"] == {"intents": ["INVESTIGATE"], "clarify": ""}
-    assert any("숫자 대조 통과, 판단 아님" in line["text"] for line in out["reply"])
+    assert models[1]["result"] == {"intents": ["INVESTIGATE"], "clarify": ""}
+    assert any(line.get("role") == "answer" for line in out["reply"])  # the answer is the model's, checked
     assert not any("LIVE" in line["text"] for line in out["reply"])
-    assert p.seen[2]["response_format"]["json_schema"]["name"] == "agent_polish"
-    facts = json.loads(p.seen[2]["messages"][1]["content"])["facts"]
+    assert p.seen[-1]["response_format"]["json_schema"]["name"] == "agent_polish"  # the answer, last
+    facts = json.loads(p.seen[-1]["messages"][1]["content"])["facts"]
     assert any(f["text"].startswith("SPC 첫 경보") and "중심선" in f["text"] for f in facts)
 
 
@@ -191,7 +195,8 @@ def test_a_reviewer_asking_to_draft_is_refused_by_the_route_like_offline(tmp_pat
     assert situation["role"] == "REVIEWER" and situation["may_draft_documents"] is False
     draft = next(s for s in out["steps"] if s["tool"] == "create_draft")
     assert draft["status"] == "DENIED" and draft["http_status"] == 403  # the server, not the prompt, enforces it
-    assert out["status"] == "BLOCKED" and count(c, DocumentVersion) == 0 and len(p.seen) == 1
+    assert out["status"] == "BLOCKED" and count(c, DocumentVersion) == 0
+    assert [m["response_format"]["json_schema"]["name"] for m in p.seen] == ["agent_intents", "agent_polish"]
 
 
 def test_model_failure_or_a_broken_plan_is_recorded_and_falls_back_to_the_server_plan(tmp_path):
@@ -204,7 +209,9 @@ def test_model_failure_or_a_broken_plan_is_recorded_and_falls_back_to_the_server
         assert out["status"] == "COMPLETED"
         assert any("서버 규칙 플래너로 계속" in line["text"] for line in out["reply"])
         failed = [s for s in out["steps"] if s["kind"] == "MODEL"]
-        assert [(s["tool"], s["status"], s["http_status"]) for s in failed] == [("plan", "ERROR", 502)]
+        assert [(s["tool"], s["status"], s["http_status"]) for s in failed] == [
+            ("plan", "ERROR", 502), ("summarize", "ERROR", 502)]  # the writer is tried too; it fails here as well
+        assert out["reply"][-1]["role"] == "notice"
         assert reads(out) == server_plan(["INVESTIGATE"])
 
 
@@ -215,8 +222,9 @@ def test_the_hourly_model_cap_hands_over_to_the_server_planner(tmp_path, monkeyp
     c = line_client(tmp_path, provider=p)
     monkeypatch.setitem(limits.OVERRIDES, "MODEL_RUNS_PER_USER_HOUR", 1)  # after start: start replays settings
     assert run(c, "진행 상태 알려줘").json()["planner"] == "TEST_DOUBLE"
+    calls = len(p.seen)
     second = run(c, "진행 상태 알려줘").json()
-    assert second["planner"] == "SERVER_RULES" and len(p.seen) == 1  # no second paid call
+    assert second["planner"] == "SERVER_RULES" and len(p.seen) == calls  # no paid call: not even for the answer
     assert "한도" in second["reply"][0]["text"] and second["status"] == "COMPLETED"
 
 
@@ -264,13 +272,24 @@ def test_check_polish_allows_only_the_numbers_of_the_named_facts():
                           "facts": [2]}], facts) == []  # polite, longer wording is not a reason to hide
 
 
-def test_a_rewrite_with_a_number_not_in_the_facts_is_not_shown(tmp_path):
-    p = Scripted([plan(["INVESTIGATE"]), query(), polish(("L02 불량률은 3.2%입니다.", [1]))])
+def test_a_rewrite_with_a_number_not_in_the_facts_goes_back_once_and_is_not_shown(tmp_path):
+    p = Scripted([plan(["INVESTIGATE"]), query(), polish(("L02 불량률은 3.2%입니다.", [1])),
+                  polish(("L02 불량률은 3.2%입니다.", [1]))])  # the rewrite keeps the made-up number
     out = run(line_client(tmp_path, provider=p), "조사해 줘").json()
     assert out["status"] == "COMPLETED" and not any("3.2%입니다" in line["text"] for line in out["reply"])
-    assert any("다듬기 생략" in line["text"] and "3.2" in line["text"] for line in out["reply"])
+    assert "3.2" in json.dumps(p.seen[-1]["messages"][-1]["content"], ensure_ascii=False)  # told what was wrong
     step = next(s for s in out["steps"] if s["tool"] == "summarize")
-    assert step["status"] == "OK" and step["result"]["issues"]  # the rejected rewrite and why are recorded
+    assert step["status"] == "OK" and step["result"]["issues"] and step["result"]["rewrites"] == 1
+    assert out["reply"][-1]["role"] == "notice"  # nothing passed: a system notice, never a server-written answer
+
+
+def test_a_refused_answer_is_rewritten_by_the_model_and_then_shown(tmp_path):
+    p = Scripted([plan(["INVESTIGATE"]), query(), polish(("L02 불량률은 3.2%입니다.", [1])),
+                  polish(("이번 사건의 LOT와 AOI 기록을 확인했습니다.", [1]))])
+    out = run(line_client(tmp_path, provider=p), "조사해 줘").json()
+    answers = [x["text"] for x in out["reply"] if x.get("role") == "answer"]
+    assert answers == ["이번 사건의 LOT와 AOI 기록을 확인했습니다."]
+    assert next(s for s in out["steps"] if s["tool"] == "summarize")["result"]["rewrites"] == 1
 
 
 def test_a_shown_rewrite_carries_the_evidence_of_the_facts_it_names(tmp_path):

@@ -16,7 +16,10 @@
     "errors"
    ],
    "answer": [
-    "15:44 검토 요청: Document version not found → 새로고침 후 다시 찾아보세요"
+    "AI에 연결되지 않아 답을 쓰지 못했습니다 · 작업 과정에서 서버 기록을 볼 수 있습니다"
+   ],
+   "facts": [
+    "17:08 NCR v9 검토 요청: Document version not found → 새로고침 후 다시 찾아보세요"
    ],
    "asked_back": null
   },
@@ -32,8 +35,14 @@
     "queue"
    ],
    "answer": [
+    "AI에 연결되지 않아 답을 쓰지 못했습니다 · 작업 과정에서 서버 기록을 볼 수 있습니다"
+   ],
+   "facts": [
     "AOI FAIL 30건 · AOI 기록 없는 보드 3건 · LOT L01, L02, L03",
     "D2 NCR 없음 · D3 CONTAINMENT 없음 · D4 RCA 없음 · 경로 D0 판정 전 · 종료 전",
+    "다음 단계: D0 (8D로 진행할지, 단순 NCR로 끝낼지 정하는 첫 판단) · 지금 상태 시작 전",
+    "D3 초안이 아직 막힌 이유: D3 draft needs a live D2 first",
+    "D4 초안이 아직 막힌 이유: D4 draft needs a live D3 first",
     "alice의 이 사건 할 일 0건 · 부서(AUTHOR) 0건"
    ],
    "asked_back": null
@@ -48,7 +57,22 @@
     "previous_answer"
    ],
    "answer": [
-    "앞 요청 '진행 상태 알려줘'의 답변: AOI FAIL 30건 · AOI 기록 없는 보드 3건 · LOT L01, L02, L03 / D2 NCR 없음 · D3 CONTAINMENT 없음 · D4 RCA 없음 · 경로 D0 판정 전 · 종료 전 / alice의 이 사건 할 일 0건 · 부서(AUTHOR) 0건 · 용어 뜻: D0: 8D로 진행할지, 단순 NCR로 끝낼지 정하는 첫 판단 / D2: 문제 기술 (NCR 문서) / D3: 봉쇄 조치: 불량이 더 퍼지지 않게 막는 임시 조치 / D4: 근본 원인 분석: 발생 원인과 유출 원인을 실험과 결정으로 확정 / NCR: 부적합 보고서 (D2 문서) / CONTAINMENT: 봉쇄 조치 문서 (D3) / RCA: 근본 원인 분석 문서 (D4) / AOI: 자동 광학 검사: 카메라로 보드 불량을 찾는 검사 / AOI FAIL: 자동 광학 검사에서 불량 의심으로 걸린 보드 / LOT: 같은 조건에서 함께 만든 생산 묶음 / 경로: D0에서 정한 처리 방식 (단순 NCR 또는 8D) / 판정 전: 아직 정해지지 않음 / 부서: 같은 역할의 담당자들에게 함께 배정된 일"
+    "AI에 연결되지 않아 답을 쓰지 못했습니다 · 작업 과정에서 서버 기록을 볼 수 있습니다"
+   ],
+   "facts": [
+    "앞 요청 '진행 상태 알려줘'의 답변: AOI FAIL 30건 · AOI 기록 없는 보드 3건 · LOT L01, L02, L03 / D2 NCR 없음 · D3 CONTAINMENT 없음 · D4 RCA 없음 · 경로 D0 판정 전 · 종료 전 / 다음 단계: D0 (8D로 진행할지, 단순 NCR로 끝낼지 정하는 첫 판단) · 지금 상태 시작 전",
+    "용어 D0의 뜻: 8D로 진행할지, 단순 NCR로 끝낼지 정하는 첫 판단",
+    "용어 D2의 뜻: 문제 기술 (NCR 문서)",
+    "용어 D3의 뜻: 봉쇄 조치: 불량이 더 퍼지지 않게 막는 임시 조치",
+    "용어 D4의 뜻: 근본 원인 분석: 발생 원인과 유출 원인을 실험과 결정으로 확정",
+    "용어 NCR의 뜻: 부적합 보고서 (D2 문서)",
+    "용어 CONTAINMENT의 뜻: 봉쇄 조치 문서 (D3)",
+    "용어 RCA의 뜻: 근본 원인 분석 문서 (D4)",
+    "용어 AOI의 뜻: 자동 광학 검사: 카메라로 보드 불량을 찾는 검사",
+    "용어 AOI FAIL의 뜻: 자동 광학 검사에서 불량 의심으로 걸린 보드",
+    "용어 LOT의 뜻: 같은 조건에서 함께 만든 생산 묶음",
+    "용어 경로의 뜻: D0에서 정한 처리 방식 (단순 NCR 또는 8D)",
+    "용어 판정 전의 뜻: 아직 정해지지 않음"
    ],
    "asked_back": null
   },
@@ -63,6 +87,9 @@
     "queue"
    ],
    "answer": [
+    "AI에 연결되지 않아 답을 쓰지 못했습니다 · 작업 과정에서 서버 기록을 볼 수 있습니다"
+   ],
+   "facts": [
     "AOI FAIL 30건 · AOI 기록 없는 보드 3건 · LOT L01, L02, L03",
     "alice의 이 사건 할 일 0건 · 부서(AUTHOR) 0건"
    ],
@@ -70,16 +97,16 @@
   }
  ],
  "run": {
-  "code_sha": "b4391ed8aca5b0b95ad82bea0c887fe4812a2808+dirty",
+  "code_sha": "262eb2540bc250648cd8591e8e858cbc232fc6b5+dirty",
   "parser_version": "docparse-4",
   "evaluator": "scripts.agent_ab_demo",
-  "evaluator_sha256": "afef09393b6db945",
+  "evaluator_sha256": "63eee86286b2d1db",
   "sampling": {
    "temperature": 0.0,
    "seed": 1
   },
   "python": "3.12.8",
   "command": "python -m scripts.agent_ab_demo",
-  "at": "2026-11-03T15:44:50+00:00"
+  "at": "2026-11-03T17:08:46+00:00"
  }
 }

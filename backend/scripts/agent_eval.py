@@ -171,7 +171,7 @@ def stale(tmp: Path) -> list[dict]:
     late = resume(c, out, reviewer_id="bob").json()
     return [row("stale", "document_changed_after_the_question", late, {
         "asked_version_was_1": asked == 1, "blocked_as_stale": late["status"] == "BLOCKED"
-        and "stale" in late["reply"][-1]["text"], "state_no_review": count(c, Review) == 0,
+        and any("stale" in x["text"] for x in late["reply"]), "state_no_review": count(c, Review) == 0,
         "state_v2_still_draft": c.get("/cases/L/ncr/2", headers=H("alice")).json()["status"] == "DRAFT"})]
 
 

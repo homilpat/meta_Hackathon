@@ -30,6 +30,10 @@ class Pointer:
         if not isinstance(messages[-1]["content"], str):  # the intake analysis: leave it to the person
             raise ProviderError("not this test's call")
         self.sent.append(messages[-1]["content"])
+        if response_format["json_schema"]["name"] == "input_question":  # the model writes the question
+            need = json.loads(messages[-1]["content"])
+            return {"message": {"content": json.dumps({"question": f"LOT {need['lot']}의 {need['missing_field']}를 "
+                                                                    "숫자나 원본 셀 위치로 알려 주세요."})}, "usage": {}}
         src = json.loads(messages[-1]["content"])["sources"]
         col = next(c["id"] for s in src for t in s["tables"] for c in t["columns"] if "검사 수량" in c["header"])
         return {"message": {"content": json.dumps({"candidates": [
@@ -141,3 +145,21 @@ def test_period_needs_a_date_on_the_row_and_must_match():
     assert in_period("2026-10-27", "2026-10") and not in_period("2026-11-02", "2026-10")
     assert in_period("2026-10-27", "2026-10-01..2026-10-31") and not in_period("2026-11-01", "2026-10-01..2026-10-31")
     assert in_period("2026-11-15", "2026-10..2026-11") and not in_period("2026-12-01", "2026-10..2026-11")
+
+
+def test_the_question_is_the_models_and_the_server_checks_it_names_the_lot_and_value():
+    from app.input_requests import write_question
+
+    class Q:
+        def __init__(self, *answers):
+            self.answers, self.seen = list(answers), []
+
+        def chat(self, messages, tools, response_format=None, reasoning_effort=None):
+            self.seen.append(json.loads(messages[-1]["content"]))
+            return {"message": {"content": json.dumps({"question": self.answers.pop(0)})}, "usage": {}}
+
+    need = {"lot": "0007", "missing_field": "검사 수량", "period": None}
+    q = Q("검사 수량을 알려 주세요.", "LOT 0007의 검사 수량을 숫자나 원본 셀 위치로 알려 주세요.")
+    assert write_question(q, need) == "LOT 0007의 검사 수량을 숫자나 원본 셀 위치로 알려 주세요."
+    assert q.seen[1]["server_check"] == ["질문에 0007이(가) 없습니다"]  # what was wrong went back to the model
+    assert write_question(None, need) == ""  # no model: no server-written question (the screen shows a notice)

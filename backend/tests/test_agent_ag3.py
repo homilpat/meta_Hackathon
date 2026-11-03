@@ -69,7 +69,7 @@ def test_confirmed_review_is_verified_and_handed_to_the_reviewers_own_queue(tmp_
     out = run(c).json()
     done = resume(c, out, reviewer_id="bob").json()
     assert done["status"] == "COMPLETED" and done["pending"] is None
-    assert done["reply"][-2]["handoff"] == {"user_id": "bob", "role": "REVIEWER", "kind": "ncr", "version": 1}
+    assert next(x for x in done["reply"] if "handoff" in x)["handoff"] == {"user_id": "bob", "role": "REVIEWER", "kind": "ncr", "version": 1}
     # §22.10 (2)(3)(4): DB, the reviewer's queue and the agent's own report agree
     doc = c.get("/cases/L/ncr/1", headers=H("alice")).json()
     assert doc["status"] == "IN_REVIEW" and doc["reviews"] == [{"reviewer_id": "bob", "state": "PENDING"}]
@@ -97,7 +97,7 @@ def test_a_document_changed_after_the_question_is_not_sent(tmp_path):
     out = run(c).json()
     ok(c.post("/cases/L/ncr", json={}, headers=H("alice")))  # the author makes v2 in the documents screen
     stale = resume(c, out, reviewer_id="bob").json()  # AG-T05
-    assert stale["status"] == "BLOCKED" and "stale" in stale["reply"][-1]["text"]
+    assert stale["status"] == "BLOCKED" and any("stale" in x["text"] for x in stale["reply"])
     assert count(c, Review) == 0
     assert c.get("/cases/L/ncr/2", headers=H("alice")).json()["status"] == "DRAFT"
 

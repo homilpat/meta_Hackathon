@@ -85,16 +85,68 @@ def request_out(session: Session, r) -> dict:
     resumed = next((e for e in ev if e.kind == "RESUMED"), None)
     status = "RESUMED" if resumed else "ANSWERED" if accepted else "NEEDS_INPUT"
     return {"request_id": r.id, "case_id": r.case_id, "action": r.action, "lot": r.lot, "period": r.period,
-            "missing_field": r.missing_field, "held": r.held, "status": status, "question": r.question,
+            "missing_field": r.missing_field, "missing_label": LABEL[r.missing_field], "held": r.held, "status": status, "question": r.question,
             "allowed_answers": list(ANSWER_KINDS), "created_by": r.created_by, "created_at": r.created_at,
             "events": [{"id": e.id, "kind": e.kind, "payload": e.payload, "by": e.actor_id, "at": e.created_at}
                        for e in ev],
             "result": resumed.payload if resumed else None}
 
 
-def start(session: Session, case_id: str, body: CalcIn, actor: Actor) -> tuple[int, dict]:
-    """Compute when every input is there; otherwise record the held action and the question (one open request
-    per case, action, LOT and missing field)."""
+def missing_of(session: Session, case_id: str, body: CalcIn) -> dict | None:
+    """What a new held request would ask for (the facts the model writes its question from), or None when the
+    inputs are all there or an open request already asks."""
+    from app.db import InputRequest
+
+    if body.action not in ACTIONS:
+        return None
+    recs = all_records(session, case_id)
+    have = {f: find(recs, body.lot, f) for f in ACTIONS[body.action]}
+    missing = next((f for f in ACTIONS[body.action] if not have[f]), None)
+    if missing is None or session.scalar(select(InputRequest.id).where(
+            InputRequest.case_id == case_id, InputRequest.action == body.action, InputRequest.lot == body.lot,
+            InputRequest.missing_field == missing)):
+        return None
+    return {"action": "defect rate (defective / inspected)" if body.action == "defect_rate" else body.action,
+            "lot": body.lot, "period": body.period, "missing_field": LABEL[missing],
+            "known": {LABEL[f]: [qty(recs[i], f) for i in ids] for f, ids in have.items() if ids},
+            "answer_types": ["a number the person types (unit: count)", "the sheet and cell of an original file"]}
+
+
+QUESTION_PROMPT = """A quality calculation is held because one input is missing. Write the question to the quality
+engineer in polite Korean, one or two sentences: name the LOT (and period if given) and the missing value, and say
+the two ways to answer. Ask only for that value. If server_check lists problems of your previous question, fix them."""
+QUESTION_SCHEMA = {"type": "json_schema", "json_schema": {"name": "input_question", "strict": True, "schema": {
+    "type": "object", "additionalProperties": False, "required": ["question"],
+    "properties": {"question": {"type": "string"}}}}}
+
+
+def write_question(provider, need: dict) -> str:
+    """The model writes the question (user 2026-11-04); the server checks it names the LOT and the missing value,
+    and sends what is wrong back once. "" when there is no model or it never passes (the screen shows a notice)."""
+    from app import limits
+    from app.model_provider import ProviderError
+
+    if provider is None:
+        return ""
+    feedback, q = [], ""
+    for _ in range(1 + limits.get("AGENT_ANSWER_MAX_REPAIRS")):
+        try:
+            r = provider.chat([{"role": "system", "content": QUESTION_PROMPT},
+                               {"role": "user", "content": json.dumps({**need, "server_check": feedback,
+                                                                       "previous": q}, ensure_ascii=False)}],
+                              [], response_format=QUESTION_SCHEMA)
+            q = str(json.loads(r["message"].get("content") or "")["question"]).strip()[:300]
+        except (ProviderError, ValueError, KeyError, TypeError):
+            return ""
+        feedback = [f"질문에 {x}이(가) 없습니다" for x in (need["lot"], need["missing_field"]) if x not in q]
+        if q and not feedback:
+            return q
+    return ""
+
+
+def start(session: Session, case_id: str, body: CalcIn, actor: Actor, question: str = "") -> tuple[int, dict]:
+    """Compute when every input is there; otherwise record the held action and the model's question (one open
+    request per case, action, LOT and missing field)."""
     from app.db import InputRequest
 
     if body.action not in ACTIONS:
@@ -111,9 +163,6 @@ def start(session: Session, case_id: str, body: CalcIn, actor: Actor) -> tuple[i
         InputRequest.missing_field == missing).order_by(InputRequest.id.desc()).limit(1))
     if open_ and request_out(session, open_)["status"] != "RESUMED":
         return 200, request_out(session, open_)
-    question = (f"LOT {body.lot}{f' ({body.period})' if body.period else ''}의 {LABEL[missing]}(개)이 확인되지 않아 "
-                f"{body.action} 계산을 보류했습니다. 숫자를 직접 입력하거나, 그 값이 있는 원본 파일의 시트·셀 위치를 "
-                f"알려주세요.")
     r = InputRequest(case_id=case_id, action=body.action, lot=body.lot, period=body.period, missing_field=missing,
                      held={"action": body.action, "numerator": num_f, "denominator": den_f,
                            "have": {f: ids for f, ids in have.items() if ids}},

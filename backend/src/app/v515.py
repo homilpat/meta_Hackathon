@@ -150,10 +150,14 @@ def make_v515_router(sessions: sessionmaker, current_user, provider: ModelProvid
     def calc(case_id: str, body: ir.CalcIn, key: IdemKey, actor: Who):
         """Compute when the inputs are there; otherwise hold the action and ask (ASK-RESUME-01)."""
         require_role(actor, "AUTHOR")
+        with sessions() as session:
+            require_case(session, case_id, actor)
+            need = ir.missing_of(session, case_id, body)
+        question = ir.write_question(provider, need) if need else ""  # the model's words, outside any transaction
 
         def run(session: Session) -> tuple[int, dict]:
             require_case(session, case_id, actor)
-            return ir.start(session, case_id, body, actor)
+            return ir.start(session, case_id, body, actor, question)
         return run_idempotent(sessions, f"held_calc:{case_id}", key, actor, run)
 
     @router.get("/cases/{case_id}/input-requests")

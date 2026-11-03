@@ -32,7 +32,8 @@ def main(args) -> int:
         out = r.json()
         turns.append({"goal": goal, "status": out.get("status"), "intents": out.get("intents"),
                       "tools": [s["tool"] for s in out.get("steps", [])],
-                      "answer": [x["text"] for x in out.get("reply", [])],
+                      "answer": [x["text"] for x in out.get("reply", []) if x.get("role") in ("answer", "notice")],
+                      "facts": [x["text"] for x in out.get("reply", []) if x.get("role") == "fact"],
                       "asked_back": (out.get("pending") or {}).get("question")})
         print(json.dumps(turns[-1], ensure_ascii=False)[:700])
     mode = provider.mode if provider else "SERVER_RULES"

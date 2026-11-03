@@ -121,14 +121,15 @@ function StepCard({ s, title, ctx }: { s: J; title: string; ctx: Ctx }) {
 
 export function PendingCard({ run, busy, onResume }: { run: J; busy: boolean; onResume: Resume }) {
   const p = run.pending
+  const answered = (run.reply ?? []).some((l: J) => l.role === 'answer')  // the model already asked it in its own words
   const [who, setWho] = useState<string>(p?.candidates?.length === 1 ? p.candidates[0].user_id : '')
   const [answer, setAnswer] = useState('')
   if (!p || run.status !== 'NEEDS_HUMAN') return null
   return <Card className="missing-card"><div className="missing-icon"><Icon name="warning"/></div><div>
-    {p.action === 'confirm_scope' && <><b>대상 사건 확인이 필요합니다</b><p>{p.question}</p>
+    {p.action === 'confirm_scope' && <><b>대상 사건 확인이 필요합니다</b>{!answered && <p>{p.question}</p>}
       <textarea className="input" aria-label="범위를 바꾸려면 새 조건 입력" placeholder="범위를 바꾸려면 입력 (예: 아니 L03으로)" rows={1} value={answer} disabled={busy} onChange={e => setAnswer(e.target.value)}/>
       <div className="row-gap mt"><button className="button primary" disabled={busy} onClick={() => onResume(true, undefined, answer.trim() || undefined)}>{answer.trim() ? '새 조건으로 다시 확인' : `현재 사건 ${run.case_id}로 진행`}</button><button className="button secondary" disabled={busy} onClick={() => onResume(false)}>취소</button></div></>}
-    {p.action === 'confirm_partial' && <><b>일부만 할 수 있는 요청입니다</b><p>{p.question}</p>
+    {p.action === 'confirm_partial' && <><b>일부만 할 수 있는 요청입니다</b>{!answered && <p>{p.question}</p>}
       <textarea className="input" aria-label="범위를 바꾸려면 새 조건 입력" placeholder="범위를 바꾸려면 입력 (예: 아니 L03으로)" rows={1} value={answer} disabled={busy} onChange={e => setAnswer(e.target.value)}/>
       <div className="row-gap mt"><button className="button primary" disabled={busy} onClick={() => onResume(true, undefined, answer.trim() || undefined)}>{answer.trim() ? '새 조건으로 다시 확인' : '지원 범위만 진행'}</button>
         <button className="button secondary" disabled={busy} onClick={() => onResume(false)}>취소</button></div></>}
@@ -139,11 +140,11 @@ export function PendingCard({ run, busy, onResume }: { run: J; busy: boolean; on
     {p.action === 'await' && <><b>다른 담당자의 결정을 기다립니다</b><p>{p.kind.toUpperCase()} v{p.version} · {p.owner ?? `${p.owner_role} 부서`}. 결정 후 '다시 확인'을 누르면 서버 상태를 다시 읽고 이어갑니다.</p>
       <div className="handoff"><span>{p.owner ?? p.owner_role}</span><Badge tone="amber">응답 대기</Badge></div>
       <div className="row-gap mt"><button className="button secondary" disabled={busy} onClick={() => onResume(true)}>다시 확인</button></div></>}
-    {p.action === 'clarify' && <><b>조금 더 알려 주세요</b><p>{p.question}</p>
+    {p.action === 'clarify' && <><b>조금 더 알려 주세요</b>{!answered && <p>{p.question}</p>}
       <textarea className="input" aria-label="Agent 질문에 대한 답변" rows={2} value={answer} disabled={busy} onChange={e => setAnswer(e.target.value)}/>
       <div className="row-gap mt"><button className="button primary" disabled={busy || !answer.trim()} onClick={() => onResume(true, undefined, answer.trim())}>답변 보내기</button>
         <button className="button secondary" disabled={busy} onClick={() => onResume(false)}>그만두기</button></div></>}
-    {p.action === 'offer_fill' && <><b>양식을 채워 드릴까요?</b><p>{p.question}</p>
+    {p.action === 'offer_fill' && <><b>양식을 채워 드릴까요?</b>{!answered && <p>{p.question}</p>}
       <div className="row-gap mt"><button className="button primary" disabled={busy} onClick={() => onResume(true)}>예, 채워 주세요</button>
         <button className="button secondary" disabled={busy} onClick={() => onResume(false)}>아니요</button></div></>}
   </div></Card>
@@ -153,10 +154,13 @@ export function RunView({ run, ctx, busy, onResume }: { run: J; ctx: Ctx; busy: 
   const titles: Record<string, string> = Object.fromEntries((run.plan ?? []).map((p: J) => [p.tool, p.title]))
   return <div className="message agent-message"><div className="avatar muse"><Icon name="spark" size={17}/></div><div className="message-body">
     <div className="agent-label"><b>QualityOps Agent</b><Badge tone={RUN_TONE[run.status]}>{RUN_LABEL[run.status] ?? run.status}</Badge><span className="muted" title={`run #${run.run_id}`}>{run.updated_at?.slice(5, 16).replace('T', ' ')}</span></div>
-    {(run.reply ?? []).map((l: J, i: number) => <p key={i} className={`wrap${l.folded ? ' muted' : ''}`}>{l.grade && <><Badge tone={l.grade === 'A' ? 'green' : l.grade === 'B' ? 'blue' : 'slate'}>{l.folded ? '참고 · ' : ''}근거 {l.grade}</Badge> </>}{l.text}{l.steps?.length > 0 && <span className="muted"> (step {l.steps.join(', ')})</span>}{l.evidence?.length > 0 && <> <span className="muted">근거</span> <Cite ids={l.evidence}/></>}{l.sources?.length > 0 && <> <span className="muted">참고</span> <Cite ids={l.sources}/></>}{l.grade_label && <span className="muted"> ({l.grade_label})</span>}</p>)}
+    {/* the answer is the model's (role answer) or a system notice; the server's facts sit in the work log */}
+    {(run.reply ?? []).filter((l: J) => l.role !== 'fact').map((l: J, i: number) => <p key={i} className={`wrap${l.folded ? ' muted' : ''}`}>{l.grade && <><Badge tone={l.grade === 'A' ? 'green' : l.grade === 'B' ? 'blue' : 'slate'}>{l.folded ? '참고 · ' : ''}근거 {l.grade}</Badge> </>}{l.text}{l.steps?.length > 0 && <span className="muted"> (step {l.steps.join(', ')})</span>}{l.evidence?.length > 0 && <> <span className="muted">근거</span> <Cite ids={l.evidence}/></>}{l.sources?.length > 0 && <> <span className="muted">참고</span> <Cite ids={l.sources}/></>}{l.grade_label && <span className="muted"> ({l.grade_label})</span>}</p>)}
     <PendingCard key={run.pending?.token ?? 'none'} run={run} busy={busy} onResume={onResume}/>
     {/* the plan and every tool call stay one click away (review and audit), not in the way of the answer */}
     <details className="work-log"><summary>작업 과정 보기 · {(run.plan ?? []).filter((i: J) => i.status === 'DONE').length}/{(run.plan ?? []).length}단계 · 도구 {(run.steps ?? []).length}회{(run.steps ?? []).some((s: J) => s.status !== 'OK') ? ' · 오류 있음' : ''}</summary>
+      {(run.reply ?? []).some((l: J) => l.role === 'fact') && <Card><SectionTitle title="서버 기록" sub="AI가 답을 쓸 때 받은 사실 · 서버가 답을 이것과 대조해 검사합니다"/>
+        {(run.reply ?? []).filter((l: J) => l.role === 'fact').map((l: J, i: number) => <p key={i} className="muted wrap">{i + 1}. {l.text}{l.evidence?.length > 0 && <> <Cite ids={l.evidence}/></>}</p>)}</Card>}
       <PlanCard run={run}/>
       <div className="tool-grid">{(run.steps ?? []).map((s: J) => <StepCard key={s.seq} s={s} title={titles[s.tool] ?? TOOL_TITLE[s.tool] ?? s.tool} ctx={ctx}/>)}</div></details>
   </div></div>

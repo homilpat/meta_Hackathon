@@ -10,7 +10,6 @@ export function ExperienceCard({ xp, cid, api, run, role, f, set }: { xp: J; cid
       <span className="row-gap"><button className="button secondary" onClick={() => run(api(`/cases/${cid}/experience/retrievals`, 'POST', { q: f.htext }))}>과거 사례 찾기</button>
         <button className="button secondary" onClick={() => run(api(`/cases/${cid}/experience/retrievals`, 'POST', { q: f.htext, ai: true }))}>AI로 넓혀 찾기 · 비교</button></span>
       {xp.latest?.ai && <p className="muted wrap">AI {xp.latest.ai.status} · {xp.latest.ai.mode} · 조건은 맞지만 단어가 달라 빠진 사례 {xp.latest.ai.read.length}건을 읽고 {xp.latest.ai.picked.length}건을 같은 문제로 골랐습니다 · 모드는 서버가 기록(효과·재발·적용 조건)으로 정합니다</p>}
-      {xp.latest?.prompt && <Note>{xp.latest.prompt}</Note>}
       {xp.latest?.mode === 'NO_RELEVANT_HISTORY' && <Note>{xp.latest.note}</Note>}
       {xp.latest && <div className="table-wrap mt"><table><thead><tr><th>사례</th><th>판단</th><th>그때 한 조치</th><th>결과</th><th>같은 조건</th><th>다른 점 · 주의</th><th>선택</th></tr></thead><tbody>
         {xp.latest.matches.map((m: J) => <tr key={m.entry_key}><td className="id" title={m.entry_key}>{m.source_ref ?? m.entry_key}</td>

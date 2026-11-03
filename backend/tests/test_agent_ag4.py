@@ -44,7 +44,7 @@ def agent_scenario(c) -> dict:
                    json={"token": first["pending"]["token"], "confirm": True, "reviewer_id": "bob"}).json()
     assert stale["status"] == "BLOCKED"  # the old question about v1 cannot send anything
     sent = answer(c, second, reviewer_id="bob")
-    assert sent["status"] == "COMPLETED" and sent["reply"][-2]["handoff"]["user_id"] == "bob"
+    assert sent["status"] == "COMPLETED" and next(x for x in sent["reply"] if "handoff" in x)["handoff"]["user_id"] == "bob"
     decide(c, "ncr", 2, "bob")  # approval stays a human decision (G9 needs the agent's fresh validation: it has one)
     out = agent(c, "NCR 승인본 PDF로 내보내 줘")
     exports = step(out, "exports")["result"]

@@ -71,6 +71,7 @@ READ_PLAN = {
 }
 FINAL_8D_REPORT = ("made by the server only when D8 closure is approved; before that the user sees the stage status "
                    "and the approved documents that can be exported")
+DONE_STATES = {"DONE", "APPROVED", "CLOSED", "EFFECTIVE", "VERIFIED", "COMPLETE"}
 NO_CASE_READ = {"WHY_FAILED", "EXPLAIN"}  # answered from server records of this user, not from the case data
 TERMS = {  # what a quality word in an answer means, for EXPLAIN (server definitions, not the model's)
     "D0": "8D로 진행할지, 단순 NCR로 끝낼지 정하는 첫 판단", "D2": "문제 기술 (NCR 문서)", "D3": "봉쇄 조치: 불량이 더 퍼지지 않게 막는 임시 조치",
@@ -95,6 +96,8 @@ TITLES = {
 OPEN_FOR_REDRAFT = ("REJECTED", "INFO_REQUESTED", "REVALIDATION_REQUIRED", "SUPERSEDED")
 NOT_8D_REPORT_YET = ("최종 8D 리포트는 D8 종료가 승인될 때 서버가 그 시점의 기록으로 만듭니다 (초안 단계 없음). "
                      "지금은 현재 단계의 문서와 상태를 준비합니다.")
+NO_MODEL = "AI에 연결되지 않아 답을 쓰지 못했습니다 · 작업 과정에서 서버 기록을 볼 수 있습니다"  # a system notice
+NOT_CONFIRMED = "AI 답변이 서버 검사를 통과하지 못했습니다 · 작업 과정에서 서버 기록을 볼 수 있습니다"
 CLARIFY = ("무엇을 도와드릴까요? 예: '불량 원인 조사해 줘', 'NCR 초안 써 줘', '8D로 갈지 판정해 줘', '내 할 일', "
            "'진행 상태', '승인본 내보내기'")
 
@@ -138,17 +141,23 @@ SUMMARY_PROMPT = """You write for a quality engineer, in polite Korean.
    based on. Keep every number exactly as written there; add no number, cause or judgement the facts do not state.
    The facts are terse notes: write them out as natural, complete sentences, not copied note fragments.
    When the goal asks what something means, explain each term with its own fact's definition, one line per term.
-   A server message quoted in English in a fact is written in Korean (keep names, ids and numbers as they are).
-2. recommendations: at most {max_recs} next checks or actions. Each must be based on at least one fact (list its numbers) and
+   Write every sentence in Korean: translate an English server message or phrase in a fact (e.g. "Document version
+   not found" -> "문서 버전을 찾을 수 없음"); keep only names, codes, ids and numbers as they are.
+2. recommendations (only when allowed: recommend is true; else []): at most {max_recs} next checks or actions. Each must be based on at least one fact (list its numbers) and
    may cite past cases / documents from `sources` by key when they support it. Never base a recommendation on a
    source marked negative: that response failed before. A recommendation is a proposal, never a decision.
+3. If `pending` is given, the run waits for the user: end with that question or choice in your own words, as a line
+   based on the fact that states it.
+4. If `server_check` lists what the server's check found wrong in your previous answer, fix exactly those points.
+   could_not_confirm: anything you still cannot state from the facts, say in one Korean sentence why (e.g. the record
+   that would show it is missing); otherwise "".
 Do not write evidence ids in text: the server attaches them. A statistical signal or a model score is not a confirmed
 cause."""
 _LINE = {"type": "object", "additionalProperties": False, "required": ["text", "facts"],
          "properties": {"text": {"type": "string"}, "facts": {"type": "array", "items": {"type": "integer"}}}}
 SUMMARY_SCHEMA = {"type": "json_schema", "json_schema": {"name": "agent_polish", "strict": True, "schema": {
-    "type": "object", "additionalProperties": False, "required": ["lines", "recommendations"],
-    "properties": {"lines": {"type": "array", "items": _LINE},
+    "type": "object", "additionalProperties": False, "required": ["lines", "recommendations", "could_not_confirm"],
+    "properties": {"lines": {"type": "array", "items": _LINE}, "could_not_confirm": {"type": "string"},
                    "recommendations": {"type": "array", "items": {
                        **_LINE, "required": ["text", "facts", "sources"],
                        "properties": {**_LINE["properties"],
@@ -379,6 +388,8 @@ class Executor:
         self.results: dict[str, Any] = {}  # successful read results of this run, by tool (sources for recommendations)
         self.query_fn: Callable[[], str | None] | None = None  # model-chosen document query (LIVE planner only)
         self.query = FALLBACK_QUERY
+        self.intents: list[str] = []  # set once planned: the answer writer recommends only for an investigation
+        self.no_model = False  # the hourly model cap was reached: no paid call for the answer either
 
     def endpoint(self, method: str, path: str) -> APIRoute:
         def walk(routes):  # FastAPI keeps included routers nested (as tests/test_s6_followups.py walks them)
@@ -736,7 +747,16 @@ def summarize(tool: str, r: Any) -> str:
             r.get("route"), "D0 판정 전")
         closure = r.get("closure") or {}
         end = "종료됨" if closure.get("closed") else "D8 종료 가능 (사람이 8D 화면에서)" if closure.get("ready") else "종료 전"
-        return f"{line} · 경로 {route} · {end}"
+        facts = [f"{line} · 경로 {route} · {end}"]
+        gates = r.get("gates") or {}
+        state = gates.get("state") or {}
+        nxt = next((k for k, v in state.items() if v not in DONE_STATES), None)  # the first step not finished yet
+        if nxt:
+            facts.append(f"다음 단계: {nxt} ({TERMS.get(nxt, '')}) · 지금 상태 {state[nxt] or '시작 전'}")
+        for step, g in list((gates.get("draft") or {}).items())[:3]:
+            if g.get("result") not in ("ALLOW", "ALLOWED", None) and g.get("reasons"):
+                facts.append(f"{step} 초안이 아직 막힌 이유: {'; '.join(g['reasons'][:2])}")
+        return "\n".join(facts)
     if tool == "fill_triage":
         f = r["fields"]
         return (f"D0 판정 권장안: {f['route']} · 심각도 {f['severity']} · 관측 {f['observed_defect']} · "
@@ -860,6 +880,7 @@ def make_agent_router(app: FastAPI, sessions: sessionmaker, current_user: Callab
     def finish(ex: Executor, plan: list[dict], reply: list[dict], status: str, pending: dict | None) -> None:
         if pending is not None:
             pending["token"] = f"{ex.run_id}:{ex.seq()}"
+        answer(ex, reply, pending)
         save(ex.run_id, plan=plan, reply=reply, status=status, pending=pending)
         with sessions.begin() as s:
             log(s, ex.cid, ex.actor, "AGENT_RUN", f"run{ex.run_id} {status}"
@@ -950,7 +971,8 @@ def make_agent_router(app: FastAPI, sessions: sessionmaker, current_user: Callab
 
     def ask_back(ex: Executor, plan: list[dict], reply: list[dict], question: str) -> None:
         """A goal too vague to plan: ask, never guess (and never fall back to a write)."""
-        reply.append({"text": question, "steps": []})
+        # the model's own question is its answer; the offline fallback's fixed question is a system notice
+        reply.append({"text": question, "steps": [], "role": "notice" if question == CLARIFY else "answer"})
         finish(ex, plan, reply, "NEEDS_HUMAN", {"action": "clarify", "question": question})
 
     def model_step(ex: Executor, tool: str, version: str, effort: str | None,
@@ -964,57 +986,79 @@ def make_agent_router(app: FastAPI, sessions: sessionmaker, current_user: Callab
         return ex.step(tool, "MODEL", {"model": provider.model, "mode": provider.mode, "prompt_version": version,
                                        "reasoning_effort": effort}, run)
 
-    def summary_hook(ex: Executor, reply: list[dict], recommend: bool = True) -> Callable[[], None]:
-        """Optional second model call: the server's fact lines rewritten as natural sentences. Shown only if every
-        line passes check_polish; each shown line carries the evidence and steps of the facts it names."""
-        def run() -> None:
-            facts = [line for line in reply if line["steps"]]  # lines written from a recorded tool step
-            texts, sources = [f["text"] for f in facts], sources_of(ex.results)
+    def answer(ex: Executor, reply: list[dict], pending: dict | None) -> None:
+        """The answer is the model's (user 2026-11-04): the server's lines so far are facts given to it, its text is
+        checked (check_polish, check_recommendations), and what the check found wrong goes back to it for a rewrite
+        (AGENT_ANSWER_MAX_REPAIRS). Lines that still fail are not shown; the model says in its own words what it
+        could not confirm. Without a model there is no answer, only a system notice."""
+        if all("role" in line for line in reply):
+            return  # nothing new since the last answer (a resumed run answers what it added)
+        for line in reply:
+            line.setdefault("role", "fact")
+        facts = [line for line in reply if line["role"] == "fact"]
+        if provider is None or ex.no_model or not facts:
+            reply.append({"text": NO_MODEL, "steps": [], "role": "notice"})
+            return
+        texts, sources = [f["text"] for f in facts], sources_of(ex.results)
+        recommend = "INVESTIGATE" in ex.intents
 
-            def call() -> dict:
-                msg = provider.chat([{"role": "system", "content": summary_prompt()},
-                                     {"role": "user", "content": json.dumps(
-                                         {"goal": ex.goal, "facts": [{"n": i, "text": t} for i, t in enumerate(texts, 1)],
-                                          "sources": sources}, ensure_ascii=False)}],
-                                    [], response_format=SUMMARY_SCHEMA, reasoning_effort=SUMMARY_EFFORT)["message"]
+        def ask(feedback: list[str], previous: dict | None) -> dict:
+            body = {"goal": ex.goal, "facts": [{"n": i, "text": t} for i, t in enumerate(texts, 1)],
+                    "sources": sources, "recommend": recommend,
+                    "pending": (pending or {}).get("question"), "server_check": feedback, "previous": previous}
+            msg = provider.chat([{"role": "system", "content": summary_prompt()},
+                                 {"role": "user", "content": json.dumps(body, ensure_ascii=False)}],
+                                [], response_format=SUMMARY_SCHEMA, reasoning_effort=SUMMARY_EFFORT)["message"]
+            try:
+                out = json.loads(msg.get("content") or "")
+                return {"lines": out["lines"], "recommendations": out["recommendations"] if recommend else [],
+                        "could_not_confirm": str(out.get("could_not_confirm") or "")[:300]}
+            except (ValueError, KeyError, TypeError) as exc:
+                raise ProviderError(f"answer is not valid JSON ({type(exc).__name__})") from None
+
+        def call() -> dict:
+            out, tries, rounds = ask([], None), 0, []
+            while True:
+                issues = check_polish(out["lines"], texts)
+                kept, rejected = check_recommendations(out["recommendations"], facts, sources)
+                rounds.append({"issues": issues, "rejected": rejected})
+                if not (issues or rejected) or tries >= limits.get("AGENT_ANSWER_MAX_REPAIRS"):
+                    break
+                tries += 1
                 try:
-                    out = json.loads(msg.get("content") or "")
-                    lines, recs = out["lines"], out["recommendations"] if recommend else []  # explain only
-                except (ValueError, KeyError, TypeError) as exc:
-                    raise ProviderError(f"rewrite is not valid JSON ({type(exc).__name__})") from None
-                kept, rejected = check_recommendations(recs, facts, sources)
-                # the checks are recorded with the call, so a hidden line or recommendation can be audited later
-                return {"lines": lines, "issues": check_polish(lines, texts), "recommendations": kept,
-                        "rejected": rejected}
+                    out = ask(issues + rejected, out)
+                except ProviderError:
+                    break  # a failed rewrite keeps the last checked answer: what passed is still shown
+            bad = {int(i.split("번")[0]) for i in issues if i.split("번")[0].isdigit()}
+            whole = any(not i.split("번")[0].isdigit() for i in issues)  # e.g. more lines than facts: none passes
+            lines = [] if whole else [x for n, x in enumerate(out["lines"], 1) if n not in bad]
+            cnc = out["could_not_confirm"]
+            if cnc and check_polish([{"text": cnc, "facts": list(range(1, len(texts) + 1))}], texts):
+                cnc = ""  # its own explanation must not bring a number or an id the facts lack either
+            # every check and rewrite is recorded with the call (audit; the work log shows it)
+            return {"lines": lines, "issues": issues, "recommendations": kept, "rejected": rejected,
+                    "could_not_confirm": cnc, "rounds": rounds, "rewrites": tries}
 
-            s = model_step(ex, "summarize", summary_version(), SUMMARY_EFFORT, call)
-            if s["status"] != "OK":
-                reply.append({"text": f"모델 문장 다듬기 생략 ({s['error']}). 위 내용은 모두 서버 확인 결과입니다.",
-                              "steps": [s["seq"]]})
-                return
-            out = s["result"]
+        s = model_step(ex, "summarize", summary_version(), SUMMARY_EFFORT, call)
+        if s["status"] != "OK":
+            reply.append({"text": NO_MODEL, "steps": [s["seq"]], "role": "notice"})
+            return
+        out = s["result"]
 
-            def shown(item: dict) -> dict:
-                used = [facts[f - 1] for f in item["facts"]]
-                return {"text": item["text"], "facts": item["facts"], "sources": item.get("sources", []),
-                        **({"grade": item["grade"], "grade_label": item["grade_label"], "folded": item["folded"]}
-                           if "grade" in item else {}),
-                        "steps": sorted({n for f in used for n in f["steps"]}),
-                        "evidence": list(dict.fromkeys(e for f in used for e in f.get("evidence", [])))}
+        def shown(item: dict) -> dict:
+            used = [facts[f - 1] for f in item.get("facts") or [] if 1 <= f <= len(facts)]
+            return {"text": item["text"], "facts": item.get("facts") or [], "sources": item.get("sources", []),
+                    **({"grade": item["grade"], "grade_label": item["grade_label"], "folded": item["folded"]}
+                       if "grade" in item else {}),
+                    "steps": sorted({n for f in used for n in f["steps"]}), "role": "answer",
+                    "evidence": list(dict.fromkeys(e for f in used for e in f.get("evidence", [])))}
 
-            if out["issues"]:
-                reply.append({"text": f"모델 문장 다듬기 생략 ({'; '.join(out['issues'])}). 위 내용은 모두 서버 확인 "
-                                      "결과입니다.", "steps": [s["seq"]]})
-            else:
-                reply.append({"text": f"[{provider.mode} 모델이 위 서버 사실을 문장으로 다듬음 · 숫자 대조 통과, 판단 아님]",
-                              "steps": [s["seq"]]})
-                reply.extend(shown({**line, "facts": list(dict.fromkeys(line["facts"]))}) for line in out["lines"])
-            if out["recommendations"]:
-                reply.append({"text": f"[{provider.mode} 모델 추천 · 이 사건 근거와 조회된 과거 사례·문서에 기반한 제안, "
-                                      "결정은 사람]", "steps": [s["seq"]]})
-                reply.extend(shown(rec) for rec in out["recommendations"])
-            # recommendations the server refused stay in this step's record (work log, audit), not in the answer
-        return run
+        reply.extend(shown({**x, "facts": list(dict.fromkeys(x["facts"]))}) for x in out["lines"])
+        reply.extend({**shown(r), "recommendation": True} for r in out["recommendations"])
+        if out["could_not_confirm"]:
+            reply.append(shown({"text": out["could_not_confirm"], "facts": []}))
+        if not any(x.get("role") == "answer" for x in reply):
+            reply.append({"text": NOT_CONFIRMED, "steps": [s["seq"]], "role": "notice"})
 
     def query_hook(ex: Executor) -> Callable[[], str | None]:
         """The model picks the document search terms from the reads so far; None (fallback query) on failure."""
@@ -1046,6 +1090,7 @@ def make_agent_router(app: FastAPI, sessions: sessionmaker, current_user: Callab
 
     def execute_rules(ex: Executor, reply: list[dict]) -> None:
         intents = intents_of(ex.goal)
+        ex.intents = intents
         save(ex.run_id, intents=intents)
         if not intents:
             return ask_back(ex, [], reply, CLARIFY)
@@ -1056,6 +1101,7 @@ def make_agent_router(app: FastAPI, sessions: sessionmaker, current_user: Callab
         server_plan as offline) and, for an investigation, one short summary call. A model failure or the hourly cap
         hands over to the server rule planner; the work never stops on the model."""
         if over_quota(ex):
+            ex.no_model = True
             save(ex.run_id, planner="SERVER_RULES")
             reply.append({"text": f"시간당 모델 호출 한도({limits.get('MODEL_RUNS_PER_USER_HOUR')}회)를 넘어 서버 규칙 플래너로 진행합니다.",
                           "steps": []})
@@ -1065,13 +1111,12 @@ def make_agent_router(app: FastAPI, sessions: sessionmaker, current_user: Callab
             reply.append({"text": f"모델 오류 ({s['error']}) - 서버 규칙 플래너로 계속합니다.", "steps": [s["seq"]]})
             return execute_rules(ex, reply)
         intents, clarify = s["result"]["intents"], s["result"]["clarify"]  # the model's own reading (user 2026-11-04)
+        ex.intents = intents
         save(ex.run_id, intents=intents)
         if not intents:
             return ask_back(ex, [], reply, clarify or CLARIFY)
         ex.query_fn = query_hook(ex)
-        execute(ex, [_item(t) for t in server_plan(intents)], reply,
-                on_done=summary_hook(ex, reply, recommend="INVESTIGATE" in intents)
-                if {"INVESTIGATE", "WHY_FAILED", "EXPLAIN"} & set(intents) else None)
+        execute(ex, [_item(t) for t in server_plan(intents)], reply)  # finish() has the model write the answer
 
     @router.get("/agent/tools")
     def agent_tools(actor: Who) -> dict:
@@ -1120,7 +1165,7 @@ def make_agent_router(app: FastAPI, sessions: sessionmaker, current_user: Callab
             if re.search(REPORT_8D, body.goal, re.IGNORECASE) else []
         try:
             if req["class"] in ("UNSUPPORTED", "HUMAN_ONLY"):
-                reply.append({"text": explain(req), "steps": []})
+                reply.append({"text": explain(req), "steps": [], "role": "notice"})  # a policy refusal, before any model call
                 finish(ex, plan, reply, "BLOCKED", None)
             elif req["class"] == "PARTIAL":  # show what can run and what cannot; run nothing until the user says so
                 q = (f"지원하는 작업: {', '.join(req['supported'])}. {explain(req)} 지원하는 범위만 진행할까요?")
@@ -1189,7 +1234,7 @@ def make_agent_router(app: FastAPI, sessions: sessionmaker, current_user: Callab
                 new = request_class(ex.goal, intents, actor.role)
                 save(run_id, intents=intents, request=new)
                 if new["class"] in ("UNSUPPORTED", "HUMAN_ONLY", "PARTIAL"):
-                    reply.append({"text": explain(new), "steps": []})
+                    reply.append({"text": explain(new), "steps": [], "role": "notice"})
                 if new["class"] in ("UNSUPPORTED", "HUMAN_ONLY") or not intents:
                     finish(ex, plan, reply, "BLOCKED" if new["class"] != "NEEDS_INFO" else "NEEDS_HUMAN",
                            None if new["class"] != "NEEDS_INFO" else {"action": "clarify", "question": CLARIFY})

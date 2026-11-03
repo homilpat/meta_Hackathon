@@ -287,12 +287,25 @@ def test_authorization_regression_on_every_case_route(env):
     paths = set()
     for route in walk(c.app_ref.routes):
         if "{case_id}" in route.path and "GET" in route.methods:
-            for kind in APPROVERS:
-                p = route.path
-                for k, v in {"{case_id}": "C1", "{kind:doc}": kind, "{version}": "1", "{prediction_id}": "1",
-                             "{import_id}": "1"}.items():
-                    p = p.replace(k, v)
-                paths.add(p)
+            params = {"case_id": "C1"}
+            for field in route.dependant.path_params:
+                if field.name in ("case_id", "kind"):
+                    continue
+                assert field.type_ is int, (
+                    f"{route.path}: no test value for path parameter {field.name!r} "
+                    f"of type {field.type_!r}"
+                )
+                params[field.name] = "1"
+
+            converters = route.param_convertors
+            assert converters.keys() <= params.keys() | {"kind"}, (
+                f"{route.path}: missing test values for {converters.keys() - params.keys() - {'kind'}}"
+            )
+            if "kind" in converters:
+                for kind in APPROVERS:
+                    paths.add(route.path_format.format(**params, kind=kind))
+            else:
+                paths.add(route.path_format.format(**params))
     assert {"/cases/C1/change-impact", "/cases/C1/rca", "/cases/C1/ncr/1", "/cases/C1/timeline"} <= paths
     for p in sorted(paths):
         assert c.get(p).status_code == 401, p

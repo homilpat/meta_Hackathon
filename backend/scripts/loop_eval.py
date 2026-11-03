@@ -320,19 +320,23 @@ def pass_hat_k(n: int, c: int, k: int) -> float | None:
 
 
 def score(args: list[str]) -> int:
-    """One report per run mode (LIVE, TEST_DOUBLE): never pooled."""
+    """One report per run mode (LIVE, TEST_DOUBLE): never pooled. --trace NAME scores that one trace file on its
+    own (a re-measure after code changes), in a report named after it."""
     done = 0
+    only = args[args.index("--trace") + 1] if "--trace" in args else None
     for mode in ("LIVE", "TEST_DOUBLE"):
         paths = sorted(TRACES.glob(f"{mode}-*.jsonl")) if TRACES.exists() else []
+        if only:
+            paths = [x for x in paths if x.name == only]
         if paths:
-            done += score_mode(mode, paths)
+            done += score_mode(mode, paths, paths[0].stem.split("-", 1)[1][:10] if only else None)
     if not done:
         print("NOT_RUN: no saved traces")
         return 2
     return 0
 
 
-def score_mode(mode: str, paths: list[Path]) -> int:
+def score_mode(mode: str, paths: list[Path], tag: str | None = None) -> int:
     rows, tmp = [], Path(tempfile.mkdtemp())
     with evalkit.no_network() as attempts:
         hids = human_ids(tmp / "ids")
@@ -398,7 +402,8 @@ def score_mode(mode: str, paths: list[Path]) -> int:
                            "business_complete": sum(r["business_complete"] for r in rows),
                            "false_completion": sum(r["valid_report"] and not r["checks"].get(
                                "cited_only_what_tools_returned", True) for r in rows)}}
-    print(evalkit.write_report(f"loop_eval_{mode}_v{EVALUATOR_VERSION}", summary, rows_all))
+    print(evalkit.write_report(f"loop_eval_{mode}_v{EVALUATOR_VERSION}" + (f"_{tag}" if tag else ""), summary,
+                               rows_all))
     print(mode, json.dumps(summary["overall"]), {t: f"{v['successes']}/{v['runs']}" for t, v in by_task.items()})
     return 1
 

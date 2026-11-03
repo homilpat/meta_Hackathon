@@ -1,0 +1,144 @@
+{
+ "run_mode": "LIVE",
+ "model": "muse-spark-1.3",
+ "steps": [
+  {
+   "step": "1 upload unregistered A",
+   "data_origin": "SYNTHETIC",
+   "route": "NEEDS_AI",
+   "reasons": [
+    "REQUIRED_NOT_MAPPED"
+   ],
+   "rule_mapping": {
+    "part_number": null,
+    "lot": "A",
+    "inspected_on": "B",
+    "inspected_qty": "C",
+    "defective_qty": null,
+    "item": null,
+    "value": null,
+    "unit": null
+   }
+  },
+  {
+   "step": "2 AI proposal",
+   "status": "OK",
+   "mode": "LIVE",
+   "model": "muse-spark-1.3",
+   "seconds": 25.4,
+   "table": "T1",
+   "mapping": {
+    "part_number": null,
+    "lot": "A",
+    "inspected_on": "B",
+    "inspected_qty": "C",
+    "defective_qty": "E",
+    "item": null,
+    "value": null,
+    "unit": null
+   },
+   "reasons": {
+    "part_number": "No part number header; only LOT, date and quantities present",
+    "lot": "Header LOT 번호 means LOT number",
+    "inspected_on": "Header 검사일 means inspection date",
+    "inspected_qty": "Header 수량 / 검사 means inspection total quantity",
+    "defective_qty": "Header 수량 / 불합격 means failed/rejected quantity",
+    "item": "No measured characteristic column present",
+    "value": "No measured value column present",
+    "unit": "No unit column present"
+   },
+   "issues": []
+  },
+  {
+   "step": "3 person compares original cells",
+   "asked": [],
+   "edited_fields": [],
+   "first_row": {
+    "lot": {
+     "cell": "A4",
+     "raw": "00412",
+     "type": "s",
+     "format": "General",
+     "formula": false
+    },
+    "inspected_on": {
+     "cell": "B4",
+     "raw": "2026-10-27",
+     "type": "s",
+     "format": "General",
+     "formula": false
+    },
+    "inspected_qty": {
+     "cell": "C4",
+     "raw": 480,
+     "type": "n",
+     "format": "General",
+     "formula": false
+    },
+    "defective_qty": {
+     "cell": "E4",
+     "raw": 10,
+     "type": "n",
+     "format": "General",
+     "formula": false
+    }
+   }
+  },
+  {
+   "step": "4 saved",
+   "form": "검사성적 확인 매핑 2c6275",
+   "version": 1,
+   "edits": 0,
+   "structure_sha": "2c62750ab7fd"
+  },
+  {
+   "step": "5 second file B (same structure, other values)",
+   "route": "REUSED",
+   "form": "검사성적 확인 매핑 2c6275",
+   "same_mapping": true,
+   "ai_proposals_total": 1,
+   "lots_A": [
+    "00412",
+    "00413"
+   ],
+   "lots_B": [
+    "00521",
+    "00522",
+    "00523"
+   ],
+   "defective_A": [
+    10,
+    4
+   ],
+   "defective_B": [
+    9,
+    0,
+    5
+   ],
+   "imports": [
+    1,
+    2
+   ],
+   "evidence_B": [
+    "EV-XL2-4",
+    "EV-XL2-5",
+    "EV-XL2-6"
+   ]
+  }
+ ],
+ "person": "scripted: corrects each field to the gold column after comparing the cells",
+ "run": {
+  "code_sha": "95f57a8e926c9fcc123e480edad9d73ad306f0da+dirty",
+  "parser_version": "docparse-4",
+  "evaluator": "scripts.xlsx_map_eval",
+  "evaluator_sha256": "5005c204d64b2e36",
+  "sampling": {
+   "temperature": 0.0,
+   "seed": 1
+  },
+  "python": "3.12.8",
+  "command": "python -m scripts.xlsx_map_eval demo --live",
+  "at": "2026-11-03T06:58:46+00:00",
+  "step": "demo"
+ }
+}

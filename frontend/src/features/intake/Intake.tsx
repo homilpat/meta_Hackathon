@@ -134,6 +134,8 @@ export function IntakeCard({ ctx, intake }: { ctx: Ctx; intake: J }) {
 // Inspection-result XLSX (spec §28): the server suggests and checks; a person confirms columns and rows.
 const XFIELD: Record<string, string> = { part_number: '품번', lot: 'LOT', inspected_on: '검사일', inspected_qty: '검사 수량', defective_qty: '불량 수량', item: '측정 항목', value: '측정값', unit: '단위' }
 const LEVEL: Record<string, Tone> = { BLOCK: 'red', WARN: 'amber', INFO: 'slate' }
+// §29: how the file was read — a mapping confirmed for this structure, a registered form, or an AI proposal to review
+const ROUTE: Record<string, [string, Tone]> = { REUSED: ['저장된 매핑 재사용', 'green'], FORM: ['등록 양식', 'blue'], NEEDS_AI: ['AI 제안·검토 필요', 'amber'] }
 const RECON: Record<string, Tone> = { MATCH: 'green', MISMATCH: 'red', MISSING: 'amber', AMBIGUOUS: 'amber', NOT_COMPARABLE: 'slate' }
 
 function InspectionXlsx({ ctx, intakeId, f, cases }: { ctx: Ctx; intakeId: number; f: J; cases: J[] }) {
@@ -145,15 +147,33 @@ function InspectionXlsx({ ctx, intakeId, f, cases }: { ctx: Ctx; intakeId: numbe
   const [rec, setRec] = useState<J>(null)
   const [cmp, setCmp] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
+  const [prop, setProp] = useState<J>(null)
+  const [conf, setConf] = useState<string[]>([])
+  const [mapWhy, setMapWhy] = useState('')
   const go = async (call: () => Promise<void>) => { if (busy) return; setBusy(true); try { await call() } catch { /* the error bar shows the server's reason */ } finally { setBusy(false) } }
-  const load = (mapping?: J, form?: string) => go(async () => {
+  const reviewing = v?.layout?.route === 'NEEDS_AI'
+  const load = (mapping?: J, form?: string, table?: string) => go(async () => {
     const params = new URLSearchParams()
     if (mapping) params.set('mapping', JSON.stringify(mapping))
-    if (form ?? v?.form?.name) params.set('form', (form ?? v?.form?.name) as string)
+    const t = table ?? (reviewing && !form ? v.layout.table : undefined)
+    if (t) params.set('table', t)
+    else if (form ?? v?.form?.name) params.set('form', (form ?? v?.form?.name) as string)
     const q = params.toString() ? `?${params}` : ''
-    const out: J = await ctx.api(`/intakes/${intakeId}/files/${f.file_id}/inspection${q}`)
+    show(await ctx.api(`/intakes/${intakeId}/files/${f.file_id}/inspection${q}`))
+  })
+  const show = (out: J) => {
     setV(out)
     setInc(Object.fromEntries(out.rows.map((x: J) => [x.row, !x.hidden && !x.issues.some((i: J) => i.level === 'BLOCK')])))
+  }
+  const ask = () => go(async () => {
+    const out: J = await ctx.api(`/intakes/${intakeId}/files/${f.file_id}/inspection/proposals`, 'POST', {})
+    setProp(out); setConf([]); show(out.preview)
+  })
+  const keep = () => go(async () => {
+    const saved: J = await ctx.api(`/intakes/${intakeId}/files/${f.file_id}/inspection/mapping`, 'POST', {
+      table: v.layout.table, mapping: v.mapping, confirmed: conf, proposal_id: prop?.proposal_id ?? null, reason: mapWhy }, true)
+    setProp(null); setMapWhy('')
+    show(await ctx.api(`/intakes/${intakeId}/files/${f.file_id}/inspection?form=${encodeURIComponent(saved.name)}`))
   })
   const reconcile = (id: number, fields: string[]) => go(async () => setRec(await ctx.api(`/cases/${caseId}/inspection-imports/${id}/reconciliation?comparable=${fields.join(',')}`)))
   const save = () => go(async () => {
@@ -168,6 +188,21 @@ function InspectionXlsx({ ctx, intakeId, f, cases }: { ctx: Ctx; intakeId: numbe
   if (!v) return <p><button className="button secondary" disabled={busy} onClick={() => load()}>{f.name}: 검사 결과로 읽기</button></p>
   return <Card><SectionTitle title={`검사 결과 확인 · ${f.name}`} sub={`시트 ${v.sheet} · 헤더 ${v.header_row ?? '없음'}행 · 열 연결 규칙 ${v.mapping_version ?? '-'} · 추천은 제안이며 사람이 확인해야 연결됩니다`}/>
     {v.form && <p className="row-gap"><span className="muted">양식</span><select className="input" aria-label="검사 양식" value={v.form.name} disabled={busy} onChange={e => load(undefined, e.target.value)}>{(v.form.candidates ?? [v.form.name]).map((n: string) => <option key={n} value={n}>{n}</option>)}</select><span className="muted">v{v.form.version}{v.form.builtin ? ' · 기본 합성 양식' : ' · 등록 양식'}</span></p>}
+    {v.layout && <p className="row-gap wrap"><Badge tone={ROUTE[v.layout.route]?.[1] ?? 'slate'}>{ROUTE[v.layout.route]?.[0] ?? v.layout.route}</Badge>
+      {v.layout.reasons.map((r: J) => <span key={r.code + r.message} className="muted">{r.message}</span>)}</p>}
+    {reviewing && <p className="row-gap wrap">
+      {v.layout.tables.length > 1 && <select className="input" aria-label="표 후보" value={v.layout.table ?? ''} disabled={busy} onChange={e => load(undefined, undefined, e.target.value)}>
+        <option value="">표 후보 선택</option>{v.layout.tables.map((t: J) => <option key={t.id} value={t.id}>{t.id} · {t.range}{t.header_rows.length > 1 ? ' · 다단 헤더' : ''}</option>)}</select>}
+      <button className="button secondary" disabled={busy || !v.layout.tables.length} onClick={ask}>AI 열 연결 제안 받기</button>
+      <span className="muted">헤더와 열 형식만 보냅니다 (셀 값은 보내지 않음). 제안은 서버가 검사하고 사람이 확인합니다.</span></p>}
+    {prop && <div className="wrap"><p className="row-gap"><Badge tone={prop.status === 'OK' ? 'blue' : 'red'}>AI 제안 {prop.status}</Badge><span className="muted">{prop.mode} · {prop.model ?? '모델 없음'} · 제안 #{prop.proposal_id}</span></p>
+      {prop.issues.map((i: J, n: number) => <Note key={n}>{i.message}</Note>)}
+      {prop.proposal && Object.entries(prop.proposal.reasons).filter(([k]) => prop.proposal.mapping[k]).map(([k, why]) => <p key={k} className="muted">{XFIELD[k] ?? k} ← {prop.proposal.mapping[k]}열: {String(why)}</p>)}</div>}
+    {reviewing && v.layout.uncertain?.map((u: J) => <div key={u.field} className="intake-card">
+      <p className="row-gap wrap"><Badge tone="amber">확인 필요</Badge><b>{XFIELD[u.field] ?? u.field}</b> ← {u.column ? `${u.column}열 "${u.header}"` : '(미연결)'} · {u.why}</p>
+      <table><thead><tr>{u.context.map((x: J) => <th key={x.column} className={x.column === u.column ? 'mark' : ''}>{x.column}: {x.header}</th>)}</tr></thead>
+        <tbody>{(u.context[0]?.cells ?? []).map((_: J, n: number) => <tr key={n}>{u.context.map((x: J) => <td key={x.column}>{x.cells[n]?.cell} = {String(x.cells[n]?.raw ?? '')}</td>)}</tr>)}</tbody></table>
+      <label className="row-gap"><input type="checkbox" aria-label={`${XFIELD[u.field] ?? u.field} 연결 확인`} checked={conf.includes(u.field)} onChange={e => setConf(e.target.checked ? [...conf, u.field] : conf.filter(x => x !== u.field))}/> 원본 셀을 보고 이 연결이 맞다고 확인함</label></div>)}
     {v.issues.map((i: J) => <Note key={i.code}>{i.message}</Note>)}
     <div className="row-gap wrap">{Object.keys(XFIELD).map(k => <label key={k} className="muted">{XFIELD[k]}{['lot', 'inspected_qty', 'defective_qty'].includes(k) ? ' *' : ''}
       <select className="input" aria-label={`${XFIELD[k]} 열`} value={v.mapping[k] ?? ''} disabled={busy} onChange={e => load({ ...v.mapping, [k]: e.target.value || null })}>
@@ -179,10 +214,14 @@ function InspectionXlsx({ ctx, intakeId, f, cases }: { ctx: Ctx; intakeId: numbe
         <td>{x.issues.map((i: J, n: number) => <div key={n}><Badge tone={LEVEL[i.level]}>{i.level}</Badge> <span className="muted">{i.cell} {i.message}</span></div>)}
           {!inc[x.row] && <input className="input" aria-label={`${x.row}행 제외 사유`} placeholder="제외 사유 (필수)" value={why[x.row] ?? ''} onChange={e => setWhy({ ...why, [x.row]: e.target.value })}/>}</td></tr>)}
     </tbody></table>
+    {reviewing && v.layout.table && <p className="row-gap wrap">
+      <input className="input" aria-label="열 연결 확인 사유" placeholder="확인 사유 (필수)" value={mapWhy} onChange={e => setMapWhy(e.target.value)}/>
+      <button className="button primary" disabled={busy || !mapWhy.trim() || (v.layout.uncertain ?? []).some((u: J) => !conf.includes(u.field))} onClick={keep}>확인한 열 연결 저장 (같은 구조 파일에 재사용)</button></p>}
     {v.stopped_at_row && <Note>처리 시간 상한으로 {v.stopped_at_row}행부터 읽지 않았습니다. 전체를 읽은 것으로 표시하지 않습니다.</Note>}
     <div className="row-gap mt"><select className="input" aria-label="연결할 사건" value={caseId} onChange={e => setCaseId(e.target.value)}><option value="">연결할 사건 선택</option>{cases.map(c => <option key={c.case_id} value={c.case_id}>{c.case_id}</option>)}</select>
-      <button className="button primary" disabled={busy || !caseId || unexplained} onClick={save}>확인한 열·행으로 사건에 연결</button>
-      {unexplained && <span className="muted">제외한 행마다 사유가 필요합니다 (분모를 남기기 위해)</span>}</div>
+      <button className="button primary" disabled={busy || !caseId || unexplained || reviewing} onClick={save}>확인한 열·행으로 사건에 연결</button>
+      {unexplained && <span className="muted">제외한 행마다 사유가 필요합니다 (분모를 남기기 위해)</span>}
+      {reviewing && <span className="muted">열 연결을 확인·저장한 뒤 사건에 연결할 수 있습니다</span>}</div>
     {imp && <p className="muted">연결됨: 가져오기 #{imp.import_id} v{imp.version} · 포함 {imp.denominator.included}행 · 제외 {imp.denominator.excluded}행 · 근거 {imp.evidence_ids.length}건</p>}
     {rec && <><SectionTitle title="고객 문서 대조" sub="같은 의미·범위라고 확인한 수량만 비교합니다. 고객 수량은 내부 검사 사실로 바뀌지 않습니다."/>
       <div className="row-gap">{['inspected_qty', 'defective_qty'].map(k => <label key={k}><input type="checkbox" checked={cmp.includes(k)} onChange={e => { const next = e.target.checked ? [...cmp, k] : cmp.filter(x => x !== k); setCmp(next); reconcile(imp.import_id, next) }}/> {XFIELD[k]}: 같은 의미·검사 범위 확인</label>)}</div>

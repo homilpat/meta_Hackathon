@@ -323,12 +323,14 @@ def add_draft_routes(router: APIRouter, sessions: sessionmaker, Who, IdemKey, pr
                         headers={"Content-Disposition": "attachment", "X-Content-Type-Options": "nosniff"})
 
 
-def add_inspection_routes(router: APIRouter, sessions: sessionmaker, Who, IdemKey) -> None:
+def add_inspection_routes(router: APIRouter, sessions: sessionmaker, Who, IdemKey,
+                          provider: ModelProvider | None = None) -> None:
     """Inspection-result XLSX (spec §28): preview and checks on the intake file, a person's confirmation into a
     case, and reconciliation with the customer's documents. Only the intake's owner reads the file; only people on
     the case see or change its imports."""
+    from app import inspection_layout as lay
     from app import inspection_xlsx as ix
-    from app.db import InspectionImport
+    from app.db import InspectionImport, InspectionMappingProposal
     from app.workflow import require_case
 
     def xlsx(session: Session, intake_id: int, file_id: int, actor: Actor) -> IntakeFile:
@@ -337,10 +339,34 @@ def add_inspection_routes(router: APIRouter, sessions: sessionmaker, Who, IdemKe
             raise HTTPException(422, "검사 결과 양식은 XLSX 파일만 읽습니다 (XLS·XLSM·CSV는 지원하지 않음)")
         return f
 
-    @router.get("/intakes/{intake_id}/files/{file_id}/inspection")
-    def preview(intake_id: int, file_id: int, actor: Who, sheet: str | None = None,
-                header_row: int | None = None, mapping: str | None = None, form: str | None = None) -> dict:
-        """mapping: the person's edited field -> column as JSON; the checks run again on it."""
+    def view(data: bytes, sha: str, known: list[dict], table: str | None = None, chosen: dict | None = None,
+             form: str | None = None, sheet: str | None = None, header_row: int | None = None) -> dict:
+        """The preview with the server's table candidates and route (§29): a confirmed mapping for the same structure
+        is used by itself; table: read one candidate (multi-row header, its own end row) with a proposed mapping."""
+        cands = lay.tables(data)
+        r = lay.route(cands, known)
+        if form is None and table is None and r["route"] == "REUSED":
+            form, table = r["form"], r["table"]
+        c = next((t for t in cands if t["id"] == (table or r["table"])), None)
+        if table and c is None:
+            raise HTTPException(422, f"표 후보 {table}가 이 파일에 없습니다")
+        if table:
+            saved = next((f for f in known if f["name"] == form), None)
+            if saved and saved.get("structure_sha"):
+                out = ix.read(data, sha, None, None, chosen, known, form)
+            else:
+                out = ix.read(data, sha, c["sheet"], c["header_rows"][-1], chosen or ix.suggest(c["columns"]), known,
+                              form or ix.FORM, c["last_row"])
+            out["columns"] = c["columns"]  # multi-row headers joined: what the person compares with
+        else:
+            out = ix.read(data, sha, sheet, header_row, chosen, known, form)
+        tables_out = [{k: t[k] for k in ("id", "range", "sheet", "header_rows", "data_rows", "columns",
+                                          "merged_header")} for t in cands]
+        out["layout"] = {**r, "tables": tables_out, "table": c["id"] if c else None,
+                         "uncertain": lay.uncertain(c, out["mapping"], data) if c and out.get("mapping") else []}
+        return out
+
+    def chosen_mapping(mapping: str | None) -> dict | None:
         import json
 
         try:
@@ -349,12 +375,66 @@ def add_inspection_routes(router: APIRouter, sessions: sessionmaker, Who, IdemKe
             raise HTTPException(422, "mapping must be JSON") from None
         if chosen is not None and (not isinstance(chosen, dict) or set(chosen) - set(ix.FIELDS)):
             raise HTTPException(422, f"mapping fields must be among {sorted(ix.FIELDS)}")
+        return chosen
+
+    @router.get("/intakes/{intake_id}/files/{file_id}/inspection")
+    def preview(intake_id: int, file_id: int, actor: Who, sheet: str | None = None,
+                header_row: int | None = None, mapping: str | None = None, form: str | None = None,
+                table: str | None = None) -> dict:
+        """mapping: the person's edited field -> column as JSON; the checks run again on it."""
+        chosen = chosen_mapping(mapping)
         with sessions() as session:
             f = xlsx(session, intake_id, file_id, actor)
             data, sha = f.content, f.sha256
         with sessions() as session:
             known = ix.forms(session)
-        return ix.read(data, sha, sheet, header_row, chosen, known, form)
+        return view(data, sha, known, table, chosen, form, sheet, header_row)
+
+    @router.post("/intakes/{intake_id}/files/{file_id}/inspection/proposals", status_code=201)
+    def propose(intake_id: int, file_id: int, actor: Who) -> dict:
+        """AI-CFG-01: one Meta proposal over the server's table candidates (headers and types only; masked when the
+        file is protected), checked by the server and recorded. A failure leaves the manual mapping open."""
+        with sessions() as session:
+            f = xlsx(session, intake_id, file_id, actor)
+            data, sha, protected = f.content, f.sha256, egress.tier_of(session, f) != "RAW"
+        cands = lay.tables(data)
+
+        def none(status: str, code: str, msg: str) -> dict:
+            return {"status": status, "mode": "OFFLINE", "model": None, "sent": {"candidates": []}, "reply": None,
+                    "proposal": None, "usage": {}, "issues": [{"code": code, "message": msg}]}
+        if not cands:
+            res = none("INVALID", "NO_HEADER", "헤더와 데이터가 있는 표를 찾지 못했습니다: 직접 연결하세요")
+        elif protected and not MASKED_EGRESS:
+            res = none("WITHHELD", "WITHHELD", "보호 파일은 외부 AI에 보내지 않습니다: 직접 연결하세요")
+        else:
+            res = lay.propose(provider, cands, protected)  # outside any transaction
+        with sessions.begin() as session:
+            row = InspectionMappingProposal(intake_id=intake_id, file_id=file_id, file_sha256=sha, mode=res["mode"],
+                                            model=res["model"], status=res["status"], sent=res["sent"],
+                                            reply=res["reply"], proposal=res["proposal"], issues=res["issues"],
+                                            usage=res["usage"], created_by=actor.id, created_at=now())
+            session.add(row)
+            session.flush()
+            pid = row.id
+            known = ix.forms(session)
+        p = res["proposal"]
+        out = view(data, sha, known, p["table"], p["mapping"]) if p else             view(data, sha, known, cands[0]["id"]) if cands else view(data, sha, known)
+        if p:
+            out["layout"]["uncertain"] = lay.uncertain(next(t for t in cands if t["id"] == p["table"]),
+                                                       out["mapping"], data, p["unresolved"])
+        return {"proposal_id": pid, "status": res["status"], "mode": res["mode"], "model": res["model"],
+                "issues": res["issues"], "proposal": p, "preview": out}
+
+    @router.post("/intakes/{intake_id}/files/{file_id}/inspection/mapping", status_code=201)
+    def save_mapping(intake_id: int, file_id: int, body: lay.MappingIn, key: IdemKey, actor: Who):
+        """AI-CFG-02: a person's confirmed mapping, saved with its table structure as a new inspection form version;
+        the next file of the same structure reuses it, a changed one goes back to review."""
+        require_role(actor, "AUTHOR")
+
+        def run(session: Session) -> tuple[int, dict]:
+            f = xlsx(session, intake_id, file_id, actor)
+            return 201, lay.save(session, body, f.content, f, actor)
+        return run_idempotent(sessions, f"inspection_mapping:{file_id}", key, actor, run)
 
     @router.get("/inspection-forms")
     def list_forms(actor: Who) -> dict:
@@ -455,5 +535,5 @@ def make_intake_router(sessions: sessionmaker, current_user, provider: ModelProv
                 "X-Content-Type-Options": "nosniff"})
 
     add_draft_routes(router, sessions, Who, IdemKey, provider, local)
-    add_inspection_routes(router, sessions, Who, IdemKey)
+    add_inspection_routes(router, sessions, Who, IdemKey, provider)
     return router

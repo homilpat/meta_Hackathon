@@ -54,7 +54,9 @@ def forms(session: Session) -> list[dict]:
     for f in session.scalars(select(InspectionForm).order_by(InspectionForm.id)):
         latest[f.name] = {"name": f.name, "version": f.version, "fields": f.fields, "required": f.required,
                           "header_search_rows": f.header_search_rows, "builtin": False, "reason": f.reason,
-                          "created_by": f.created_by, "created_at": f.created_at}
+                          "created_by": f.created_by, "created_at": f.created_at, "source": f.source,
+                          "structure": f.structure, "structure_sha": f.structure_sha, "mapping": f.mapping,
+                          "edits": f.edits, "proposal_id": f.proposal_id}
     return [BUILTIN, *latest.values()]
 
 
@@ -216,7 +218,7 @@ def _normalize(field: str, c: dict, required=REQUIRED) -> tuple[object, list[dic
 
 def read(data: bytes, file_sha256: str, sheet: str | None = None, header: int | None = None,
          mapping: dict[str, str | None] | None = None, candidates: list[dict] | None = None,
-         form_name: str | None = None) -> dict:
+         form_name: str | None = None, last_row: int | None = None) -> dict:
     """Preview and row checks: sheets, the header row, columns, a suggested mapping and every data row with its
     cells, normalized values and issues. Hidden rows are excluded by default and listed."""
     from app import docparse
@@ -228,6 +230,14 @@ def read(data: bytes, file_sha256: str, sheet: str | None = None, header: int | 
     names = [s["name"] for s in sheets]
     if not names:
         raise HTTPException(422, "시트가 없는 파일입니다")
+    chosen = next((f for f in candidates or [] if f["name"] == form_name), None) if form_name else None
+    if chosen and chosen.get("structure_sha"):  # a confirmed mapping holds only for the structure it was made on
+        from app.inspection_layout import tables
+
+        match = next((t for t in tables(data) if t["structure_sha"] == chosen["structure_sha"]), None)
+        if match is None:
+            raise HTTPException(422, f"저장된 매핑 {form_name}과 표 구조가 다릅니다: 다시 검토하세요")
+        sheet, last_row = match["sheet"], last_row or match["last_row"]
     sheet = sheet or next((s["name"] for s in sheets if not s["hidden"]), names[0])
     if sheet not in names:
         raise HTTPException(422, f"시트 {sheet!r}가 없습니다")
@@ -237,7 +247,9 @@ def read(data: bytes, file_sha256: str, sheet: str | None = None, header: int | 
         form = next((f for f in candidates if f["name"] == form_name), None)
         if form is None:
             raise HTTPException(422, f"등록되지 않은 양식: {form_name}")
-        header = header or header_row(ws_v, form["header_search_rows"], form["fields"])
+        # a confirmed mapping (§29) knows its header row; a word form searches for it
+        header = header or (form["header_search_rows"] if form.get("mapping") else
+                            header_row(ws_v, form["header_search_rows"], form["fields"]))
     else:
         form, found = best_form(ws_v, candidates)
         header = header or found
@@ -250,10 +262,10 @@ def read(data: bytes, file_sha256: str, sheet: str | None = None, header: int | 
                 "suggested_mapping": {}, "mapping": {}, "issues": [{"level": "BLOCK", "code": "NO_HEADER",
                                                                      "message": "양식의 헤더 행을 찾지 못했습니다"}]}
     columns = {c.column_letter: c.value for c in ws_v[header] if c.value is not None}
-    suggested = suggest(columns, fields)
+    suggested = form.get("mapping") or suggest(columns, fields)
     mapping = mapping or suggested
     rows, stopped = [], None
-    for r in range(header + 1, ws_v.max_row + 1):
+    for r in range(header + 1, (last_row or ws_v.max_row) + 1):  # last_row: the table's end (§29 candidates)
         if budget.spent(f"row {r}"):
             stopped = r
             break

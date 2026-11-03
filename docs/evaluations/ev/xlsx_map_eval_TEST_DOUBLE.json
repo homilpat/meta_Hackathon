@@ -1,0 +1,521 @@
+{
+ "summary": {
+  "run_mode": "TEST_DOUBLE",
+  "trace": "TEST_DOUBLE-2026-11-03T065301+0000.jsonl",
+  "collected": {
+   "code_sha": "95f57a8e926c9fcc123e480edad9d73ad306f0da+dirty",
+   "parser_version": "docparse-4",
+   "evaluator": "scripts.xlsx_map_eval",
+   "evaluator_sha256": "e7ef5dfd9512b107",
+   "sampling": {
+    "temperature": 0.0,
+    "seed": 1
+   },
+   "python": "3.12.8",
+   "command": "python -m scripts.xlsx_map_eval collect --double",
+   "at": "2026-11-03T06:53:01+00:00",
+   "run_mode": "TEST_DOUBLE",
+   "model": "scripted-rules",
+   "budget_usd": 0.0
+  },
+  "rules_alone": {
+   "samples": 12,
+   "required_fields": 36,
+   "required_accuracy": 0.389,
+   "hold_rate": 0.611,
+   "edits": 22,
+   "right_table": 10,
+   "failed_samples": {
+    "en_punctuated": {
+     "lot": null,
+     "inspected_qty": null,
+     "defective_qty": null
+    },
+    "merged_two_row": {
+     "inspected_qty": null,
+     "defective_qty": null
+    },
+    "accepted_rejected": {
+     "defective_qty": null
+    },
+    "rejected_first": {
+     "inspected_qty": null,
+     "defective_qty": null
+    },
+    "multiple_tables": {
+     "lot": "A",
+     "inspected_qty": null,
+     "defective_qty": null
+    },
+    "two_sheets": {
+     "lot": null,
+     "inspected_qty": null,
+     "defective_qty": null
+    },
+    "japanese": {
+     "lot": null,
+     "inspected_qty": null,
+     "defective_qty": null
+    },
+    "abbreviations": {
+     "lot": null,
+     "inspected_qty": null
+    },
+    "batch_leading_zero": {
+     "lot": null,
+     "inspected_qty": null,
+     "defective_qty": null
+    }
+   }
+  },
+  "ai_proposal": {
+   "samples": 12,
+   "required_fields": 36,
+   "required_accuracy": 0.389,
+   "hold_rate": 0.611,
+   "edits": 22,
+   "right_table": 10,
+   "failed_samples": {
+    "en_punctuated": {
+     "lot": null,
+     "inspected_qty": null,
+     "defective_qty": null
+    },
+    "merged_two_row": {
+     "inspected_qty": null,
+     "defective_qty": null
+    },
+    "accepted_rejected": {
+     "defective_qty": null
+    },
+    "rejected_first": {
+     "inspected_qty": null,
+     "defective_qty": null
+    },
+    "multiple_tables": {
+     "lot": "A",
+     "inspected_qty": null,
+     "defective_qty": null
+    },
+    "two_sheets": {
+     "lot": null,
+     "inspected_qty": null,
+     "defective_qty": null
+    },
+    "japanese": {
+     "lot": null,
+     "inspected_qty": null,
+     "defective_qty": null
+    },
+    "abbreviations": {
+     "lot": null,
+     "inspected_qty": null
+    },
+    "batch_leading_zero": {
+     "lot": null,
+     "inspected_qty": null,
+     "defective_qty": null
+    }
+   }
+  },
+  "cost_usd": 0.0,
+  "gold": "scripts/xlsx_samples.py (written before any run)",
+  "not_evaluated": [
+   "review time (needs people)",
+   "real company files (none provided)"
+  ],
+  "scored": {
+   "code_sha": "95f57a8e926c9fcc123e480edad9d73ad306f0da+dirty",
+   "parser_version": "docparse-4",
+   "evaluator": "scripts.xlsx_map_eval",
+   "evaluator_sha256": "5005c204d64b2e36",
+   "sampling": {
+    "temperature": 0.0,
+    "seed": 1
+   },
+   "python": "3.12.8",
+   "command": "python -m scripts.xlsx_map_eval score",
+   "at": "2026-11-03T06:58:03+00:00"
+  }
+ },
+ "rows": [
+  {
+   "sample": "en_punctuated",
+   "rules": {
+    "route": "NEEDS_AI",
+    "reasons": [
+     "REQUIRED_NOT_MAPPED"
+    ],
+    "right_table": true,
+    "correct": 0,
+    "held": 3,
+    "edits": 3,
+    "wrong": {
+     "lot": null,
+     "inspected_qty": null,
+     "defective_qty": null
+    }
+   },
+   "ai": {
+    "status": "OK",
+    "issues": [
+     "REQUIRED_NOT_MAPPED",
+     "REQUIRED_NOT_MAPPED",
+     "REQUIRED_NOT_MAPPED"
+    ],
+    "right_table": true,
+    "correct": 0,
+    "held": 3,
+    "edits": 3,
+    "wrong": {
+     "lot": null,
+     "inspected_qty": null,
+     "defective_qty": null
+    },
+    "usage": {}
+   }
+  },
+  {
+   "sample": "merged_two_row",
+   "rules": {
+    "route": "NEEDS_AI",
+    "reasons": [
+     "REQUIRED_NOT_MAPPED"
+    ],
+    "right_table": true,
+    "correct": 1,
+    "held": 2,
+    "edits": 2,
+    "wrong": {
+     "inspected_qty": null,
+     "defective_qty": null
+    }
+   },
+   "ai": {
+    "status": "OK",
+    "issues": [
+     "REQUIRED_NOT_MAPPED",
+     "REQUIRED_NOT_MAPPED"
+    ],
+    "right_table": true,
+    "correct": 1,
+    "held": 2,
+    "edits": 2,
+    "wrong": {
+     "inspected_qty": null,
+     "defective_qty": null
+    },
+    "usage": {}
+   }
+  },
+  {
+   "sample": "accepted_rejected",
+   "rules": {
+    "route": "NEEDS_AI",
+    "reasons": [
+     "REQUIRED_NOT_MAPPED"
+    ],
+    "right_table": true,
+    "correct": 2,
+    "held": 1,
+    "edits": 1,
+    "wrong": {
+     "defective_qty": null
+    }
+   },
+   "ai": {
+    "status": "OK",
+    "issues": [
+     "REQUIRED_NOT_MAPPED"
+    ],
+    "right_table": true,
+    "correct": 2,
+    "held": 1,
+    "edits": 1,
+    "wrong": {
+     "defective_qty": null
+    },
+    "usage": {}
+   }
+  },
+  {
+   "sample": "rejected_first",
+   "rules": {
+    "route": "NEEDS_AI",
+    "reasons": [
+     "REQUIRED_NOT_MAPPED"
+    ],
+    "right_table": true,
+    "correct": 1,
+    "held": 2,
+    "edits": 2,
+    "wrong": {
+     "inspected_qty": null,
+     "defective_qty": null
+    }
+   },
+   "ai": {
+    "status": "OK",
+    "issues": [
+     "REQUIRED_NOT_MAPPED",
+     "REQUIRED_NOT_MAPPED"
+    ],
+    "right_table": true,
+    "correct": 1,
+    "held": 2,
+    "edits": 2,
+    "wrong": {
+     "inspected_qty": null,
+     "defective_qty": null
+    },
+    "usage": {}
+   }
+  },
+  {
+   "sample": "multiple_tables",
+   "rules": {
+    "route": "NEEDS_AI",
+    "reasons": [
+     "MULTIPLE_TABLES"
+    ],
+    "right_table": false,
+    "correct": 0,
+    "held": 2,
+    "edits": 3,
+    "wrong": {
+     "lot": "A",
+     "inspected_qty": null,
+     "defective_qty": null
+    }
+   },
+   "ai": {
+    "status": "OK",
+    "issues": [
+     "REQUIRED_NOT_MAPPED",
+     "REQUIRED_NOT_MAPPED"
+    ],
+    "right_table": false,
+    "correct": 0,
+    "held": 2,
+    "edits": 3,
+    "wrong": {
+     "lot": "A",
+     "inspected_qty": null,
+     "defective_qty": null
+    },
+    "usage": {}
+   }
+  },
+  {
+   "sample": "two_sheets",
+   "rules": {
+    "route": "NEEDS_AI",
+    "reasons": [
+     "MULTIPLE_TABLES"
+    ],
+    "right_table": false,
+    "correct": 0,
+    "held": 3,
+    "edits": 3,
+    "wrong": {
+     "lot": null,
+     "inspected_qty": null,
+     "defective_qty": null
+    }
+   },
+   "ai": {
+    "status": "OK",
+    "issues": [
+     "REQUIRED_NOT_MAPPED",
+     "REQUIRED_NOT_MAPPED",
+     "REQUIRED_NOT_MAPPED"
+    ],
+    "right_table": false,
+    "correct": 0,
+    "held": 3,
+    "edits": 3,
+    "wrong": {
+     "lot": null,
+     "inspected_qty": null,
+     "defective_qty": null
+    },
+    "usage": {}
+   }
+  },
+  {
+   "sample": "japanese",
+   "rules": {
+    "route": "NEEDS_AI",
+    "reasons": [
+     "REQUIRED_NOT_MAPPED"
+    ],
+    "right_table": true,
+    "correct": 0,
+    "held": 3,
+    "edits": 3,
+    "wrong": {
+     "lot": null,
+     "inspected_qty": null,
+     "defective_qty": null
+    }
+   },
+   "ai": {
+    "status": "OK",
+    "issues": [
+     "REQUIRED_NOT_MAPPED",
+     "REQUIRED_NOT_MAPPED",
+     "REQUIRED_NOT_MAPPED"
+    ],
+    "right_table": true,
+    "correct": 0,
+    "held": 3,
+    "edits": 3,
+    "wrong": {
+     "lot": null,
+     "inspected_qty": null,
+     "defective_qty": null
+    },
+    "usage": {}
+   }
+  },
+  {
+   "sample": "abbreviations",
+   "rules": {
+    "route": "NEEDS_AI",
+    "reasons": [
+     "REQUIRED_NOT_MAPPED"
+    ],
+    "right_table": true,
+    "correct": 1,
+    "held": 2,
+    "edits": 2,
+    "wrong": {
+     "lot": null,
+     "inspected_qty": null
+    }
+   },
+   "ai": {
+    "status": "OK",
+    "issues": [
+     "REQUIRED_NOT_MAPPED",
+     "REQUIRED_NOT_MAPPED"
+    ],
+    "right_table": true,
+    "correct": 1,
+    "held": 2,
+    "edits": 2,
+    "wrong": {
+     "lot": null,
+     "inspected_qty": null
+    },
+    "usage": {}
+   }
+  },
+  {
+   "sample": "missing_defective",
+   "rules": {
+    "route": "NEEDS_AI",
+    "reasons": [
+     "REQUIRED_NOT_MAPPED"
+    ],
+    "right_table": true,
+    "correct": 3,
+    "held": 1,
+    "edits": 0,
+    "wrong": {}
+   },
+   "ai": {
+    "status": "OK",
+    "issues": [
+     "REQUIRED_NOT_MAPPED"
+    ],
+    "right_table": true,
+    "correct": 3,
+    "held": 1,
+    "edits": 0,
+    "wrong": {},
+    "usage": {}
+   }
+  },
+  {
+   "sample": "builtin_control",
+   "rules": {
+    "route": "FORM",
+    "reasons": [],
+    "right_table": true,
+    "correct": 3,
+    "held": 0,
+    "edits": 0,
+    "wrong": {}
+   },
+   "ai": {
+    "status": "OK",
+    "issues": [],
+    "right_table": true,
+    "correct": 3,
+    "held": 0,
+    "edits": 0,
+    "wrong": {},
+    "usage": {}
+   }
+  },
+  {
+   "sample": "batch_leading_zero",
+   "rules": {
+    "route": "NEEDS_AI",
+    "reasons": [
+     "REQUIRED_NOT_MAPPED"
+    ],
+    "right_table": true,
+    "correct": 0,
+    "held": 3,
+    "edits": 3,
+    "wrong": {
+     "lot": null,
+     "inspected_qty": null,
+     "defective_qty": null
+    }
+   },
+   "ai": {
+    "status": "OK",
+    "issues": [
+     "REQUIRED_NOT_MAPPED",
+     "REQUIRED_NOT_MAPPED",
+     "REQUIRED_NOT_MAPPED"
+    ],
+    "right_table": true,
+    "correct": 0,
+    "held": 3,
+    "edits": 3,
+    "wrong": {
+     "lot": null,
+     "inspected_qty": null,
+     "defective_qty": null
+    },
+    "usage": {}
+   }
+  },
+  {
+   "sample": "meta_rows",
+   "rules": {
+    "route": "FORM",
+    "reasons": [],
+    "right_table": true,
+    "correct": 3,
+    "held": 0,
+    "edits": 0,
+    "wrong": {}
+   },
+   "ai": {
+    "status": "OK",
+    "issues": [],
+    "right_table": true,
+    "correct": 3,
+    "held": 0,
+    "edits": 0,
+    "wrong": {},
+    "usage": {}
+   }
+  }
+ ]
+}

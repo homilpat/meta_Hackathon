@@ -1,0 +1,195 @@
+{
+ "run_mode": "TEST_DOUBLE",
+ "model": "scripted-rules",
+ "steps": [
+  {
+   "step": "1 upload unregistered A",
+   "data_origin": "SYNTHETIC",
+   "route": "NEEDS_AI",
+   "reasons": [
+    "REQUIRED_NOT_MAPPED"
+   ],
+   "rule_mapping": {
+    "part_number": null,
+    "lot": "A",
+    "inspected_on": "B",
+    "inspected_qty": "C",
+    "defective_qty": null,
+    "item": null,
+    "value": null,
+    "unit": null
+   }
+  },
+  {
+   "step": "2 AI proposal",
+   "status": "OK",
+   "mode": "TEST_DOUBLE",
+   "model": "scripted-rules",
+   "seconds": 0.0,
+   "table": "T1",
+   "mapping": {
+    "part_number": null,
+    "lot": "A",
+    "inspected_on": "B",
+    "inspected_qty": null,
+    "defective_qty": null,
+    "item": null,
+    "value": null,
+    "unit": null
+   },
+   "reasons": {
+    "part_number": "words",
+    "lot": "words",
+    "inspected_on": "words",
+    "inspected_qty": "words",
+    "defective_qty": "words",
+    "item": "words",
+    "value": "words",
+    "unit": "words"
+   },
+   "issues": [
+    {
+     "level": "BLOCK",
+     "code": "REQUIRED_NOT_MAPPED",
+     "field": "inspected_qty",
+     "message": "필수 inspected_qty 미연결"
+    },
+    {
+     "level": "BLOCK",
+     "code": "REQUIRED_NOT_MAPPED",
+     "field": "defective_qty",
+     "message": "필수 defective_qty 미연결"
+    }
+   ]
+  },
+  {
+   "step": "3 person compares original cells",
+   "asked": [
+    {
+     "field": "defective_qty",
+     "column": null,
+     "header": null,
+     "why": "AI가 확정하지 못한 항목입니다",
+     "side_by_side": [
+      [
+       "수량 / 검사",
+       "C4=480",
+       "C5=500"
+      ],
+      [
+       "수량 / 합격",
+       "D4=470",
+       "D5=496"
+      ],
+      [
+       "수량 / 불합격",
+       "E4=10",
+       "E5=4"
+      ]
+     ]
+    },
+    {
+     "field": "inspected_qty",
+     "column": null,
+     "header": null,
+     "why": "AI가 확정하지 못한 항목입니다",
+     "side_by_side": [
+      [
+       "수량 / 검사",
+       "C4=480",
+       "C5=500"
+      ],
+      [
+       "수량 / 합격",
+       "D4=470",
+       "D5=496"
+      ],
+      [
+       "수량 / 불합격",
+       "E4=10",
+       "E5=4"
+      ]
+     ]
+    }
+   ],
+   "edited_fields": [
+    "inspected_qty",
+    "defective_qty"
+   ],
+   "first_row": {
+    "lot": {
+     "cell": "A4",
+     "raw": "00412",
+     "type": "s",
+     "format": "General",
+     "formula": false
+    },
+    "inspected_on": {
+     "cell": "B4",
+     "raw": "2026-10-27",
+     "type": "s",
+     "format": "General",
+     "formula": false
+    },
+    "inspected_qty": null,
+    "defective_qty": null
+   }
+  },
+  {
+   "step": "4 saved",
+   "form": "검사성적 확인 매핑 2c6275",
+   "version": 1,
+   "edits": 2,
+   "structure_sha": "2c62750ab7fd"
+  },
+  {
+   "step": "5 second file B (same structure, other values)",
+   "route": "REUSED",
+   "form": "검사성적 확인 매핑 2c6275",
+   "same_mapping": true,
+   "ai_proposals_total": 1,
+   "lots_A": [
+    "00412",
+    "00413"
+   ],
+   "lots_B": [
+    "00521",
+    "00522",
+    "00523"
+   ],
+   "defective_A": [
+    10,
+    4
+   ],
+   "defective_B": [
+    9,
+    0,
+    5
+   ],
+   "imports": [
+    1,
+    2
+   ],
+   "evidence_B": [
+    "EV-XL2-4",
+    "EV-XL2-5",
+    "EV-XL2-6"
+   ]
+  }
+ ],
+ "person": "scripted: corrects each field to the gold column after comparing the cells",
+ "run": {
+  "code_sha": "95f57a8e926c9fcc123e480edad9d73ad306f0da+dirty",
+  "parser_version": "docparse-4",
+  "evaluator": "scripts.xlsx_map_eval",
+  "evaluator_sha256": "5005c204d64b2e36",
+  "sampling": {
+   "temperature": 0.0,
+   "seed": 1
+  },
+  "python": "3.12.8",
+  "command": "python -m scripts.xlsx_map_eval demo --double",
+  "at": "2026-11-03T06:53:22+00:00",
+  "step": "demo"
+ }
+}

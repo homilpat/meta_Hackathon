@@ -247,6 +247,35 @@ class InspectionForm(Base):
     reason: Mapped[str] = mapped_column(Text)
     created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[str] = mapped_column(String(40))
+    # §29: a mapping a person confirmed for one table structure (source CONFIRMED); ADMIN forms have header words only
+    source: Mapped[str] = mapped_column(String(20), default="ADMIN", server_default="ADMIN")
+    structure: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # sheet, header rows, column header texts
+    structure_sha: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    mapping: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # field -> column letter
+    proposal_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # inspection_mapping_proposals.id
+    edits: Mapped[int | None] = mapped_column(Integer, nullable=True)  # fields the person changed from the proposal
+
+
+class InspectionMappingProposal(Base):
+    """One AI proposal of a column mapping for an unregistered inspection XLSX (§29 AI-CFG-01/02): what was sent
+    (headers and structure only), the reply, and the server's verdict on it. Append-only."""
+
+    __tablename__ = "inspection_mapping_proposals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    intake_id: Mapped[int] = mapped_column(Integer, index=True)
+    file_id: Mapped[int] = mapped_column(Integer)
+    file_sha256: Mapped[str] = mapped_column(String(64))
+    mode: Mapped[str] = mapped_column(String(20))  # LIVE, TEST_DOUBLE, OFFLINE
+    model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    status: Mapped[str] = mapped_column(String(20))  # OK, INVALID, FAILED, OFFLINE, WITHHELD
+    sent: Mapped[dict] = mapped_column(JSON)  # the candidates as sent (masked when the file is protected)
+    reply: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    proposal: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # after the server's checks
+    issues: Mapped[list] = mapped_column(JSON)
+    usage: Mapped[dict] = mapped_column(JSON)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[str] = mapped_column(String(40))
 
 
 class InspectionImport(Base):
@@ -1193,7 +1222,7 @@ class LimitSetting(Base):
 
 
 # Audit rows are append-only at the database level, not just by convention.
-APPEND_ONLY = ("inspection_forms", "calculations", "model_responses", "approval_events", "workflow_events", "doc_comments", "audit_chain",
+APPEND_ONLY = ("inspection_forms", "inspection_mapping_proposals", "calculations", "model_responses", "approval_events", "workflow_events", "doc_comments", "audit_chain",
                "workflow_policies", "evidence_quality", "process_contexts", "affected_objects",
                "triage_assessments", "team_events", "actions", "action_events",
                "cause_hypotheses", "why_links", "experiments", "causal_decisions",

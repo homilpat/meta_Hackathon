@@ -22,6 +22,6 @@ describe('ExportButtons', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ detail: 'NCR v2 is DRAFT' }), { status: 409 })))
     render(<ExportButtons user="bob" path="/cases/L/documents/ncr/export?version=2" label="승인본"/>)
     fireEvent.click(screen.getByText('승인본 DOCX'))
-    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('409: NCR v2 is DRAFT'))
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('지금은 할 수 없습니다 · 나중에 다시 시도해 주세요'))
   })
 })

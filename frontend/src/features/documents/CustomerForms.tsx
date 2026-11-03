@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import { readable } from '../../api/client'
 import { Badge, Card, Note, SectionTitle } from '../../components/ui'
 import { useLoad } from '../../hooks/useLoad'
 import { toBase64 } from '../intake/Intake'
+import { say } from '../../labels'
 import type { Ctx, J, Tone } from '../../types'
 
 // §30.1 DOC-OUT-01..04: a customer's DOCX form, slots mapped to case fields (AI proposal, a person confirms),
@@ -46,7 +48,7 @@ export function CustomerForms({ ctx }: { ctx: Ctx }) {
   })
   const download = async (mode: string) => {
     const r = await fetch(`/cases/${ctx.cid}/customer-templates/${tid}/export?mode=${mode}`, { headers: { 'X-User': ctx.me.id } })
-    if (!r.ok) { const j = await r.json().catch(() => ({})); setMsg(`${r.status}: ${j.detail ?? r.statusText}`); return }
+    if (!r.ok) { const j = await r.json().catch(() => ({})); setMsg(readable(r.status, j)); return }
     const name = decodeURIComponent(/filename\*=UTF-8''([^;]+)/.exec(r.headers.get('Content-Disposition') ?? '')?.[1] ?? `form_${mode}.docx`)
     const a = document.createElement('a')
     a.href = URL.createObjectURL(await r.blob()); a.download = name; a.click(); URL.revokeObjectURL(a.href)
@@ -63,7 +65,7 @@ export function CustomerForms({ ctx }: { ctx: Ctx }) {
       <button className="button secondary" disabled={busy || !file || !reg.customer.trim() || !reg.name.trim() || !reg.reason.trim()} onClick={register}>양식 등록</button></div>}
     <p className="row-gap wrap">{(Array.isArray(list) ? list : []).map(x => <button key={x.template_id} className={`button ${x.template_id === tid ? 'primary' : 'secondary'}`} onClick={() => open(x.template_id)}>{x.customer} · {x.name} v{x.version}</button>)}</p>
     {t && <>
-      <p className="row-gap wrap"><Badge tone={ROUTE[t.route]?.[1] ?? 'slate'}>{ROUTE[t.route]?.[0] ?? t.route}</Badge><span className="muted">칸 {t.slots.length}개 · 원본 SHA-256 {t.sha256.slice(0, 12)} · {t.data_origin}{t.mapping ? ` · 매핑 v${t.mapping.version}` : ''}</span>
+      <p className="row-gap wrap"><Badge tone={ROUTE[t.route]?.[1] ?? 'slate'}>{ROUTE[t.route]?.[0] ?? t.route}</Badge><span className="muted" title={`원본 SHA-256 ${t.sha256}`}>칸 {t.slots.length}개 · {say(t.data_origin)}{t.mapping ? ` · 매핑 ${t.mapping.version}번째 확정본` : ''}</span>
         {author && <button className="button secondary" disabled={busy} onClick={ask}>AI 매핑 제안 받기</button>}</p>
       {prop && <p className="row-gap"><Badge tone={prop.status === 'OK' ? 'blue' : 'red'}>AI 제안 {prop.status}</Badge><span className="muted">{prop.mode} · {prop.model ?? '모델 없음'} · 칸 라벨과 필드 정의만 보냅니다 (사건 값은 보내지 않음)</span></p>}
       {prop?.issues?.map((i: J, n: number) => <Note key={n}>{i.message}</Note>)}
@@ -75,7 +77,7 @@ export function CustomerForms({ ctx }: { ctx: Ctx }) {
           <td><select className="input" aria-label={`${s.label} 서식`} value={fmt[s.id] ?? 'AS_IS'} disabled={!author} onChange={e => setFmt({ ...fmt, [s.id]: e.target.value })}>
             {(t.formats ?? ['AS_IS']).map((f: string) => <option key={f} value={f}>{f}</option>)}</select></td>
           <td><input type="checkbox" aria-label={`${s.label} 필수`} checked={req.includes(s.id)} disabled={!author} onChange={e => setReq(e.target.checked ? [...req, s.id] : req.filter(x => x !== s.id))}/></td>
-          <td className="wrap">{v ? <><Badge tone={STATUS[v.status]?.[1] ?? 'slate'}>{STATUS[v.status]?.[0] ?? v.status}</Badge> {v.shown && v.shown !== v.value ? <>{v.shown} <span className="muted">(원래 {v.value})</span></> : v.value ?? ''}{v.converted === false && <> <Badge tone="red">서식 변환 불가</Badge></>} <span className="muted">{v.source ?? ''}{v.version ? ` · ${v.version}` : ''}</span></> : <span className="muted">-</span>}</td></tr> })}
+          <td className="wrap">{v ? <><Badge tone={STATUS[v.status]?.[1] ?? 'slate'}>{STATUS[v.status]?.[0] ?? v.status}</Badge> {v.shown && v.shown !== v.value ? <>{v.shown} <span className="muted">(원래 {v.value})</span></> : v.value ?? ''}{v.converted === false && <> <Badge tone="red">서식 변환 불가</Badge></>} <span className="muted" title={v.version ?? ''}>{v.source ?? ''}</span></> : <span className="muted">-</span>}</td></tr> })}
       </tbody></table></div>
       {author && <p className="row-gap wrap"><input className="input" aria-label="매핑 확정 사유" placeholder="확정 사유 (필수)" value={why} onChange={e => setWhy(e.target.value)}/>
         <button className="button primary" disabled={busy || !why.trim()} onClick={keep}>원본 칸·출처 확인 후 매핑 확정</button></p>}

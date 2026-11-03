@@ -111,3 +111,16 @@
 button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
 @media(max-width:1300px){.main-area{grid-template-columns:minmax(600px,1fr) 260px}.tool-grid{grid-template-columns:1fr}}
 .message .avatar{flex:0 0 auto}
+/* readability (2026-11-03): the base sizes were 8-11px; raise the shared classes once instead of per screen */
+body{font-size:14px;line-height:1.55}
+.muted{font-size:12.5px;line-height:1.5}
+table{font-size:13px}th{font-size:12px}td{padding:9px 10px}
+.badge{font-size:11px;padding:3px 7px}
+.button{font-size:13px;height:36px}
+.section-title strong{font-size:15px}.section-title span{font-size:12.5px}
+.citation{font-size:11px}
+.page-head p{font-size:13.5px}
+.input,input,select,textarea{font-size:13px}
+.work-log{margin:8px 0}.work-log>summary{cursor:pointer;color:var(--slate);font-size:13px;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:#f7f9fa;list-style:none}
+.work-log>summary::-webkit-details-marker{display:none}.work-log>summary:before{content:"▸ ";color:var(--muted)}.work-log[open]>summary:before{content:"▾ "}
+.work-log[open]>summary{margin-bottom:8px}

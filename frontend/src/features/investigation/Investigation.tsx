@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { CLASS_TONE, STATUS_TONE } from '../../constants'
 import { Badge, Card, Cite, Empty, Icon, Note, Page, SectionTitle } from '../../components/ui'
 import { useLoad } from '../../hooks/useLoad'
+import { say } from '../../labels'
 import type { Ctx, J } from '../../types'
 
 export function Investigation({ ctx, provider }: { ctx: Ctx; provider: J }) {
@@ -30,7 +31,7 @@ export function Investigation({ ctx, provider }: { ctx: Ctx; provider: J }) {
       </div>
       <div className="stack">
         <Card><SectionTitle title="주장별 근거 수준"/>{(r.report?.findings ?? []).map((f: J, i: number) =>
-          <div className="claim" key={i}><Icon name="chevron"/><div><b>{f.text}</b><Badge tone={CLASS_TONE[f.classification]}>{f.classification}</Badge><Cite ids={f.evidence_ids}/></div></div>)}</Card>
+          <div className="claim" key={i}><Icon name="chevron"/><div><b>{f.text}</b><Badge tone={CLASS_TONE[f.classification]}>{say(f.classification)}</Badge><Cite ids={f.evidence_ids}/></div></div>)}</Card>
         {r.validation_errors.length > 0 && <Card className="blocked"><SectionTitle title="차단된 주장" action={<Badge tone="red">{r.validation_errors.length}건</Badge>}/>{r.validation_errors.map((e: string) =>
           <div className="blocked-box" key={e}><Icon name="shield"/><div><span>{e}</span></div></div>)}</Card>}
       </div>

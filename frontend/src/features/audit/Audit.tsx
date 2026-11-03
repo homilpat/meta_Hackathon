@@ -36,7 +36,31 @@ function Limits({ ctx }: { ctx: Ctx }) {
       <input aria-label="새 값" placeholder="새 값" value={form.value} onChange={e => setForm(f => ({ ...f, value: e.target.value }))}/>
       <input aria-label="변경 사유" placeholder="사유 (필수)" value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))}/>
       <button className="button primary" disabled={!form.name || !form.value || !form.reason.trim()} onClick={save}>변경</button></div>}
+    {admin && <LimitProposals ctx={ctx}/>}
     {data.history.length > 0 && <Field label="변경 이력">{data.history.map((h: J, i: number) => <span key={i} className="muted">{h.at.slice(0, 19)} · {h.actor_id} · {h.name} = {h.value} · {h.reason}</span>)}</Field>}</Card>
+}
+
+// v5.14 AI-CFG-04: Meta proposes from run statistics, the server replays each value on recorded runs, the admin decides.
+const PSTATUS: Record<string, [string, Tone]> = { PROPOSED: ['검토 대기', 'amber'], APPROVED: ['승인·적용됨', 'green'], REJECTED: ['거절됨', 'slate'], INVALID: ['서버가 거부', 'red'] }
+function LimitProposals({ ctx }: { ctx: Ctx }) {
+  const list = useLoad<J[]>(ctx, '/limit-proposals', [])
+  const [why, setWhy] = useState<Record<number, string>>({})
+  const [busy, setBusy] = useState(false)
+  const go = async (call: () => Promise<unknown>) => { if (busy) return; setBusy(true); try { await call(); ctx.refresh() } catch { /* error bar */ } finally { setBusy(false) } }
+  const decide = (id: number, decision: string) => go(() => ctx.api(`/limit-proposals/${id}/decision`, 'POST', { decision, reason: why[id] ?? '' }))
+  return <div className="mt"><p className="row-gap wrap"><b>AI 설정 변경 제안</b>
+    <button className="button secondary" disabled={busy} onClick={() => go(() => ctx.api('/limit-proposals', 'POST', {}))}>최근 실행 기록으로 제안 받기</button>
+    <span className="muted">AI는 제안만 합니다. 승인해야 적용됩니다.</span></p>
+    {(Array.isArray(list) ? list : []).map(p => { const c = p.comparison ?? {}; return <div key={p.proposal_id} className="intake-card">
+      <p className="row-gap wrap"><Badge tone={PSTATUS[p.status]?.[1] ?? 'slate'}>{PSTATUS[p.status]?.[0] ?? p.status}</Badge><b>{p.name}</b>
+        <span>{p.current} → <b>{p.proposed}</b> {p.unit}</span><span className="muted">적용 범위: 전체</span></p>
+      <p className="wrap">{p.reason}</p>
+      {p.issue ? <p className="muted wrap">거부 이유: {p.issue}</p> : <p className="muted wrap">최근 {c.runs_compared}건에 적용했다면: 끊겼을 실행 {c.would_cut}건 (그중 성공했던 실행 {c.would_cut_validated}건) · 지금 상한에 걸려 실패한 실행 {c.stopped_at_current_cap}건</p>}
+      {p.status === 'PROPOSED' && <p className="row-gap"><input className="input" aria-label={`제안 ${p.proposal_id} 판단 사유`} placeholder="판단 사유 (필수)" value={why[p.proposal_id] ?? ''} onChange={e => setWhy({ ...why, [p.proposal_id]: e.target.value })}/>
+        <button className="button primary" disabled={busy || !(why[p.proposal_id] ?? '').trim()} onClick={() => decide(p.proposal_id, 'APPROVED')}>승인하고 적용</button>
+        <button className="button secondary" disabled={busy || !(why[p.proposal_id] ?? '').trim()} onClick={() => decide(p.proposal_id, 'REJECTED')}>거절</button></p>}
+      {p.decision && <p className="muted">{p.decision.by} · {p.decision.reason}</p>}</div> })}
+  </div>
 }
 
 // Company inspection XLSX forms (spec §28): blanks to fill with a real form's header words; AI operations registers.

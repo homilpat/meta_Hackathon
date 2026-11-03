@@ -4,6 +4,7 @@ import { Badge, Card, Cite, Icon, Note, SectionTitle } from '../../components/ui
 import { ExportButtons } from '../../components/ExportButtons'
 import { ControlChart } from '../spc/Spc'
 import { TASK } from '../queue/Queue'
+import { show } from '../../labels'
 import type { Ctx, J, Tone } from '../../types'
 
 // Renders one persisted AgentRun exactly as the server returned it. Nothing here decides or claims a state.
@@ -46,8 +47,8 @@ function StepBody({ s, ctx }: { s: J; ctx: Ctx }) {
       {r.top_explanation && <p className="muted wrap">SHAP <Cite ids={[r.top_explanation.evidence_id]}/> {Object.entries(r.top_explanation.contributions_log_odds).slice(0, 3).map(([k, v]) => `${k} ${v}`).join(' · ')}</p>}
       <Note>{r.note} SHAP은 모델 점수의 설명이며 물리적 원인이 아닙니다.</Note></>
     case 'evidence_gaps': return <>{r.hypotheses.map((h: J) => <p key={h.hypothesis_id} className="wrap"><Badge tone="violet">가설 #{h.hypothesis_id} {h.status}</Badge> {h.text} — <span className="muted">{h.gaps.join(' · ') || '공백 없음'}</span></p>)}
-      {r.case_unknowns.map((u: J, i: number) => <p key={`u${i}`} className="muted wrap"><Badge tone="slate">UNKNOWN</Badge> {typeof u === 'string' ? u : u.text ?? JSON.stringify(u)}</p>)}
-      {r.next_checks.map((c: J, i: number) => <p key={`c${i}`} className="muted wrap"><Badge tone="teal">다음 확인</Badge> {typeof c === 'string' ? c : c.check ?? JSON.stringify(c)}</p>)}</>
+      {r.case_unknowns.map((u: J, i: number) => <p key={`u${i}`} className="muted wrap"><Badge tone="slate">알 수 없음</Badge> {typeof u === 'string' ? u : u.text ?? show(u)}</p>)}
+      {r.next_checks.map((c: J, i: number) => <p key={`c${i}`} className="muted wrap"><Badge tone="teal">다음 확인</Badge> {typeof c === 'string' ? c : c.check ?? show(c)}</p>)}</>
     case 'experience': return <><p><Badge tone={r.mode === 'KNOWN' ? 'green' : r.mode === 'ANALOGICAL' ? 'amber' : 'slate'}>{r.mode}</Badge> 추천 {r.recommendations.length}건 · 실패 사례 {r.negative_precedents.length}건</p><Note>{r.note}</Note></>
     case 'history': return <p className="muted wrap">{r.precedents.map((p: J) => p.historical_case_id).join(', ') || '적격 과거 사례 없음'} · 유사도는 인과 근거가 아닙니다.</p>
     case 'references': return <>{r.results.map((d: J) => <p key={d.ref} className="muted wrap"><Badge tone="slate">{d.kind}</Badge> {d.doc_number} rev {d.revision} · {d.title} <Cite ids={[d.ref]}/></p>)}</>
@@ -107,8 +108,8 @@ function TriageForm({ r, ctx }: { r: J; ctx: Ctx }) {
 function StepCard({ s, title, ctx }: { s: J; title: string; ctx: Ctx }) {
   const tone: Tone = s.status === 'OK' ? 'green' : 'red'
   return <Card className="tool-card"><div className="tool-top"><span className={`tool-icon ${s.kind === 'READ' ? '' : 'violet'}`}><Icon name={s.kind === 'READ' ? 'database' : 'document'}/></span>
-    <div><b>{title}</b><small>#{s.seq} · {s.kind} · {s.tool} · {s.duration_ms}ms{s.http_status ? ` · HTTP ${s.http_status}` : ''}</small></div>
-    <Badge tone={tone}>{s.status === 'OK' ? '서버 응답 확인' : s.status === 'DENIED' ? '거부됨' : '오류'}</Badge></div>
+    <div title={`#${s.seq} · ${s.kind} · ${s.tool} · ${s.duration_ms}ms${s.http_status ? ` · HTTP ${s.http_status}` : ''}`}><b>{title}</b><small>{s.kind === 'READ' ? '조회' : '작성'} · {(s.duration_ms / 1000).toFixed(1)}초</small></div>
+    <Badge tone={tone}>{s.status === 'OK' ? '완료' : s.status === 'DENIED' ? '거부됨' : '오류'}</Badge></div>
     <div className="tool-result">{s.status === 'OK' ? (StepBody({ s, ctx }) ?? <span className="muted">결과 없음</span>) : <span className="wrap">{s.error}</span>}</div>
     {s.audit_event_ids?.length > 0 && <button className="citation" onClick={() => ctx.open(ctx.cid, '', 'audit')}>감사 이벤트 {s.audit_event_ids.map((i: number) => `#${i}`).join(' ')}</button>}
   </Card>
@@ -147,11 +148,12 @@ export function PendingCard({ run, busy, onResume }: { run: J; busy: boolean; on
 export function RunView({ run, ctx, busy, onResume }: { run: J; ctx: Ctx; busy: boolean; onResume: Resume }) {
   const titles: Record<string, string> = Object.fromEntries((run.plan ?? []).map((p: J) => [p.tool, p.title]))
   return <div className="message agent-message"><div className="avatar muse"><Icon name="spark" size={17}/></div><div className="message-body">
-    <div className="agent-label"><b>QualityOps Agent</b><Badge tone={RUN_TONE[run.status]}>{RUN_LABEL[run.status] ?? run.status}</Badge><span className="muted">run #{run.run_id} · {run.updated_at?.slice(0, 19)}</span></div>
+    <div className="agent-label"><b>QualityOps Agent</b><Badge tone={RUN_TONE[run.status]}>{RUN_LABEL[run.status] ?? run.status}</Badge><span className="muted" title={`run #${run.run_id}`}>{run.updated_at?.slice(5, 16).replace('T', ' ')}</span></div>
     {(run.reply ?? []).map((l: J, i: number) => <p key={i} className={`wrap${l.folded ? ' muted' : ''}`}>{l.grade && <><Badge tone={l.grade === 'A' ? 'green' : l.grade === 'B' ? 'blue' : 'slate'}>{l.folded ? '참고 · ' : ''}근거 {l.grade}</Badge> </>}{l.text}{l.steps?.length > 0 && <span className="muted"> (step {l.steps.join(', ')})</span>}{l.evidence?.length > 0 && <> <span className="muted">근거</span> <Cite ids={l.evidence}/></>}{l.sources?.length > 0 && <> <span className="muted">참고</span> <Cite ids={l.sources}/></>}{l.grade_label && <span className="muted"> ({l.grade_label})</span>}</p>)}
-    <PlanCard run={run}/>
     <PendingCard key={run.pending?.token ?? 'none'} run={run} busy={busy} onResume={onResume}/>
-    <div className="tool-grid">{(run.steps ?? []).map((s: J) => <StepCard key={s.seq} s={s} title={titles[s.tool] ?? TOOL_TITLE[s.tool] ?? s.tool} ctx={ctx}/>)}</div>
-    <div className="agent-note"><Icon name="shield"/><p><b>사람의 검토가 필요한 결정은 사람이 내립니다.</b> Agent는 문서 승인, 근본원인 확정, 조치 실행 기록, 사건 종료를 하지 않으며 서버가 재조회로 확인한 상태만 알립니다.</p></div>
+    {/* the plan and every tool call stay one click away (review and audit), not in the way of the answer */}
+    <details className="work-log"><summary>작업 과정 보기 · {(run.plan ?? []).filter((i: J) => i.status === 'DONE').length}/{(run.plan ?? []).length}단계 · 도구 {(run.steps ?? []).length}회{(run.steps ?? []).some((s: J) => s.status !== 'OK') ? ' · 오류 있음' : ''}</summary>
+      <PlanCard run={run}/>
+      <div className="tool-grid">{(run.steps ?? []).map((s: J) => <StepCard key={s.seq} s={s} title={titles[s.tool] ?? TOOL_TITLE[s.tool] ?? s.tool} ctx={ctx}/>)}</div></details>
   </div></div>
 }

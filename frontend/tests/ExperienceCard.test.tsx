@@ -19,7 +19,7 @@ describe('ExperienceCard', () => {
   it('sends only the reason the person typed; no reason, no choice', () => {
     const api = vi.fn(async () => ({}))
     render(<Harness api={api}/>)
-    const choice = screen.getByText('INVESTIGATE_MORE') as HTMLButtonElement
+    const choice = screen.getByText('더 조사') as HTMLButtonElement
     expect(choice.disabled).toBe(true)
     fireEvent.change(screen.getByLabelText('선택 사유'), { target: { value: '   ' } })
     expect(choice.disabled).toBe(true)

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Badge, Card, Cite, Empty, Field, Note, Page, SectionTitle } from '../../components/ui'
 import { useLoad } from '../../hooks/useLoad'
 import { InputRequests } from './InputRequests'
+import { say } from '../../labels'
 import type { Ctx, J, Tone } from '../../types'
 import { toBase64 } from '../intake/Intake'
 
@@ -148,7 +149,7 @@ function RequestCard({ ctx, r, busy, act }: { ctx: Ctx; r: J; busy: boolean; act
     await ctx.api(`/requests/${r.request_id}/submissions`, 'POST', { files, submitted_by: { org } }, true)
   })
   const post = (path: string, body?: unknown) => act(() => ctx.api(`/requests/${r.request_id}${path}`, 'POST', body, true))
-  return <Card><SectionTitle title={`#${r.request_id} ${r.title}`} sub={`${KIND[r.kind] ?? r.kind} · 기한 ${r.due_at} ${r.due_tz}${r.overdue ? ' · 기한 초과' : ''}`} action={<Badge tone={STATE[r.status]}>{r.status}</Badge>}/>
+  return <Card><SectionTitle title={`#${r.request_id} ${r.title}`} sub={`${KIND[r.kind] ?? r.kind} · 기한 ${r.due_at} ${r.due_tz}${r.overdue ? ' · 기한 초과' : ''}`} action={<Badge tone={STATE[r.status]}>{say(r.status)}</Badge>}/>
     <p className="muted">담당 {r.owner_id}{r.pending_owner_id ? ` (인수 대기 → ${r.pending_owner_id})` : ''} · 검토 {r.reviewer_id} · 외부 응답 주체 {r.external_party?.org ?? '-'} (시스템 외부 발송 없음)</p>
     <div className="table-wrap"><table><thead><tr><th>항목</th><th>요구사항</th><th>필요 증거</th><th>판정 기준</th><th>AI 의견 (결정 아님)</th></tr></thead><tbody>
       {r.items.map((i: J) => { const o = ai?.items.find((x: J) => x.item_id === i.item_id); return <tr key={i.item_id}><td>{i.item_id}</td><td className="wrap">{i.requirement}</td><td className="wrap">{i.required_evidence}</td><td className="wrap">{i.criterion}</td>

@@ -93,7 +93,7 @@ describe('App shell', () => {
       const button = await screen.findByRole('button', { name: '소형 픽스처 사건' })
       failPost = { status: 409, detail: 'case already exists' }
       await act(async () => { fireEvent.click(button) })
-      expect(await screen.findByText('409: case already exists')).toBeTruthy()
+      expect(await screen.findByText('지금은 할 수 없습니다 · 나중에 다시 시도해 주세요')).toBeTruthy()
       expect(calls.find(c => c.method === 'POST')?.path).toBe('/cases')
       await waitFor(() => expect(escaped.map(String)).toEqual(['Error: 409']))
     } finally {

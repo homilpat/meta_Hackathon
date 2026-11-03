@@ -6,6 +6,7 @@ import { useLoad } from '../../hooks/useLoad'
 import { DocEditor } from './DocEditor'
 import { CustomerForms } from './CustomerForms'
 import { ExportButtons } from '../../components/ExportButtons'
+import { say as plain } from '../../labels'
 import type { Ctx, J } from '../../types'
 
 export function Reports({ ctx }: { ctx: Ctx }) {
@@ -40,7 +41,7 @@ export function Reports({ ctx }: { ctx: Ctx }) {
         {d.status === 'APPROVED' && <ExportButtons key={`${d.kind}:${d.version}`} user={ctx.me.id} path={`/cases/${d.case_id}/documents/${d.kind}/export?version=${d.version}`} label="승인본"/>}
         {d.note && <Note>{d.note}</Note>}
         <div className="table-wrap"><table><thead><tr><th>ID</th><th>구분</th><th>주장</th><th>근거</th><th>코멘트</th></tr></thead><tbody>{d.claims.map((c: J) =>
-          <tr key={c.claim_id}><td>{c.claim_id}</td><td><Badge tone={CLASS_TONE[c.classification]}>{c.classification}</Badge></td><td className="wrap">{c.text}</td><td className="wrap"><Cite ids={c.evidence_ids}/></td>
+          <tr key={c.claim_id}><td>{c.claim_id}</td><td><Badge tone={CLASS_TONE[c.classification]}>{plain(c.classification)}</Badge></td><td className="wrap">{c.text}</td><td className="wrap"><Cite ids={c.evidence_ids}/></td>
             <td><button className="citation" onClick={() => { setClaimFor(c.claim_id); setReplyTo(null) }}>{openOn(c.claim_id) ? `열림 ${openOn(c.claim_id)}` : '+'}</button></td></tr>)}</tbody></table></div>
         <p className="muted">SHA-256 {d.content_sha256}</p></Card> : <Card><Empty>문서를 선택하세요.</Empty></Card>}
       {d && <div className="stack"><Card><SectionTitle title="검토 및 결재"/>

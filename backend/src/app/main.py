@@ -43,6 +43,7 @@ from app.intake_case import make_intake_case_router
 from app.ml_api import make_ml_router
 from app.model_cache import Reusing
 from app.model_provider import MODEL, LocalProvider, MetaProvider, ModelProvider, sampling
+from app.ops_proposals import make_ops_router
 from app.synthetic import (
     LINE_VERSION,
     canonical,
@@ -164,6 +165,7 @@ def create_app(database_url: str | None = None,
     app.include_router(make_egress_router(sessions, current_user))
     with contextlib.suppress(OperationalError):  # a DB not yet migrated has no settings to replay
         limits.load(sessions)
+    app.include_router(make_ops_router(sessions, current_user, app.state.provider))
     app.include_router(limits.make_limits_router(sessions, current_user))
     app.include_router(make_intake_case_router(sessions, current_user))
     app.include_router(make_vision_router(sessions, current_user))

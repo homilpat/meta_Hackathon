@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Badge, Card, Note, SectionTitle } from '../../components/ui'
 import { useLoad } from '../../hooks/useLoad'
+import { say } from '../../labels'
 import type { Ctx, J, Tone } from '../../types'
 
 // §30.2 ASK-RESUME-01..03: a held server calculation asks for its missing input; the answer is a number a person
@@ -28,7 +29,9 @@ export function InputRequests({ ctx }: { ctx: Ctx }) {
 }
 
 function Result({ r }: { r: J }) {
-  return <p className="wrap"><Badge tone="green">{r.rate_percent}%</Badge> LOT {r.lot} · 계산 {r.calculation.calculation_id} · {r.inputs.map((i: J) => `${i.field} ${i.value} (${SOURCE[i.source_type] ?? i.source_type}, ${i.evidence_id})`).join(' / ')}</p>
+  const part = (f: string) => r.inputs.filter((i: J) => i.field === f).map((i: J) => `${i.value}개(${SOURCE[i.source_type] ?? i.source_type})`).join(' + ')
+  return <p className="wrap" title={`서버 계산 ${r.calculation.calculation_id} · 근거 ${r.inputs.map((i: J) => i.evidence_id).join(', ')}`}>
+    <Badge tone="green">불량률 {r.rate_percent}%</Badge> LOT {r.lot}: 불량 {part('defective_qty')} ÷ 검사 {part('inspected_qty')}</p>
 }
 
 function Ask({ ctx, r, busy, go }: { ctx: Ctx; r: J; busy: boolean; go: (c: () => Promise<void>) => Promise<void> }) {
@@ -44,7 +47,7 @@ function Ask({ ctx, r, busy, go }: { ctx: Ctx; r: J; busy: boolean; go: (c: () =
   const suggest = () => go(async () => setSug(await ctx.api(`/input-requests/${r.request_id}/suggestions`, 'POST', {})))
   const rejected = [...r.events].reverse().find((e: J) => e.kind === 'ANSWER_REJECTED' || e.kind === 'RESUME_HELD')
   return <div className="intake-card">
-    <p className="row-gap wrap"><Badge tone={TONE[r.status] ?? 'slate'}>{r.status}</Badge><b>#{r.request_id}</b><span className="wrap">{r.question}</span></p>
+    <p className="row-gap wrap"><Badge tone={TONE[r.status] ?? 'slate'}>{say(r.status)}</Badge><span className="wrap">{r.question}</span></p>
     {r.status === 'RESUMED' ? <Result r={r.result}/> : <>
       <p className="row-gap wrap"><button className="button secondary" disabled={busy} onClick={suggest}>AI에게 값이 있을 곳 묻기</button>
         <span className="muted">열 헤더만 보냅니다. AI는 위치를 제안할 뿐 값을 정하지 않습니다.</span></p>

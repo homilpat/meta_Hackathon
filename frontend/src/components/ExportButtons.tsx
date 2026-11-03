@@ -1,11 +1,12 @@
 import { useState } from 'react'
+import { readable } from '../api/client'
 
 // G10: download the server's DOCX/PDF export (X-User header, so not a plain link). A 409 explains why it is refused.
 export function ExportButtons({ user, path, label }: { user: string; path: string; label: string }) {
   const [msg, setMsg] = useState('')
   const get = async (format: string) => {
     const r = await fetch(`${path}${path.includes('?') ? '&' : '?'}format=${format}`, { headers: { 'X-User': user } })
-    if (!r.ok) { const j = await r.json().catch(() => ({})); setMsg(`${r.status}: ${j.detail ?? r.statusText}`); return }
+    if (!r.ok) { const j = await r.json().catch(() => ({})); setMsg(readable(r.status, j)); return }
     const name = /filename="([^"]+)"/.exec(r.headers.get('Content-Disposition') ?? '')?.[1] ?? `export.${format}`
     const a = document.createElement('a')
     a.href = URL.createObjectURL(await r.blob()); a.download = name; a.click(); URL.revokeObjectURL(a.href)

@@ -3,6 +3,7 @@ import { USERS } from '../../constants'
 import { Badge, Card, Cite, Empty, Field, Note, Page, SectionTitle } from '../../components/ui'
 import { ExperienceCard } from '../experience/ExperienceCard'
 import { ExportButtons } from '../../components/ExportButtons'
+import { say, show } from '../../labels'
 import type { Ctx, J, Tone } from '../../types'
 
 export const STAGE_LABEL: Record<string, string> = { D0: '위험 평가', D1: '팀', D2: '문제 정의', D3: '임시 봉쇄', D4: '근본 원인', D5: '조치 선정', D6: '실행·효과', D7: '재발 방지', D8: '종결' }
@@ -52,7 +53,7 @@ export function EightD({ ctx }: { ctx: Ctx }) {
     </Card>
     <div className="dashboard-main">
       <Card><SectionTitle title="D0 위험 평가" sub="신호와 확정 불량은 별도 상태로 저장됩니다"/>
-        {t ? <div className="wrap" style={{ fontSize: 11 }}><Badge tone="blue">{t.signal_kind}</Badge> <Badge tone={t.observed_defect === 'DEFECT_CONFIRMED' ? 'red' : 'slate'}>{t.observed_defect}</Badge> <Badge tone="violet">{t.route}</Badge> <Badge>{t.severity}</Badge>
+        {t ? <div className="wrap" style={{ fontSize: 11 }}><Badge tone="blue">{say(t.signal_kind)}</Badge> <Badge tone={t.observed_defect === 'DEFECT_CONFIRMED' ? 'red' : 'slate'}>{say(t.observed_defect)}</Badge> <Badge tone="violet">{say(t.route)}</Badge> <Badge>심각도 {say(t.severity)}</Badge>
           <p>{t.rationale}</p><p className="muted">범위 LOT {t.scope_lots.join(', ') || '-'} · 출하분 포함 {String(t.risk_flags.shipped_in_scope)} · 평가자 {t.assessor_id}</p><Cite ids={t.evidence_ids}/></div> : <Empty>아직 D0 평가가 없습니다.</Empty>}
         {role === 'REVIEWER' && <div className="mt">
           <div className="dual"><Field label="신호 종류"><select value={f.signal_kind} onChange={set('signal_kind')}>{['SPC_SIGNAL', 'AOI_FAIL', 'CUSTOMER_COMPLAINT', 'OTHER'].map(x => <option key={x}>{x}</option>)}</select></Field>
@@ -92,7 +93,7 @@ export function EightD({ ctx }: { ctx: Ctx }) {
     </div>
     {pd && <Card className="mb"><SectionTitle title="D2 문제 정의 (5W2H · IS / IS NOT)" sub="현재 원본 행에서 서버가 계산 · NCR 문서에도 같은 내용이 클레임으로 들어가 승인 해시에 묶입니다"/>
       <div className="table-wrap"><table><thead><tr><th>항목</th><th>값</th><th>상태</th><th>근거</th></tr></thead><tbody>
-        {['what', 'where', 'when', 'who_detected', 'how_many', 'is', 'is_not'].map(k => <tr key={k}><td>{k}</td><td className="wrap">{typeof pd[k].value === 'string' ? pd[k].value : JSON.stringify(pd[k].value)}</td>
+        {['what', 'where', 'when', 'who_detected', 'how_many', 'is', 'is_not'].map(k => <tr key={k}><td>{k}</td><td className="wrap">{show(pd[k].value)}</td>
           <td><Badge tone={pd[k].status === 'KNOWN' ? 'green' : 'slate'}>{pd[k].status}</Badge></td><td>{pd[k].evidence_ids.length}건</td></tr>)}
       </tbody></table></div>
       <p className="muted wrap mt">범위 미상 {pd.unknown_scope.length}건 · 원본 버전 {Object.entries(pd.effective_source_versions).map(([k, v]) => `${k} v${v}`).join(', ')} · {pd.note}</p></Card>}

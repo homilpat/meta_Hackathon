@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Badge, Card, Cite, Note, SectionTitle } from '../../components/ui'
+import { show as asText } from '../../labels'
 import type { Ctx, J, Tone } from '../../types'
 
 // Customer-document intake (spec v5.8 §23) inside the Agent chat. Every value shown comes from the server's draft;
@@ -102,6 +103,7 @@ export function IntakeCard({ ctx, intake }: { ctx: Ctx; intake: J }) {
       {d.egress?.files?.length > 0 && <p className="muted wrap">전송 방식: {d.egress.files.map((x: J) => `${x.name} ${x.sent === 'MASKED' ? '마스킹(값·이미지 제외)' : d.mode === 'LOCAL' ? '사내 모델' : '원문'}`).join(' · ')}{d.egress.masked_payload && ` · 전송 내용 sha256 ${d.egress.masked_payload.sha256.slice(0, 12)}…`}{d.egress.usage?.prompt_tokens != null && ` · 사용 토큰 입력 ${d.egress.usage.prompt_tokens} / 출력 ${d.egress.usage.completion_tokens ?? '-'}`}</p>}
       {d.egress?.mode === 'WHOLE' && <p className="muted wrap">읽기 방식: 전체 읽기{d.egress.auto ? ' (기본 정책: 한 번에 들어가는 문서는 전체 읽기)' : ''}</p>}
       {d.egress?.mode === 'HYBRID' && <p className="muted wrap">읽기 방식: 탐색 읽기 (서버 선별 + 목차 + AI 추가 요청){d.egress.auto ? ' · 문서가 한 번에 들어가지 않아 탐색 읽기로 전환' : ''}{d.egress.rounds?.slice(1).map((r: J) => r.asked?.length ? ` · AI가 추가로 요청한 부분: ${r.asked.map((x: string) => x.split(':')[1]).join(', ')}` : '').join('')}</p>}
+      {d.egress?.auto?.proposed_by === 'AI' && <p className="muted wrap">읽기 방식은 AI가 서버가 좁힌 후보({d.egress.auto.candidates.join(', ')}) 중에서 골랐습니다: {d.egress.auto.reason}</p>}
       {d.egress?.unread?.elements > 0 && <Note>문서 일부만 읽었습니다 ({d.egress.unread.of - d.egress.unread.elements}/{d.egress.unread.of} 요소).{d.egress.unread.missing?.length > 0 && ` 찾지 못한 항목: ${d.egress.unread.missing.map((k: string) => FIELD[k] ?? k).join(', ')}.`} <button className="citation" disabled={busy} onClick={() => run(async () => setView(await ctx.api(`/intakes/${id}/analyze?read=WHOLE`, 'POST', undefined, true)))}>전체 읽기로 다시 분석</button></Note>}
       {d.egress?.files?.filter((x: J) => x.not_sent_from).map((x: J) => <Note key={x.file_id}>{x.name}: 비용 한도로 {x.not_sent_from}부터 {x.not_sent}개 요소는 모델에 보내지 않았습니다 (원문 위치로 직접 확인)</Note>)}
       {d.documents?.length > 0 && <p className="muted">문서 분류: {d.documents.map((x: J) => `#${x.file_id} ${x.classes.join('+')}${x.needs_confirmation ? ' (확인 필요)' : ''}`).join(' · ')}</p>}
@@ -210,7 +212,7 @@ function InspectionXlsx({ ctx, intakeId, f, cases }: { ctx: Ctx; intakeId: numbe
     <table className="mt"><thead><tr><th>포함</th><th>행</th>{Object.keys(XFIELD).filter(k => v.mapping[k]).map(k => <th key={k}>{XFIELD[k]}</th>)}<th>확인 필요</th></tr></thead><tbody>
       {v.rows.map((x: J) => <tr key={x.row}><td><input type="checkbox" aria-label={`${x.row}행 포함`} checked={!!inc[x.row]} disabled={busy || x.issues.some((i: J) => i.level === 'BLOCK')} onChange={e => setInc({ ...inc, [x.row]: e.target.checked })}/></td>
         <td>{x.row}{x.hidden ? ' (숨김)' : ''}</td>
-        {Object.keys(XFIELD).filter(k => v.mapping[k]).map(k => <td key={k} title={`${x.cells[k]?.cell} 원본 ${JSON.stringify(x.cells[k]?.raw)} · 형식 ${x.cells[k]?.format}`}>{x.values[k] ?? <span className="muted">-</span>}</td>)}
+        {Object.keys(XFIELD).filter(k => v.mapping[k]).map(k => <td key={k} title={`${x.cells[k]?.cell} 원본 ${asText(x.cells[k]?.raw)} · 형식 ${x.cells[k]?.format}`}>{x.values[k] ?? <span className="muted">-</span>}</td>)}
         <td>{x.issues.map((i: J, n: number) => <div key={n}><Badge tone={LEVEL[i.level]}>{i.level}</Badge> <span className="muted">{i.cell} {i.message}</span></div>)}
           {!inc[x.row] && <input className="input" aria-label={`${x.row}행 제외 사유`} placeholder="제외 사유 (필수)" value={why[x.row] ?? ''} onChange={e => setWhy({ ...why, [x.row]: e.target.value })}/>}</td></tr>)}
     </tbody></table>

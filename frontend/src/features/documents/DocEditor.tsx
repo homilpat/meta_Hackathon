@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Badge, Card, Note, SectionTitle } from '../../components/ui'
+import { show } from '../../labels'
 import type { Ctx, J } from '../../types'
 
 const RESULT_TONE: Record<string, 'green' | 'amber' | 'red'> = { PASS: 'green', WARN: 'amber', BLOCK: 'red' }
@@ -8,7 +9,7 @@ function DiffList({ diff }: { diff: J[] }) {
   if (!diff.length) return <p className="muted">변경 없음</p>
   return <div className="stack">{diff.map((x: J) => <div key={x.claim_id + x.change} className="detail-row wrap">
     <span><Badge tone={x.change === 'REMOVED' ? 'red' : x.change === 'ADDED' ? 'green' : 'amber'}>{x.change}</Badge> {x.claim_id}</span>
-    <b className="wrap">{x.change === 'CHANGED' ? Object.entries(x.fields as Record<string, unknown[]>).map(([f, [a, b]]) => `${f}: ${JSON.stringify(a)} → ${JSON.stringify(b)}`).join(' · ')
+    <b className="wrap">{x.change === 'CHANGED' ? Object.entries(x.fields as Record<string, unknown[]>).map(([f, [a, b]]) => `${f}: ${show(a)} → ${show(b)}`).join(' · ')
       : (x.after ?? x.before)?.text}</b></div>)}</div>
 }
 

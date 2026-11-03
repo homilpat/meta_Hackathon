@@ -231,9 +231,31 @@ class SettingIn(BaseModel):
     reason: FreeText  # why the AI operations department changed it
 
 
+def apply(sessions: sessionmaker, name: str, raw: str, reason: str, actor) -> dict:
+    """The one way a setting changes (a person's POST /limits/{name}, or an approved AI-CFG-04 proposal): checked
+    by the limit's own rules, recorded append-only, then effective."""
+    from app.db import LimitSetting
+    from app.workflow import now
+
+    if name not in LIMITS:
+        raise HTTPException(404, "Unknown limit")
+    value = cast(name, str(raw))
+    if name == "ALLOWED_TIMEZONES":
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+        try:
+            [ZoneInfo(z) for z in str(value).split(",")]
+        except (ZoneInfoNotFoundError, ValueError):
+            raise HTTPException(422, "every zone must be an IANA name") from None
+    with sessions.begin() as session:
+        session.add(LimitSetting(name=name, value=str(value), reason=reason, actor_id=actor.id, created_at=now()))
+    OVERRIDES[name] = value
+    return next(x for x in table() if x["name"] == name)
+
+
 def make_limits_router(sessions: sessionmaker, current_user) -> APIRouter:
     from app.db import LimitSetting
-    from app.workflow import Actor, now
+    from app.workflow import Actor
 
     router = APIRouter()
     Who = Annotated[Actor, Depends(current_user)]
@@ -249,20 +271,6 @@ def make_limits_router(sessions: sessionmaker, current_user) -> APIRouter:
     def change(name: str, body: SettingIn, actor: Who) -> dict:
         if actor.role != ADMIN_ROLE:
             raise HTTPException(403, f"only {ADMIN_ROLE} (AI 운영 담당) changes operating limits")
-        if name not in LIMITS:
-            raise HTTPException(404, "Unknown limit")
-        value = cast(name, body.value)
-        if name == "ALLOWED_TIMEZONES":
-            from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-
-            try:
-                [ZoneInfo(z) for z in str(value).split(",")]
-            except (ZoneInfoNotFoundError, ValueError):
-                raise HTTPException(422, "every zone must be an IANA name") from None
-        with sessions.begin() as session:
-            session.add(LimitSetting(name=name, value=str(value), reason=body.reason, actor_id=actor.id,
-                                     created_at=now()))
-        OVERRIDES[name] = value
-        return {"limit": next(x for x in table() if x["name"] == name)}
+        return {"limit": apply(sessions, name, body.value, body.reason, actor)}
 
     return router

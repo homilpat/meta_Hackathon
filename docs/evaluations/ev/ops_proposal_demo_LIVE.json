@@ -1,0 +1,394 @@
+{
+ "run_mode": "LIVE",
+ "model": "muse-spark-1.3",
+ "runs_from": "loop_eval_LIVE_v2_2026-11-03T112722.json",
+ "runs": 40,
+ "statistics": {
+  "runs": 40,
+  "status": {
+   "VALIDATED": 35,
+   "LIMIT_EXCEEDED": 2,
+   "VALIDATION_FAILED": 2,
+   "JSON_ERROR": 1
+  },
+  "distributions": {
+   "repairs": {
+    "min": 0,
+    "median": 0,
+    "p90": 0,
+    "max": 0
+   },
+   "seconds": {
+    "min": 12.1,
+    "median": 30.1,
+    "p90": 37.3,
+    "max": 59.1
+   },
+   "tool_calls": {
+    "min": 3,
+    "median": 5,
+    "p90": 8,
+    "max": 10
+   },
+   "cost_usd": {
+    "min": 0.02138,
+    "median": 0.05856,
+    "p90": 0.08209,
+    "max": 0.09322
+   },
+   "rounds": {
+    "min": 3,
+    "median": 4,
+    "p90": 5,
+    "max": 5
+   }
+  },
+  "stopped_by_cap": {
+   "INVESTIGATION_MAX_REPAIRS": 0,
+   "INVESTIGATION_MAX_ROUNDS": 2,
+   "INVESTIGATION_MAX_TOOL_CALLS": 2,
+   "INVESTIGATION_DEADLINE_S": 0,
+   "INVESTIGATION_MAX_COST_USD": 0
+  },
+  "repair_outcomes": {
+   "needed_repair": 0,
+   "validated_after_repair": 0
+  }
+ },
+ "proposals": [
+  {
+   "proposal_id": 1,
+   "name": "INVESTIGATION_MAX_ROUNDS",
+   "current": "5",
+   "proposed": "6",
+   "scope": "GLOBAL",
+   "reason": "2 runs were stopped by INVESTIGATION_MAX_ROUNDS with median 4 and p90 and max at the cap of 5, showing the limit blocks completion.",
+   "comparison": {
+    "measure": "rounds",
+    "current": 5,
+    "proposed": 6,
+    "runs_compared": 40,
+    "would_cut": 0,
+    "would_cut_validated": 0,
+    "stopped_at_current_cap": 2,
+    "cost_of_cut_runs_usd": 0,
+    "note": "a run cut by a lower cap ends as LIMIT_EXCEEDED; a run stopped at the current cap may or may not succeed with more room"
+   },
+   "statistics": {
+    "runs": 40,
+    "status": {
+     "VALIDATED": 35,
+     "LIMIT_EXCEEDED": 2,
+     "VALIDATION_FAILED": 2,
+     "JSON_ERROR": 1
+    },
+    "distributions": {
+     "repairs": {
+      "min": 0,
+      "median": 0,
+      "p90": 0,
+      "max": 0
+     },
+     "seconds": {
+      "min": 12.1,
+      "median": 30.1,
+      "p90": 37.3,
+      "max": 59.1
+     },
+     "tool_calls": {
+      "min": 3,
+      "median": 5,
+      "p90": 8,
+      "max": 10
+     },
+     "cost_usd": {
+      "min": 0.02138,
+      "median": 0.05856,
+      "p90": 0.08209,
+      "max": 0.09322
+     },
+     "rounds": {
+      "min": 3,
+      "median": 4,
+      "p90": 5,
+      "max": 5
+     }
+    },
+    "stopped_by_cap": {
+     "INVESTIGATION_MAX_REPAIRS": 0,
+     "INVESTIGATION_MAX_ROUNDS": 2,
+     "INVESTIGATION_MAX_TOOL_CALLS": 2,
+     "INVESTIGATION_DEADLINE_S": 0,
+     "INVESTIGATION_MAX_COST_USD": 0
+    },
+    "repair_outcomes": {
+     "needed_repair": 0,
+     "validated_after_repair": 0
+    }
+   },
+   "status": "PROPOSED",
+   "issue": null,
+   "mode": "LIVE",
+   "model": "muse-spark-1.3",
+   "created_at": "2026-11-03T12:43:23.313208+00:00",
+   "decision": null,
+   "unit": "model calls per investigation run",
+   "live_value": "5"
+  },
+  {
+   "proposal_id": 2,
+   "name": "INVESTIGATION_MAX_TOOL_CALLS",
+   "current": "8",
+   "proposed": "10",
+   "scope": "GLOBAL",
+   "reason": "2 runs were stopped by INVESTIGATION_MAX_TOOL_CALLS with p90 at the cap of 8 and max of 10, showing the limit blocks completion.",
+   "comparison": {
+    "measure": "tool_calls",
+    "current": 8,
+    "proposed": 10,
+    "runs_compared": 40,
+    "would_cut": 0,
+    "would_cut_validated": 0,
+    "stopped_at_current_cap": 2,
+    "cost_of_cut_runs_usd": 0,
+    "note": "a run cut by a lower cap ends as LIMIT_EXCEEDED; a run stopped at the current cap may or may not succeed with more room"
+   },
+   "statistics": {
+    "runs": 40,
+    "status": {
+     "VALIDATED": 35,
+     "LIMIT_EXCEEDED": 2,
+     "VALIDATION_FAILED": 2,
+     "JSON_ERROR": 1
+    },
+    "distributions": {
+     "repairs": {
+      "min": 0,
+      "median": 0,
+      "p90": 0,
+      "max": 0
+     },
+     "seconds": {
+      "min": 12.1,
+      "median": 30.1,
+      "p90": 37.3,
+      "max": 59.1
+     },
+     "tool_calls": {
+      "min": 3,
+      "median": 5,
+      "p90": 8,
+      "max": 10
+     },
+     "cost_usd": {
+      "min": 0.02138,
+      "median": 0.05856,
+      "p90": 0.08209,
+      "max": 0.09322
+     },
+     "rounds": {
+      "min": 3,
+      "median": 4,
+      "p90": 5,
+      "max": 5
+     }
+    },
+    "stopped_by_cap": {
+     "INVESTIGATION_MAX_REPAIRS": 0,
+     "INVESTIGATION_MAX_ROUNDS": 2,
+     "INVESTIGATION_MAX_TOOL_CALLS": 2,
+     "INVESTIGATION_DEADLINE_S": 0,
+     "INVESTIGATION_MAX_COST_USD": 0
+    },
+    "repair_outcomes": {
+     "needed_repair": 0,
+     "validated_after_repair": 0
+    }
+   },
+   "status": "PROPOSED",
+   "issue": null,
+   "mode": "LIVE",
+   "model": "muse-spark-1.3",
+   "created_at": "2026-11-03T12:43:23.314865+00:00",
+   "decision": null,
+   "unit": "tool calls per investigation run",
+   "live_value": "8"
+  },
+  {
+   "proposal_id": 3,
+   "name": "INVESTIGATION_DEADLINE_S",
+   "current": "300",
+   "proposed": "120",
+   "scope": "GLOBAL",
+   "reason": "No runs were stopped by INVESTIGATION_DEADLINE_S with p90 at 37.3s and max at 59.1s far below the 300s cap, so the cap can be lowered to bound time.",
+   "comparison": {
+    "measure": "seconds",
+    "current": 300,
+    "proposed": 120,
+    "runs_compared": 40,
+    "would_cut": 0,
+    "would_cut_validated": 0,
+    "stopped_at_current_cap": 0,
+    "cost_of_cut_runs_usd": 0,
+    "note": "a run cut by a lower cap ends as LIMIT_EXCEEDED; a run stopped at the current cap may or may not succeed with more room"
+   },
+   "statistics": {
+    "runs": 40,
+    "status": {
+     "VALIDATED": 35,
+     "LIMIT_EXCEEDED": 2,
+     "VALIDATION_FAILED": 2,
+     "JSON_ERROR": 1
+    },
+    "distributions": {
+     "repairs": {
+      "min": 0,
+      "median": 0,
+      "p90": 0,
+      "max": 0
+     },
+     "seconds": {
+      "min": 12.1,
+      "median": 30.1,
+      "p90": 37.3,
+      "max": 59.1
+     },
+     "tool_calls": {
+      "min": 3,
+      "median": 5,
+      "p90": 8,
+      "max": 10
+     },
+     "cost_usd": {
+      "min": 0.02138,
+      "median": 0.05856,
+      "p90": 0.08209,
+      "max": 0.09322
+     },
+     "rounds": {
+      "min": 3,
+      "median": 4,
+      "p90": 5,
+      "max": 5
+     }
+    },
+    "stopped_by_cap": {
+     "INVESTIGATION_MAX_REPAIRS": 0,
+     "INVESTIGATION_MAX_ROUNDS": 2,
+     "INVESTIGATION_MAX_TOOL_CALLS": 2,
+     "INVESTIGATION_DEADLINE_S": 0,
+     "INVESTIGATION_MAX_COST_USD": 0
+    },
+    "repair_outcomes": {
+     "needed_repair": 0,
+     "validated_after_repair": 0
+    }
+   },
+   "status": "PROPOSED",
+   "issue": null,
+   "mode": "LIVE",
+   "model": "muse-spark-1.3",
+   "created_at": "2026-11-03T12:43:23.314865+00:00",
+   "decision": null,
+   "unit": "seconds per investigation run",
+   "live_value": "300"
+  }
+ ],
+ "approved": {
+  "proposal_id": 1,
+  "name": "INVESTIGATION_MAX_ROUNDS",
+  "current": "5",
+  "proposed": "6",
+  "scope": "GLOBAL",
+  "reason": "2 runs were stopped by INVESTIGATION_MAX_ROUNDS with median 4 and p90 and max at the cap of 5, showing the limit blocks completion.",
+  "comparison": {
+   "measure": "rounds",
+   "current": 5,
+   "proposed": 6,
+   "runs_compared": 40,
+   "would_cut": 0,
+   "would_cut_validated": 0,
+   "stopped_at_current_cap": 2,
+   "cost_of_cut_runs_usd": 0,
+   "note": "a run cut by a lower cap ends as LIMIT_EXCEEDED; a run stopped at the current cap may or may not succeed with more room"
+  },
+  "statistics": {
+   "runs": 40,
+   "status": {
+    "VALIDATED": 35,
+    "LIMIT_EXCEEDED": 2,
+    "VALIDATION_FAILED": 2,
+    "JSON_ERROR": 1
+   },
+   "distributions": {
+    "repairs": {
+     "min": 0,
+     "median": 0,
+     "p90": 0,
+     "max": 0
+    },
+    "seconds": {
+     "min": 12.1,
+     "median": 30.1,
+     "p90": 37.3,
+     "max": 59.1
+    },
+    "tool_calls": {
+     "min": 3,
+     "median": 5,
+     "p90": 8,
+     "max": 10
+    },
+    "cost_usd": {
+     "min": 0.02138,
+     "median": 0.05856,
+     "p90": 0.08209,
+     "max": 0.09322
+    },
+    "rounds": {
+     "min": 3,
+     "median": 4,
+     "p90": 5,
+     "max": 5
+    }
+   },
+   "stopped_by_cap": {
+    "INVESTIGATION_MAX_REPAIRS": 0,
+    "INVESTIGATION_MAX_ROUNDS": 2,
+    "INVESTIGATION_MAX_TOOL_CALLS": 2,
+    "INVESTIGATION_DEADLINE_S": 0,
+    "INVESTIGATION_MAX_COST_USD": 0
+   },
+   "repair_outcomes": {
+    "needed_repair": 0,
+    "validated_after_repair": 0
+   }
+  },
+  "status": "APPROVED",
+  "issue": null,
+  "mode": "LIVE",
+  "model": "muse-spark-1.3",
+  "created_at": "2026-11-03T12:43:23.313208+00:00",
+  "decision": {
+   "by": "gina",
+   "reason": "데모: 최근 실행 기록 근거로 승인",
+   "at": "2026-11-03T12:43:23.332312+00:00"
+  },
+  "unit": "model calls per investigation run",
+  "live_value": "6"
+ },
+ "cost_usd": null,
+ "run": {
+  "code_sha": "1f55918afb70384dc6368ff63d043a72696e39ab+dirty",
+  "parser_version": "docparse-4",
+  "evaluator": "scripts.ops_proposal_demo",
+  "evaluator_sha256": "4c6228980929c36d",
+  "sampling": {
+   "temperature": 0.0,
+   "seed": 1
+  },
+  "python": "3.12.8",
+  "command": "python -m scripts.ops_proposal_demo --live",
+  "at": "2026-11-03T12:43:23+00:00"
+ }
+}

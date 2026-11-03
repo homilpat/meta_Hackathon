@@ -256,6 +256,41 @@ class InspectionForm(Base):
     edits: Mapped[int | None] = mapped_column(Integer, nullable=True)  # fields the person changed from the proposal
 
 
+class LimitProposal(Base):
+    """One AI-proposed change of an operating limit (spec v5.14 AI-CFG-04) with the statistics it rests on and the
+    server's replay of it on recorded runs. Append-only; a person's decision is a LimitProposalDecision."""
+
+    __tablename__ = "limit_proposals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(60))
+    current_value: Mapped[str] = mapped_column(Text)
+    proposed_value: Mapped[str] = mapped_column(Text)
+    scope: Mapped[str] = mapped_column(String(20))
+    reason: Mapped[str] = mapped_column(Text)
+    statistics: Mapped[dict] = mapped_column(JSON)
+    snapshot_sha: Mapped[str] = mapped_column(String(16))
+    comparison: Mapped[dict] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String(20))  # PROPOSED | INVALID
+    issue: Mapped[str | None] = mapped_column(Text, nullable=True)
+    mode: Mapped[str] = mapped_column(String(20))
+    model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    usage: Mapped[dict] = mapped_column(JSON)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class LimitProposalDecision(Base):
+    __tablename__ = "limit_proposal_decisions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    proposal_id: Mapped[int] = mapped_column(ForeignKey("limit_proposals.id"), index=True)
+    decision: Mapped[str] = mapped_column(String(10))  # APPROVED | REJECTED
+    reason: Mapped[str] = mapped_column(Text)
+    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
 class CustomerTemplate(Base):
     """A customer's blank DOCX form (§30.1 DOC-OUT-01): the file, its hash and the slots the server found.
     Append-only: a changed file is a new version of the same customer and name."""
@@ -1327,7 +1362,7 @@ class LimitSetting(Base):
 
 
 # Audit rows are append-only at the database level, not just by convention.
-APPEND_ONLY = ("customer_templates", "customer_template_proposals", "customer_template_mappings", "customer_template_exports", "input_requests", "input_events", "inspection_forms", "inspection_mapping_proposals", "calculations", "model_responses", "approval_events", "workflow_events", "doc_comments", "audit_chain",
+APPEND_ONLY = ("limit_proposals", "limit_proposal_decisions", "customer_templates", "customer_template_proposals", "customer_template_mappings", "customer_template_exports", "input_requests", "input_events", "inspection_forms", "inspection_mapping_proposals", "calculations", "model_responses", "approval_events", "workflow_events", "doc_comments", "audit_chain",
                "workflow_policies", "evidence_quality", "process_contexts", "affected_objects",
                "triage_assessments", "team_events", "actions", "action_events",
                "cause_hypotheses", "why_links", "experiments", "causal_decisions",

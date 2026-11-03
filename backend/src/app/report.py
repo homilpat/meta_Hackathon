@@ -29,7 +29,8 @@ class Calc(BaseModel):
 
 class Finding(BaseModel):
     model_config = ConfigDict(extra="forbid")  # no root_cause / source / url fields can sneak in
-    classification: Literal["OBSERVED", "CALCULATED", "HYPOTHESIS", "UNKNOWN"]
+    # REPORTED: what the customer states (CUSTOMER_REPORTED evidence); never an internal OBSERVED fact (§28)
+    classification: Literal["OBSERVED", "CALCULATED", "HYPOTHESIS", "UNKNOWN", "REPORTED"]
     text: str = Field(min_length=1, max_length=600)
     evidence_ids: list[str] = []
     value: float | None = None
@@ -81,6 +82,15 @@ def _expected(calc: Calc, finding: Finding, records: dict[str, dict]) -> float:
     return sum(values) if calc.op == "sum" else sum(values) / len(values)
 
 
+def customer_reported(session: Session, case_id: str) -> set[str]:
+    from sqlalchemy import select
+
+    from app.db import Evidence
+
+    return set(session.scalars(select(Evidence.evidence_id).where(Evidence.case_id == case_id,
+                                                                  Evidence.validity == "CUSTOMER_REPORTED")))
+
+
 def validate_report(session: Session, case_id: str, report: InvestigationReport,
                     precedents: list[dict] | None = None) -> list[str]:
     """Return every rule violation; an empty list means the report may be used.
@@ -89,6 +99,8 @@ def validate_report(session: Session, case_id: str, report: InvestigationReport,
     from app.history import recommends_failed_action
     allowed = {p["historical_case_id"] for p in precedents or []}
     records = {i["ev"]: i["rec"] for i in _evidence(session, case_id)} | derived_records(session, case_id)
+    reported = customer_reported(session, case_id)  # citable, but only as what the customer states
+    known = set(records) | reported
     errors: list[str] = []
     from app.calculations import CalcError, resolve
 
@@ -103,9 +115,14 @@ def validate_report(session: Session, case_id: str, report: InvestigationReport,
             f.value, f.unit, f.calc = c["value"], c["unit"], None
             f.evidence_ids = c["input_evidence_ids"] + [i for i in c["denominator_evidence_ids"]
                                                         if i not in c["input_evidence_ids"]]
-        if missing := sorted(set(f.evidence_ids) - set(records)):
+        if missing := sorted(set(f.evidence_ids) - known):
             errors.append(f"{tag}: unknown evidence_id {missing}")
             continue
+        if f.classification == "REPORTED" and (not f.evidence_ids or set(f.evidence_ids) - reported):
+            errors.append(f"{tag}: REPORTED cites only customer-reported evidence "
+                          f"({sorted(set(f.evidence_ids) - reported) or 'none given'})")
+        if f.classification in ("OBSERVED", "CALCULATED") and (cr := sorted(set(f.evidence_ids) & reported)):
+            errors.append(f"{tag}: {cr} are customer statements; classify them REPORTED, not {f.classification}")
         if f.classification in ("OBSERVED", "CALCULATED") and not f.evidence_ids:
             errors.append(f"{tag}: {f.classification} needs evidence_ids")
         if f.value is not None and not f.evidence_ids:
@@ -124,18 +141,18 @@ def validate_report(session: Session, case_id: str, report: InvestigationReport,
                     errors.append(f"{tag}: {exc}")
         elif f.calc is not None:
             errors.append(f"{tag}: calc only allowed on CALCULATED")
-        errors += _text_errors(tag, f.text, records)
+        errors += _text_errors(tag, f.text, known)
         if f.classification in ("OBSERVED", "CALCULATED") and PRECEDENT_REF.search(f.text):
             errors.append(f"{tag}: a precedent is not evidence about this case; cite it in a next check")
-    errors += _text_errors("summary", report.summary, records)
+    errors += _text_errors("summary", report.summary, known)
     for n, w in enumerate(report.data_warnings, 1):  # a quoted instruction is data: only its ids are checked
-        if missing := sorted(set(w.evidence_ids) - set(records)):
+        if missing := sorted(set(w.evidence_ids) - known):
             errors.append(f"data warning {n}: unknown evidence_id {missing}")
     for n, c in enumerate(report.next_evidence_requests, 1):
         tag = f"next check {n}"
         if not c.evidence_ids:  # a recommendation rests on this case's data; precedents alone only support it
             errors.append(f"{tag}: needs evidence_ids from this case")
-        if missing := sorted(set(c.evidence_ids) - set(records)):
+        if missing := sorted(set(c.evidence_ids) - known):
             errors.append(f"{tag}: unknown evidence_id {missing}")
         texts = f"{c.check} {c.reason}"
         cited = set(c.precedent_ids) | set(PRECEDENT_REF.findall(texts))
@@ -143,7 +160,7 @@ def validate_report(session: Session, case_id: str, report: InvestigationReport,
             errors.append(f"{tag}: precedent {bad} was not retrieved as eligible for this case")
         if hit := recommends_failed_action(texts, precedents or []):
             errors.append(f"{tag}: recommends {hit}, which failed before")
-        errors += _text_errors(tag, texts, records)
+        errors += _text_errors(tag, texts, known)
     for t in [report.summary, *(f.text for f in report.findings)]:
         if bad := sorted(set(PRECEDENT_REF.findall(t)) - allowed):
             errors.append(f"precedent {bad} cited but not eligible/retrieved")
@@ -199,7 +216,8 @@ def asserts_certainty(text: str) -> bool:
     return False
 
 
-def _text_errors(tag: str, text: str, records: dict[str, dict]) -> list[str]:
+def _text_errors(tag: str, text: str, known: set[str]) -> list[str]:
+    """known: every evidence id the report may name (internal records and customer statements)."""
     errors = []
     if asserts_certainty(text):
         errors.append(f"{tag}: causal certainty is not allowed")
@@ -207,5 +225,5 @@ def _text_errors(tag: str, text: str, records: dict[str, dict]) -> list[str]:
         errors.append(f"{tag}: SHAP attribution is not causal evidence")
     if URL.search(text):
         errors.append(f"{tag}: external source reference is not allowed")
-    errors += [f"{tag}: text cites nonexistent {ref}" for ref in sorted(set(EVIDENCE_REF.findall(text)) - set(records))]
+    errors += [f"{tag}: text cites nonexistent {ref}" for ref in sorted(set(EVIDENCE_REF.findall(text)) - known)]
     return errors

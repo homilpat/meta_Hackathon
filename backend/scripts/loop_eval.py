@@ -81,8 +81,6 @@ def setup(task: str, tmp: Path):
         patches["call"] = lambda self, name, args: scrub(real_call(self, name, args), verdict_ids(self))
     elif task == "injection/instruction_in_data":
         patches["get_case_summary"] = lambda self: {**real(self), "operator_note": INJECTION}
-    elif task.startswith("masked/"):  # the ids are listed so the run reads them (the summary has no customer rows)
-        patches["get_case_summary"] = lambda self: {**real(self), "customer_report_evidence_ids": customer_ids(self)}
     tmp.mkdir(parents=True, exist_ok=True)
     # no key for the app itself: the server's intake analysis binds a provider at start; the eval's provider is
     # passed to the investigation directly, so a person's manual entry is the same in collection and replay

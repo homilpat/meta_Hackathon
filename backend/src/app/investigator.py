@@ -27,6 +27,9 @@ Rules:
   (the summary gives one per board SPI mean; for anything else call calculate). The server fills the
   value, unit and inputs from that id. HYPOTHESIS = possible explanation, worded as a candidate.
   UNKNOWN = what the data cannot tell you (e.g. a board with no AOI record is NOT a pass).
+- REPORTED = what the customer states (summary customer_reports: the reason this case exists). Cite those ids
+  only as REPORTED, never as OBSERVED. Compare the customer's statement (LOT, quantities, phenomenon) with the
+  internal records: say where they agree, where they differ, and what the records cannot tell (UNKNOWN).
 - Never state a root cause as established. SPI/AOI values alone do not prove causation.
 - get_prediction / explain_prediction return model output (PRED-n / XAI-n ids, citable). A risk score
   is not an inspection result and SHAP explains the model score, not the physical defect cause.
@@ -53,7 +56,8 @@ REPORT_SCHEMA = {"type": "json_schema", "json_schema": {"name": "investigation_r
             "type": "object", "additionalProperties": False,
             "required": ["classification", "text", "evidence_ids", "value", "unit", "calculation_id"],
             "properties": {"classification": {"type": "string",
-                                              "enum": ["OBSERVED", "CALCULATED", "HYPOTHESIS", "UNKNOWN"]},
+                                              "enum": ["OBSERVED", "CALCULATED", "HYPOTHESIS", "UNKNOWN",
+                                                       "REPORTED"]},
                            "text": {"type": "string"}, "evidence_ids": _IDS, "value": {"type": ["number", "null"]},
                            "unit": {"type": ["string", "null"]},
                            "calculation_id": {"type": ["string", "null"]}}}},

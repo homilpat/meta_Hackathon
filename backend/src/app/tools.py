@@ -114,7 +114,7 @@ class EvidenceTools:
         protected = [(v, e) for v, e, _ in rows if (e.data_origin, e.sensitivity) != APPROVED]
         if protected and (self.masker is None or any(e.entity_type in SUMMARY_TYPES for _, e in protected)):
             raise ToolDenied("denied: source not approved for external processing")
-        self.protected = {v.evidence_id for v, _ in protected}
+        self.protected = self.protected | {v.evidence_id for v, _ in protected}
         return [self._item(v, e, a) for v, e, a in rows]
 
     def _item(self, v, e, a) -> dict:
@@ -170,7 +170,15 @@ class EvidenceTools:
         return {"aoi_evidence_ids": [i["ev"] for i in aoi.values()], "lots": lots, "aoi_fail": fails,
                 "no_aoi_record": [["/".join(b["key"]), b["ev"]] for b in ncr._uninspected(items, aoi)],
                 "data_issues": dict(issues),
-                "legend": "[value, evidence_id]; model = [PRED id, score, threshold] (model output, not inspection)"}
+                "customer_reports": self._customer_reports(),
+                "legend": "[value, evidence_id]; model = [PRED id, score, threshold] (model output, not inspection); "
+                          "customer_reports = what the customer states (REPORTED), not internal records"}
+
+    def _customer_reports(self) -> list[list]:
+        """[field, value, evidence_id] per value a person confirmed from the customer's documents (masked like any
+        protected row)."""
+        return [[r["record"].get("field"), r["record"].get("value"), r["evidence_id"]]
+                for r in self._rows(SourceEvent.entity_type == "CUSTOMER_REPORT")]
 
     def get_case_context(self) -> dict:
         case = self.session.get(QualityCase, self.case_id)

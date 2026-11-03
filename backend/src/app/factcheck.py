@@ -154,7 +154,7 @@ def validate(session: Session, case_id: str, claims: list[dict], role: str | Non
         except ValueError as exc:
             issues.append({"claim_id": cid, "code": "CLAIM_RULE", "severity": "BLOCK", "message": str(exc)})
             continue
-        issues += [_issue(cid, "TEXT_RULE", e.split(": ", 1)[1]) for e in _text_errors(cid, text, records)]
+        issues += [_issue(cid, "TEXT_RULE", e.split(": ", 1)[1]) for e in _text_errors(cid, text, set(records))]
         if INJECTION.search(text):
             issues.append(_issue(cid, "INSTRUCTION_IN_TEXT", "claim text contains an instruction to the system"))
         named = set(LOT.findall(text))

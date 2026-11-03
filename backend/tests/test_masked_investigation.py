@@ -36,7 +36,7 @@ class Scripted:
         assert re.fullmatch(r"[\[\]TND0-9-]+", token), token
         report = {"summary": "Customer-reported LOT reviewed.", "open_questions": ["Internal data for this LOT?"],
                   "next_evidence_requests": [], "data_warnings": [],
-                  "findings": [{"classification": "OBSERVED", "text": f"The customer reports LOT {token}.",
+                  "findings": [{"classification": "REPORTED", "text": f"The customer reports LOT {token}.",
                                 "evidence_ids": self.ids[:1], "value": None, "unit": None, "calculation_id": None}]}
         return {"message": {"content": json.dumps(report)}, "usage": {}}
 
@@ -73,6 +73,8 @@ def test_the_model_sees_tokens_and_the_stored_report_has_the_values(protected_ca
     with Session(c.app.state.engine) as s:
         run = investigator.investigate(s, case, "alice", p)
         stored = json.loads(run.report_json)
+        errors = json.dumps(run.validation_errors or [])
+    assert "customer statements" not in errors and "REPORTED cites only" not in errors  # REPORTED, as it should be
     assert not any(SECRET_LOT in m for m in p.seen)  # nothing protected left the server
     assert "tokens like [T3]" in p.seen[0]  # the model is told what the tokens are
     assert SECRET_LOT in stored["findings"][0]["text"]  # mapped back on the server

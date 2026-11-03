@@ -97,7 +97,7 @@ def test_every_value_is_kept_only_as_far_as_its_source_supports_it(tmp_path):
     assert [x["file_id"] for x in d["documents"]] == [pdf_id, docx_id]  # an unknown file id is dropped
     assert d["links"] == [{"element_id": "pdf:p1:img1", "text": "U7 핀 사진, 캡션 Fig. 1과 현상 문단에 연결",
                            "related_element_ids": ["pdf:p1:l16", "pdf:p1:l5"], "ambiguous": False,
-                           "kind": "AI_OBSERVATION"}]
+                           "kind": "AI_OBSERVATION", "place": "1쪽 그림1"}]
     assert [x["element_id"] for x in d["flags"]] == ["pdf:p1:l16"]  # T08: the caption's instruction is flagged
     sent = p.seen[0]
     assert sent["response_format"]["json_schema"]["name"] == "intake_extract"

@@ -83,7 +83,8 @@ def sheet_cells(ws, t: int, prefix: str, budget: "Budget") -> list[dict]:
             if c.value is None:
                 continue
             span, rows = spans.get((c.row, c.column), (1, 1))
-            out.append({"id": f"{prefix}{c.coordinate}", "kind": "cell", "table": t, "sheet": ws.title, "row": c.row,
+            out.append({"id": f"{prefix}{c.coordinate}", "place": f"{ws.title} 시트 {c.coordinate} 셀", "kind": "cell",
+                        "table": t, "sheet": ws.title, "row": c.row,
                         "col": c.column, "span": span, "row_span": rows, "text": cell_text(c.value)})
     return out
 
@@ -146,7 +147,8 @@ def parse_csv(data: bytes, budget: "Budget | None" = None) -> tuple[list[dict], 
     for r, row in enumerate(csv.reader(io.StringIO(text), dialect), 1):
         if budget.spent(f"row {r}"):
             break
-        elements += [{"id": f"csv:r{r}:c{c}", "kind": "cell", "table": 1, "row": r, "col": c, "span": 1,
+        elements += [{"id": f"csv:r{r}:c{c}", "place": f"{r}행 {c}열", "kind": "cell", "table": 1, "row": r, "col": c,
+                      "span": 1,
                       "text": v.strip()} for c, v in enumerate(row, 1) if v.strip()]
     return elements, {"text": "NONE", "tables": "OK" if elements else "NONE", "images": "NONE", "charts": "NONE",
                       "scan": "NONE", "render": "NOT_SUPPORTED", "encoding": enc, **budget.report()}, {}
@@ -209,7 +211,8 @@ def parse_pdf(data: bytes, budget: "Budget | None" = None) -> tuple[list[dict], 
             break
         lines = [x.strip() for x in (page.extract_text() or "").splitlines() if x.strip()]
         for i, line in enumerate(lines, 1):
-            elements.append({"id": f"pdf:p{n}:l{i}", "kind": "text", "page": n, "text": line})
+            elements.append({"id": f"pdf:p{n}:l{i}", "place": f"{n}쪽 {i}번째 줄", "kind": "text", "page": n,
+                             "text": line})
         captions = [f"pdf:p{n}:l{i}" for i, line in enumerate(lines, 1) if CAPTION.match(line)]
         for t, table in enumerate(tables_of(chunks(page)), 1):
             tables += 1
@@ -217,19 +220,21 @@ def parse_pdf(data: bytes, budget: "Budget | None" = None) -> tuple[list[dict], 
             for r, row in enumerate(table, 1):
                 for x, text in row:
                     c = min(range(len(cols)), key=lambda k: abs(cols[k] - x)) + 1
-                    elements.append({"id": f"pdf:p{n}:t{t}:r{r}:c{c}", "kind": "cell", "page": n, "table": t,
+                    elements.append({"id": f"pdf:p{n}:t{t}:r{r}:c{c}", "place": f"{n}쪽 표{t} {r}행 {c}열",
+                                     "kind": "cell", "page": n, "table": t,
                                      "row": r, "col": c, "span": 1, "text": text, "rebuilt": True})
         images = list(page.images)
         if not lines and images:  # no text layer: a scan, readable only through a vision path
             scans += 1
-            elements.append({"id": f"pdf:p{n}:scan", "kind": "scan_page", "page": n, "text": "",
+            elements.append({"id": f"pdf:p{n}:scan", "place": f"{n}쪽 스캔", "kind": "scan_page", "page": n, "text": "",
                              "status": "NEEDS_VISION"})
             blobs[f"pdf:p{n}:scan"] = images[0].data  # the scan itself: only a vision path can read it
             continue
         for i, img in enumerate(images, 1):
             eid = f"pdf:p{n}:img{i}"
             blobs[eid] = img.data
-            elements.append({"id": eid, "kind": "image", "page": n, "sha256": sha(img.data), "text": "",
+            elements.append({"id": eid, "place": f"{n}쪽 그림{i}", "kind": "image", "page": n, "sha256": sha(img.data),
+                             "text": "",
                              # one image and one caption on a page link; anything else is left for a person
                              "caption_id": captions[0] if len(images) == 1 and len(captions) == 1 else None,
                              "caption_candidates": captions if not (len(images) == 1 and len(captions) == 1) else []})
@@ -401,7 +406,7 @@ def parse_docx(data: bytes) -> tuple[list[dict], dict, dict[str, bytes]]:
             el["caption_id"] = pid if text and CAPTION.match(text) else None
         pending.clear()
         if text:
-            el = {"id": pid, "kind": "text", "text": text}
+            el = {"id": pid, "place": f"{counts['p']}번째 문단", "kind": "text", "text": text}
             if (level := heading_level(p)) is not None:
                 el["heading"] = level
             elements.append(el)
@@ -411,14 +416,14 @@ def parse_docx(data: bytes) -> tuple[list[dict], dict, dict[str, bytes]]:
                 counts["img"] += 1
                 eid, b = f"docx:img{counts['img']}", z.read(f"word/{target}")
                 blobs[eid] = b
-                el = {"id": eid, "kind": "image", "sha256": sha(b), "after": pid, "text": ""}
+                el = {"id": eid, "place": f"그림{counts['img']}", "kind": "image", "sha256": sha(b), "after": pid, "text": ""}
                 elements.append(el)
                 pending.append(el)
         for ch in p.iter(w("c:chart")):
             target = rels.get(ch.get(w("r:id")))
             if target and f"word/{target}" in z.namelist():
                 counts["chart"] += 1
-                el = {"id": f"docx:chart{counts['chart']}", "kind": "chart", "after": pid,
+                el = {"id": f"docx:chart{counts['chart']}", "place": f"차트{counts['chart']}", "kind": "chart", "after": pid,
                       **chart_data(z, f"word/{target}")}
                 el["text"] = " ".join([el["title"] or ""] + [f"{s['name']}: " + ", ".join(
                     f"{c} {v:g}" for c, v in zip(s["categories"], s["values"], strict=False)) for s in el["series"]])
@@ -436,7 +441,8 @@ def parse_docx(data: bytes) -> tuple[list[dict], dict, dict[str, bytes]]:
                     span_el = tc.find("w:tcPr/w:gridSpan", NS)
                     vm = tc.find("w:tcPr/w:vMerge", NS)
                     span = int(span_el.get(w("w:val"))) if span_el is not None else 1
-                    elements.append({"id": f"docx:t{counts['t']}:r{r}:c{col}", "kind": "cell", "table": counts["t"],
+                    elements.append({"id": f"docx:t{counts['t']}:r{r}:c{col}", "place": f"표{counts['t']} {r}행 {col}열",
+                                     "kind": "cell", "table": counts["t"],
                                      "row": r, "col": col, "span": span, "text": text_of(tc),
                                      "vmerge": None if vm is None else (vm.get(w("w:val")) or "continue")})
                     col += span

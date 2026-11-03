@@ -202,6 +202,10 @@ def _latest(session: Session, case_id: str, doc_type: str = "NCR") -> DocumentVe
         .order_by(DocumentVersion.version.desc()).limit(1))
 
 
+STATE_WORDS = {"DRAFT": "초안", "IN_REVIEW": "검토 중", "APPROVED": "승인됨", "REJECTED": "반려됨",
+               "SUPERSEDED": "새 버전으로 대체됨"}  # a lock reason is read on screen (user 2026-11-04)
+
+
 def _based_on(session: Session, case_id: str, doc_type: str, approved: bool = True) -> list[str]:
     """The upstream chain a document builds on. Drafts may be written ahead (e.g. all sections from one
     AI run); review and approval need every upstream document APPROVED, so 8D steps cannot be skipped."""
@@ -209,9 +213,9 @@ def _based_on(session: Session, case_id: str, doc_type: str, approved: bool = Tr
     while t := PREREQ.get(t):
         up = _latest(session, case_id, t)
         if up is None or up.status in ("REJECTED", "SUPERSEDED") or (approved and up.status != "APPROVED"):
-            need = "APPROVED" if approved else "a live draft"
-            raise HTTPException(409, f"{doc_type} needs the latest {t} to be {need} "
-                                     f"(is {up.status if up else 'missing'})")
+            need = "승인되어야" if approved else "초안이 있어야"
+            now = STATE_WORDS.get(up.status, up.status) if up else "없음"
+            raise HTTPException(409, f"{doc_type}: 앞 단계 {t}이(가) 먼저 {need} 합니다 (지금 {now})")
         chain.append(f"{t} v{up.version}")
     return chain[::-1]
 

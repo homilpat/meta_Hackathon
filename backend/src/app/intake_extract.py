@@ -38,7 +38,8 @@ Return ONLY the JSON.
   exactly from those elements. One entry per distinct value: when documents disagree give each value, never merge
   or correct them. Leave a field out when no document states it. Compute nothing (no rates, no totals).
 - links: what each image or chart shows in relation to the text (part, LOT, phenomenon, caption), with the element
-  ids it relies on; ambiguous when unclear. Describe only what is visible; you do not detect, classify or measure
+  ids it relies on; ambiguous when unclear. Write the text in plain Korean for a quality engineer (keep part numbers,
+  LOT and codes as written). Describe only what is visible; you do not detect, classify or measure
   defects, and a chart picture's unreadable numbers stay unknown.
 - transcriptions: for each scan_page element you were shown as an image, the text you can read on it (exactly
   as written; leave out what you cannot read). Values from a scan cite the scan element and an excerpt of your
@@ -445,7 +446,8 @@ def draft(raw: dict | None, files: list[dict]) -> dict:
         value = str(item["value"]).strip()
         problems = [p for s in item.get("sources") or [] if (p := check_source(s, elements))]
         good = [{"file_id": elements[s["element_id"]]["file_id"], "element_id": s["element_id"],
-                 "excerpt": s["excerpt"], "page": elements[s["element_id"]].get("page")}
+                 "excerpt": s["excerpt"], "page": elements[s["element_id"]].get("page"),
+                 "place": elements[s["element_id"]].get("place")}
                 for s in item.get("sources") or [] if not check_source(s, elements)]
         excerpt_numbers = set(NUMBER.findall(" ".join(s["excerpt"] for s in good)))
         if missing := [n for n in NUMBER.findall(value) if n not in excerpt_numbers]:
@@ -472,7 +474,7 @@ def draft(raw: dict | None, files: list[dict]) -> dict:
         notes.append("검사 모수가 확인되지 않아 불량률을 계산하지 않습니다.")
     if fields["customer_cause_claim"]["status"] != "MISSING":
         notes.append("고객의 원인 추정은 가설(HYPOTHESIS)이며 내부 확인 사실이나 확정 원인이 아닙니다.")
-    links = [{**lk, "kind": "AI_OBSERVATION",
+    links = [{**lk, "kind": "AI_OBSERVATION", "place": elements[lk["element_id"]].get("place"),
               "related_element_ids": [r for r in lk.get("related_element_ids", []) if r in elements]}
              for lk in (raw or {}).get("links", []) if lk.get("element_id") in elements]
     known_files = {f["file_id"] for f in files}
@@ -494,7 +496,8 @@ def apply_edits(fields: dict, changes: list[dict], elements: dict[str, dict], ac
         src = {"element_id": ch.get("element_id"), "excerpt": ch.get("excerpt")} if ch.get("element_id") else None
         held = src is not None and check_source(src, elements) is None
         out[ch["field"]] = {**out[ch["field"]], "status": "USER_SET", "value": ch.get("value"),
-                            "candidates": [], "sources": [{**src, "file_id": elements[src["element_id"]]["file_id"]}]
+                            "candidates": [], "sources": [{**src, "file_id": elements[src["element_id"]]["file_id"],
+                                                           "place": elements[src["element_id"]].get("place")}]
                             if held else [],
                             "edit": {"by": actor, "at": at, "reason": ch["reason"],
                                      "source_check": "원문 근거 확인" if held else "원문 근거 없음 (사용자 입력)"}}

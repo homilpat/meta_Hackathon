@@ -24,7 +24,9 @@ export const toBase64 = (f: File) => new Promise<string>((ok, bad) => {
   r.readAsDataURL(f)
 })
 
-const where = (s: J) => `${s.element_id}${s.page ? ` (p.${s.page})` : ''}`
+// where a value was read, in words a person uses: "1쪽", "검사성적 B4"; the internal element id stays in the record
+// where a value was read, as the parser recorded it for people ("1쪽 6번째 줄"); the element id stays in the record
+const where = (s: J) => s.place ?? (s.page ? `${s.page}쪽` : '')
 
 export function IntakePanel({ ctx }: { ctx: Ctx }) {
   const [intakes, setIntakes] = useState<J[]>([])
@@ -86,40 +88,32 @@ export function IntakeCard({ ctx, intake }: { ctx: Ctx; intake: J }) {
   const open = Object.entries(d?.fields ?? {}).filter(([, v]: [string, J]) => ['CONFLICT', 'NEEDS_CONFIRMATION'].includes(v.status)).map(([k]) => FIELD[k] ?? k)
 
   return <div className="intake-card">
-    <div className="row-gap"><b>접수 #{id}</b>{(view?.files ?? intake.files ?? []).map((f: J) => <span key={f.file_id}><Badge tone={f.egress?.tier === 'RAW' ? 'teal' : 'amber'}>{f.name} · {f.egress?.tier === 'RAW' ? '외부 원문 처리 가능' : '외부에는 마스킹만'}</Badge>
+    <div className="row-gap"><b>접수 #{id}</b>{(view?.files ?? intake.files ?? []).map((f: J) => <span key={f.file_id}><Badge tone={f.egress?.tier === 'RAW' ? 'teal' : 'amber'}>{f.name}{f.egress?.tier === 'RAW' ? '' : ' · 외부에는 마스킹만'}</Badge>
       {f.egress && f.egress.tier !== 'RAW' && f.egress.events?.slice(-1)[0]?.event !== 'REQUESTED' && <button className="citation" disabled={busy} onClick={() => run(async () => {
         const reason = window.prompt('외부 AI 원문 처리가 필요한 이유 (품질 관리자가 승인)'); if (!reason) return
         await ctx.api(`/intakes/${id}/files/${f.file_id}/egress-request`, 'POST', { reason }); ctx.refresh() })}>원문 처리 승인 요청</button>}
       {f.egress?.events?.slice(-1)[0]?.event === 'REQUESTED' && <span className="muted"> 승인 대기</span>}</span>)}</div>
     {(view?.files ?? intake.files ?? []).filter((f: J) => /\.xlsx$/i.test(f.name ?? '')).map((f: J) =>
       <InspectionXlsx key={`x${f.file_id}`} ctx={ctx} intakeId={id} f={f} cases={cases}/>)}
-    {view?.files?.map((f: J) => f.coverage && <p key={f.file_id} className="muted wrap">{f.name}: 본문 {f.coverage.text} · 표 {f.coverage.tables} · 이미지 {f.coverage.images} · 차트 {f.coverage.charts} · 스캔 {f.coverage.scan} · 렌더 {f.coverage.render}
-      {f.coverage.tables_note && ` (${f.coverage.tables_note})`}{f.coverage.charts_note && ` (${f.coverage.charts_note})`}{f.coverage.render_note && ` (${f.coverage.render_note})`}{f.checks?.active_content?.length > 0 && ` · 활성 콘텐츠 표시됨(실행 안 함)`}{f.checks?.external_links > 0 && ` · 외부 링크 ${f.checks.external_links}개(따라가지 않음)`}</p>)}
     {!d ? <button className="button primary" disabled={busy} onClick={analyze}>{busy ? '분석 중…' : '문서 분석'}</button> : <>
-      <p className="row-gap"><Badge tone={MODE[d.status] ?? 'slate'}>{d.status}</Badge><span className="muted">v{d.version} · {d.mode}{d.model ? ` · ${d.model}` : ''}{d.prompt_version ? ` · prompt ${d.prompt_version}` : ''}</span>
-        {d.mode === 'TEST_DOUBLE' && <Badge tone="amber">TEST_DOUBLE (Meta 아님)</Badge>}</p>
+      {d.mode === 'TEST_DOUBLE' && <p><Badge tone="amber">TEST_DOUBLE (Meta 아님)</Badge></p>}
       {d.error && <Note>{d.error}</Note>}
       {d.withheld?.length > 0 && <Note>외부 전송 승인 안 된 파일은 모델에 보내지 않았습니다: {d.withheld.map((w: J) => w.name).join(', ')}</Note>}
-      {d.egress?.files?.length > 0 && <p className="muted wrap">전송 방식: {d.egress.files.map((x: J) => `${x.name} ${x.sent === 'MASKED' ? '마스킹(값·이미지 제외)' : d.mode === 'LOCAL' ? '사내 모델' : '원문'}`).join(' · ')}{d.egress.masked_payload && ` · 전송 내용 sha256 ${d.egress.masked_payload.sha256.slice(0, 12)}…`}{d.egress.usage?.prompt_tokens != null && ` · 사용 토큰 입력 ${d.egress.usage.prompt_tokens} / 출력 ${d.egress.usage.completion_tokens ?? '-'}`}</p>}
-      {d.egress?.mode === 'WHOLE' && <p className="muted wrap">읽기 방식: 전체 읽기{d.egress.auto ? ' (기본 정책: 한 번에 들어가는 문서는 전체 읽기)' : ''}</p>}
-      {d.egress?.mode === 'HYBRID' && <p className="muted wrap">읽기 방식: 탐색 읽기 (서버 선별 + 목차 + AI 추가 요청){d.egress.auto ? ' · 문서가 한 번에 들어가지 않아 탐색 읽기로 전환' : ''}{d.egress.rounds?.slice(1).map((r: J) => r.asked?.length ? ` · AI가 추가로 요청한 부분: ${r.asked.map((x: string) => x.split(':')[1]).join(', ')}` : '').join('')}</p>}
-      {d.egress?.auto?.proposed_by === 'AI' && <p className="muted wrap">읽기 방식은 AI가 서버가 좁힌 후보({d.egress.auto.candidates.join(', ')}) 중에서 골랐습니다: {d.egress.auto.reason}</p>}
       {d.egress?.unread?.elements > 0 && <Note>문서 일부만 읽었습니다 ({d.egress.unread.of - d.egress.unread.elements}/{d.egress.unread.of} 요소).{d.egress.unread.missing?.length > 0 && ` 찾지 못한 항목: ${d.egress.unread.missing.map((k: string) => FIELD[k] ?? k).join(', ')}.`} <button className="citation" disabled={busy} onClick={() => run(async () => setView(await ctx.api(`/intakes/${id}/analyze?read=WHOLE`, 'POST', undefined, true)))}>전체 읽기로 다시 분석</button></Note>}
       {d.egress?.files?.filter((x: J) => x.not_sent_from).map((x: J) => <Note key={x.file_id}>{x.name}: 비용 한도로 {x.not_sent_from}부터 {x.not_sent}개 요소는 모델에 보내지 않았습니다 (원문 위치로 직접 확인)</Note>)}
-      {d.documents?.length > 0 && <p className="muted">문서 분류: {d.documents.map((x: J) => `#${x.file_id} ${x.classes.join('+')}${x.needs_confirmation ? ' (확인 필요)' : ''}`).join(' · ')}</p>}
-      <div className="table-wrap"><table><thead><tr><th>항목</th><th>상태</th><th>값</th><th>원문 위치 · 발췌</th><th>수정 (사유 필수)</th></tr></thead><tbody>
+      <div className="table-wrap"><table><thead><tr><th>항목</th><th>상태</th><th>값</th><th>원문</th><th>수정 (사유 필수)</th></tr></thead><tbody>
         {Object.entries(d.fields).map(([k, v]: [string, J]) => <tr key={k}><td>{FIELD[k] ?? k}{v.kind === 'HYPOTHESIS' && <> <Badge tone="violet">가설</Badge></>}</td>
           <td><Badge tone={STATUS[v.status]?.[1] ?? 'slate'}>{STATUS[v.status]?.[0] ?? v.status}</Badge></td>
-          <td className="wrap">{v.value ?? '-'}{v.candidates?.map((c: J, n: number) => <div key={n}><button className="citation" onClick={() => pick(k, c)}>{c.value} 선택</button> <span className="muted">{c.sources.map(where).join(', ')}</span></div>)}</td>
-          <td className="wrap">{v.sources?.map((s: J, n: number) => <div key={n}><Cite ids={[where(s)]}/> <span className="muted">"{s.excerpt}"</span></div>)}{v.edit && <span className="muted">{v.edit.by}: {v.edit.reason} ({v.edit.source_check})</span>}{v.rejected?.length > 0 && <span className="muted">제외: {v.rejected[0].problems.join('; ')}</span>}</td>
+          <td className="wrap">{v.value ?? '-'}{v.candidates?.map((c: J, n: number) => <div key={n}><button className="citation" onClick={() => pick(k, c)}>{c.value} 선택</button> <span className="muted">{c.sources.map(where).filter(Boolean).join(', ')}</span></div>)}</td>
+          <td className="wrap">{v.sources?.map((s: J, n: number) => <div key={n}><span className="muted">"{s.excerpt}"</span>{where(s) && <span className="muted"> ({where(s)})</span>}</div>)}{v.edit && <span className="muted">{v.edit.by}: {v.edit.reason} ({v.edit.source_check})</span>}{v.rejected?.length > 0 && <span className="muted">제외: {v.rejected[0].problems.join('; ')}</span>}</td>
           <td><input aria-label={`${FIELD[k] ?? k} 값`} value={edits[k]?.value ?? ''} placeholder="새 값" onChange={e => setEdits(x => ({ ...x, [k]: { ...x[k], reason: x[k]?.reason ?? '', value: e.target.value } }))}/>
             <input aria-label={`${FIELD[k] ?? k} 수정 사유`} value={edits[k]?.reason ?? ''} placeholder="사유" onChange={e => setEdits(x => ({ ...x, [k]: { ...x[k], value: x[k]?.value ?? '', reason: e.target.value } }))}/></td></tr>)}
       </tbody></table></div>
       {Object.keys(edits).length > 0 && <button className="button secondary" disabled={busy} onClick={saveEdits}>수정 저장 (새 버전)</button>}
       {d.notes?.map((n: string) => <Note key={n}>{n}</Note>)}
-      {d.flags?.map((x: J) => <Note key={x.element_id}>{x.element_id}: {x.note}</Note>)}
+      {d.flags?.map((x: J) => <Note key={x.element_id}>{x.note}</Note>)}
+      {d.links?.length > 0 && <div><b>그림·차트 설명 (AI가 본 내용, 불량 판정 아님)</b>{d.links.map((l: J, n: number) => <p key={n} className="muted wrap">{l.place ? `${l.place}: ` : ''}{l.text}{l.ambiguous ? ' (불확실)' : ''}</p>)}</div>}
       {d.questions?.length > 0 && <div><b>확인이 필요한 질문</b>{d.questions.map((q: string) => <p key={q} className="wrap">· {q}</p>)}</div>}
-      {d.links?.length > 0 && <div><b>그림·차트 맥락 (AI 해석, 결함 판정 아님)</b>{d.links.map((l: J, n: number) => <p key={n} className="muted wrap">{l.element_id}: {l.text}{l.ambiguous ? ' (모호)' : ''} <Cite ids={l.related_element_ids}/></p>)}</div>}
       {linked ? <Card className="handoff"><b>사건 {linked.case_id} {linked.intakes?.length ? '연결됨' : ''}</b>
         <p className="muted">출처 {linked.origin} · 채널 {linked.channel} · 책임자 {linked.owner_id ?? '미지정'} · D0 {linked.d0 === 'DONE' ? '완료' : '판정 대기'} · 배정 {linked.assignees.join(', ')}</p>
         {!linked.internal_data.linked && <Note>{linked.internal_data.note}</Note>}

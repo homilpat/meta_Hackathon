@@ -9,7 +9,7 @@ import json
 from datetime import UTC, datetime
 
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import sessionmaker
 
 from app import limits
@@ -36,11 +36,14 @@ class Reusing:
         if limits.get("MODEL_RESPONSE_REUSE") != "ON":
             return self.inner.chat(messages, tools, response_format, reasoning_effort)
         key = self.key(messages, tools, response_format, reasoning_effort)
-        with self.sessions() as s:
-            row = s.scalar(select(ModelResponse).where(ModelResponse.request_sha256 == key))
-            if row is not None:  # no new call, so no new usage or cost
-                return {"message": row.message, "usage": {}, "reused": {"request_sha256": key, "stored_at":
-                                                                         row.created_at}}
+        try:
+            with self.sessions() as s:
+                row = s.scalar(select(ModelResponse).where(ModelResponse.request_sha256 == key))
+        except OperationalError:  # the database is locked by the caller's own write: call the model, as with OFF
+            row = None
+        if row is not None:  # no new call, so no new usage or cost
+            return {"message": row.message, "usage": {}, "reused": {"request_sha256": key, "stored_at":
+                                                                     row.created_at}}
         out = self.inner.chat(messages, tools, response_format, reasoning_effort)
         try:
             with self.sessions.begin() as s:
@@ -48,5 +51,7 @@ class Reusing:
                                     message=out["message"], usage=out.get("usage") or {},
                                     created_at=datetime.now(UTC).isoformat()))
         except IntegrityError:  # the same request answered at the same moment: the first stored answer stands
+            pass
+        except OperationalError:  # locked: the answer is used, only not stored for reuse
             pass
         return out

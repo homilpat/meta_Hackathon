@@ -102,3 +102,20 @@ def test_the_confidential_backstop_stays_on_unless_an_evaluation_turns_it_off_fo
     with pytest.raises(EgressBlocked):  # the secret check never turns off
         p.chat([{"role": "user", "content": "Bearer abcdefghijklmnop"}], [])
     assert len(sent) == 1 and MetaProvider.restricted_check is True
+
+
+def test_a_route_holding_the_write_lock_does_not_block_the_cache(tmp_path):
+    """LIVE rehearsal 2026-11-04: an investigation calls the model inside its write transaction; the cache waited on
+    that lock and the request failed with "database is locked"."""
+    import time
+
+    sent = []
+    app = create_app(f"sqlite:///{tmp_path / 'lock.db'}", provider(sent))
+    Base.metadata.create_all(app.state.engine)
+    with sessionmaker(app.state.engine).begin() as s:  # BEGIN IMMEDIATE, as every route's transaction
+        s.execute(Base.metadata.tables["model_responses"].select())
+        t = time.monotonic()
+        out = app.state.provider.chat([{"role": "user", "content": "x"}], [])
+        assert out["message"]["content"] == "a1" and time.monotonic() - t < 5
+    assert app.state.provider.chat([{"role": "user", "content": "x"}], [])["message"]["content"] == "a1"
+    assert len(sent) == 2  # the locked call was not stored; the next one is a plain miss and is stored

@@ -135,6 +135,9 @@ def create_app(database_url: str | None = None,
         serialize_sqlite(engine)
     sessions = sessionmaker(engine)
     app.state.engine = engine
+    # the response cache is read and written while a route may hold SQLite's one write lock (an investigation calls
+    # the model inside its transaction): its own connection, no wait, so a locked database is only a cache miss
+    cache_sessions = sessionmaker(create_engine(database_url, connect_args={"timeout": 0}))         if engine.dialect.name == "sqlite" else sessions
 
     current_user = make_auth(sessions)
     Who = Annotated[Actor, Depends(current_user)]
@@ -179,7 +182,7 @@ def create_app(database_url: str | None = None,
     app.add_exception_handler(RequestValidationError, logged_validation)
     app.state.provider = provider or MetaProvider.from_env()  # None -> investigations return 503
     if isinstance(app.state.provider, MetaProvider):  # a real model: the same request gets the same answer
-        app.state.provider = Reusing(app.state.provider, sessions)
+        app.state.provider = Reusing(app.state.provider, cache_sessions)
     app.include_router(make_router(sessions, current_user, app.state.provider))
     app.include_router(make_ml_router(sessions, current_user))
     app.include_router(make_v5_router(sessions, current_user))
@@ -193,7 +196,7 @@ def create_app(database_url: str | None = None,
     app.include_router(make_agent_router(app, sessions, current_user, app.state.provider))
     app.state.local_provider = LocalProvider.from_env()  # in-house model for protected files, if configured
     if app.state.local_provider is not None:
-        app.state.local_provider = Reusing(app.state.local_provider, sessions)
+        app.state.local_provider = Reusing(app.state.local_provider, cache_sessions)
     app.include_router(make_intake_router(sessions, current_user, app.state.provider, app.state.local_provider))
     app.include_router(make_egress_router(sessions, current_user))
     with contextlib.suppress(OperationalError):  # a DB not yet migrated has no settings to replay

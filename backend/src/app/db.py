@@ -876,6 +876,8 @@ class AgentRun(Base):
     plan: Mapped[list] = mapped_column(JSON)
     pending: Mapped[dict | None] = mapped_column(JSON)  # the human decision the run waits for
     reply: Mapped[list] = mapped_column(JSON)  # server-written lines, each from a recorded step
+    # request class (SUPPORTED NEEDS_INFO UNSUPPORTED HUMAN_ONLY PARTIAL) with what is out and why; {} before it
+    request: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")
     created_at: Mapped[str] = mapped_column(String(40))
     updated_at: Mapped[str] = mapped_column(String(40))
 

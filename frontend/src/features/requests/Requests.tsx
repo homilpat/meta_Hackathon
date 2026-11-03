@@ -28,9 +28,11 @@ export function Requests({ ctx }: { ctx: Ctx }) {
       <Card><SectionTitle title={`사건 ${cid}`} sub={`출처 ${profile?.origin ?? '-'} · 채널 ${profile?.channel ?? '-'}`}/>
         {profile?.profile?.slice(-1).map((p: J) => <p key={p.version} className="muted wrap">프로필 v{p.version}: {Object.entries(p.details).map(([k, v]) => `${k}=${Array.isArray(v) ? v.join('/') : v}`).join(' · ')}</p>)}
         {resp && <><p>사건 책임자 <b>{resp.case_owner.user_id ?? '미지정'}</b>{resp.case_owner.pending_handover && <> · <Badge tone="amber">인수 대기 → {resp.case_owner.pending_handover.to}</Badge></>}</p>
-          <p className="muted wrap">승인 역할: {Object.entries(resp.approvers).map(([s, r]) => `${s} ${r}`).join(' · ')} · 실행자 {resp.executors.map((x: J) => x.actor_id).join(', ') || '-'} · 효과 확인 {resp.effect_verifiers.map((x: J) => x.actor_id).join(', ') || '-'}</p>
+          <p className="muted wrap">승인 역할(정책): {Object.entries(resp.approvers).map(([s, r]) => `${s} ${r}`).join(' · ')}</p>
           <Handover ctx={ctx} busy={busy} act={act} path={`/cases/${cid}/owner`} pending={resp.case_owner.pending_handover?.to} canPropose={resp.case_owner.user_id === me}/>
           <p className="muted">{resp.identity_note}</p></>}</Card>
+      {resp?.summary && <Summary s={resp.summary}/>}
+      {resp && <Chains ctx={ctx} resp={resp}/>}
       <NewRequest ctx={ctx} busy={busy} act={act}/>
       {list.map(r => <RequestCard key={r.request_id} ctx={ctx} r={r} busy={busy} act={act}/>)}
       {!list.length && <Card><Empty>이 사건의 요청이 없습니다.</Empty></Card>}
@@ -41,6 +43,52 @@ export function Requests({ ctx }: { ctx: Ctx }) {
 }
 
 type Act = (call: () => Promise<J>) => Promise<void>
+
+// RW-UI-01..04: each state comes from its own server record; an empty role is shown as such, never as done.
+const ST: Record<string, [string, Tone]> = {
+  UNASSIGNED: ['미배정', 'red'], HANDOVER_PENDING: ['인수 대기', 'amber'], OVERDUE: ['기한 초과', 'red'], NOT_SENT: ['미발송', 'slate'],
+  AWAITING_REPLY: ['회신 대기', 'blue'], AWAITING_REVIEW: ['검토 대기', 'amber'], IN_REVIEW: ['검토 중', 'amber'],
+  REVISION_REQUESTED: ['보완 요청', 'red'], REPLY_ACCEPTED: ['회신 수용 (조치·효과 아님)', 'green'], REPLY_REJECTED: ['회신 반려', 'red'],
+  PLAN_APPROVED: ['계획 승인', 'blue'], PLAN_NOT_APPROVED: ['계획 미승인', 'slate'], EXECUTED: ['실행 기록 있음', 'blue'],
+  NOT_EXECUTED: ['미실행', 'red'], VERIFIED: ['독립 확인됨', 'green'], NOT_VERIFIED: ['확인 전', 'amber'],
+  EFFECT_UNVERIFIED: ['효과 미확인', 'amber'], EFFECT_EFFECTIVE: ['효과 확인', 'green'], EFFECT_NOT_EFFECTIVE: ['효과 없음', 'red'],
+  EFFECT_INCONCLUSIVE: ['효과 판단 불가', 'amber'], NOT_EFFECTIVE: ['효과 없음', 'red'], CANCELLED: ['취소', 'slate'],
+  RE_REVIEW_NEEDED: ['근거 변경 · 재검토 필요', 'red'], APPROVED: ['승인', 'green'], DRAFT: ['초안', 'slate'],
+}
+const States = ({ list }: { list: string[] }) => <>{list.map(x => <Badge key={x} tone={ST[x]?.[1] ?? 'slate'}>{ST[x]?.[0] ?? x}</Badge>)}</>
+const who = (u?: string | null, missing = '미기록') => u ? <b>{u}</b> : <span className="muted">{missing}</span>
+
+function Summary({ s }: { s: J }) {
+  return <Card><SectionTitle title="지금 누가 무엇을" sub="사건 책임자는 모든 단계의 실행자·승인자가 아닙니다"/>
+    <p>현재 단계 <b>{s.current_stage ?? '모든 단계 완료'}</b>{s.stage_state ? ` (${s.stage_state})` : ''} · 다음 행동 <b>{s.next_action ?? '-'}</b> · 처리 담당 {who(s.next_owner, '담당 미지정')} · 기한 {s.due_at ?? '-'}{s.overdue && <> <Badge tone="red">기한 초과</Badge></>}</p>
+    {s.blocked_by?.length > 0 ? <ul className="muted">{s.blocked_by.map((b: string) => <li key={b}>막힌 이유: {b}</li>)}</ul> : <p className="muted">막힌 항목 없음</p>}
+  </Card>
+}
+
+function Chains({ ctx, resp }: { ctx: Ctx; resp: J }) {
+  const audit = () => ctx.open(ctx.cid, '', 'audit')
+  return <Card><SectionTitle title="작업별 책임 연결" sub="배정 · 수락 · 실제 실행 · 독립 확인 · 효과 · 결정을 각 요청·조치·문서 버전의 기록으로 표시"/>
+    {(resp.requests ?? []).map((r: J) => <div key={`r${r.request_id}`} className="tool-item"><div>
+      <b>요청 #{r.request_id} {r.title}</b> <States list={r.states}/>
+      <p className="muted wrap">담당 {who(r.owner_id, '미배정')}{r.pending_owner_id && <> → 인수 예정 {who(r.pending_owner_id)} (수락 전에는 {r.owner_id} 책임)</>} · 검토자 {who(r.reviewer_id, '미배정')} · 기한 {r.due_at}</p>
+      {r.submissions.map((x: J) => <p key={x.version} className="muted">회신 v{x.version} · 등록 {x.registered_by} · {x.created_at?.slice(0, 19)} · sha {x.files_sha256?.slice(0, 10)}</p>)}
+      {r.reviews.map((v: J, i: number) => <p key={i} className="muted">{v.kind === 'AI' ? <Badge tone="slate">AI 검토 · 참고</Badge> : <Badge tone="blue">사람 결정</Badge>} {v.kind === 'HUMAN' ? `${v.actor_id} · ${v.decision} · 회신 v${v.submission_version} · ${v.reason ?? ''}` : `회신 v${v.submission_version}`} · {v.created_at?.slice(0, 19)}</p>)}
+    </div></div>)}
+    {(resp.actions ?? []).map((a: J) => <div key={`a${a.action_id}`} className="tool-item"><div>
+      <b>조치 #{a.action_id} ({a.stage})</b> <States list={a.states}/> <span className="muted">{a.execution_mode === 'SIMULATED' ? '합성 데모 기록' : ''}</span>
+      <p className="wrap">{a.description}</p>
+      <p className="muted wrap">요청 {who(a.requested_by)} · 계획 승인 {who(a.plan_approved_by)} · 실제 실행 {who(a.executed_by, '미실행')} · 독립 확인 {who(a.verified_by, '미확인')}{a.stage === 'D5' && <> · 효과 판정 {a.effect_reviews.length ? a.effect_reviews.map((e: J) => `${e.reviewer_id}(${e.reviewer_role}) ${e.decision}`).join(', ') : <span className="muted">미확인</span>}</>}</p>
+      <span className="row-gap"><button className="citation" onClick={() => ctx.open(ctx.cid, '', 'eightd')}>D0~D8 진행 보기</button><button className="citation" onClick={audit}>조치 이벤트 {a.audit_event_ids.map((i: number) => `#${i}`).join(' ')}</button></span>
+    </div></div>)}
+    {(resp.decisions ?? []).map((d: J) => <div key={`d${d.doc_type}${d.version}`} className="tool-item"><div>
+      <b>{d.doc_type} v{d.version}</b> <States list={d.states}/> <span className="muted">작성 {d.author_id} · 내용 sha {d.content_sha256.slice(0, 10)}</span>
+      <p className="muted wrap">승인 역할 {d.approver_role ?? '-'} · 지정 검토자 {d.reviewer === 'ROLE_ONLY_UNASSIGNED' ? <Badge tone="amber">역할 지정 / 담당 미배정</Badge> : d.assigned_reviewers.map((v: J) => `${v.reviewer_id}(${v.state})`).join(', ')}{d.based_on?.length > 0 && ` · 근거 문서 ${d.based_on.join(', ')}`}</p>
+      {d.decisions.map((e: J) => <p key={e.event_id} className="muted wrap"><Badge tone="blue">사람 결정</Badge> {e.by} ({e.role}) · {e.action} · {e.at?.slice(0, 19)} · 사유 {e.reason || '미기록'} · 대상 sha {e.content_sha256.slice(0, 10)}{!e.on_current_content && <> <Badge tone="red">결정 이후 내용 변경</Badge></>}</p>)}
+      <span className="row-gap"><button className="citation" onClick={() => ctx.open(ctx.cid, '', 'reports')}>문서 · 결재 보기</button><button className="citation" onClick={audit}>감사 이벤트 {d.audit_event_ids.length}건</button></span>
+    </div></div>)}
+    {!resp.requests?.length && !resp.actions?.length && !resp.decisions?.length && <Empty>아직 기록된 요청·조치·문서가 없습니다.</Empty>}
+  </Card>
+}
 
 function OriginForm({ ctx, busy, act }: { ctx: Ctx; busy: boolean; act: Act }) {
   const [origin, setOrigin] = useState('SUPPLIER_NONCONFORMITY')

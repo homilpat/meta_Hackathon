@@ -8,10 +8,10 @@ import type { Ctx, J, Tone } from '../../types'
 
 // Renders one persisted AgentRun exactly as the server returned it. Nothing here decides or claims a state.
 export const RUN_TONE: Record<string, Tone> = {
-  PLANNED: 'slate', RUNNING: 'blue', NEEDS_HUMAN: 'amber', BLOCKED: 'red', FAILED: 'red', COMPLETED: 'green',
+  PLANNED: 'slate', RUNNING: 'blue', NEEDS_HUMAN: 'amber', BLOCKED: 'red', FAILED: 'red', COMPLETED: 'green', PARTIAL: 'amber', CANCELLED: 'slate',
 }
 export const RUN_LABEL: Record<string, string> = {
-  PLANNED: '계획됨', RUNNING: '실행 중', NEEDS_HUMAN: '사람 확인 필요', BLOCKED: '차단됨', FAILED: '실패', COMPLETED: '완료',
+  PLANNED: '계획됨', RUNNING: '실행 중', NEEDS_HUMAN: '사람 확인 필요', BLOCKED: '차단됨', FAILED: '실패', COMPLETED: '완료', PARTIAL: '부분 완료', CANCELLED: '취소됨',
 }
 const ITEM: Record<string, [string, Tone]> = {
   PENDING: ['대기', 'slate'], RUNNING: ['실행 중', 'blue'], DONE: ['완료', 'green'], ERROR: ['오류', 'red'], DENIED: ['거부됨', 'red'],
@@ -121,7 +121,12 @@ export function PendingCard({ run, busy, onResume }: { run: J; busy: boolean; on
   if (!p || run.status !== 'NEEDS_HUMAN') return null
   return <Card className="missing-card"><div className="missing-icon"><Icon name="warning"/></div><div>
     {p.action === 'confirm_scope' && <><b>대상 사건 확인이 필요합니다</b><p>{p.question}</p>
-      <div className="row-gap"><button className="button primary" disabled={busy} onClick={() => onResume(true)}>현재 사건 {run.case_id}로 진행</button><button className="button secondary" disabled={busy} onClick={() => onResume(false)}>취소</button></div></>}
+      <textarea className="input" aria-label="범위를 바꾸려면 새 조건 입력" placeholder="범위를 바꾸려면 입력 (예: 아니 L03으로)" rows={1} value={answer} disabled={busy} onChange={e => setAnswer(e.target.value)}/>
+      <div className="row-gap mt"><button className="button primary" disabled={busy} onClick={() => onResume(true, undefined, answer.trim() || undefined)}>{answer.trim() ? '새 조건으로 다시 확인' : `현재 사건 ${run.case_id}로 진행`}</button><button className="button secondary" disabled={busy} onClick={() => onResume(false)}>취소</button></div></>}
+    {p.action === 'confirm_partial' && <><b>일부만 할 수 있는 요청입니다</b><p>{p.question}</p>
+      <textarea className="input" aria-label="범위를 바꾸려면 새 조건 입력" placeholder="범위를 바꾸려면 입력 (예: 아니 L03으로)" rows={1} value={answer} disabled={busy} onChange={e => setAnswer(e.target.value)}/>
+      <div className="row-gap mt"><button className="button primary" disabled={busy} onClick={() => onResume(true, undefined, answer.trim() || undefined)}>{answer.trim() ? '새 조건으로 다시 확인' : '지원 범위만 진행'}</button>
+        <button className="button secondary" disabled={busy} onClick={() => onResume(false)}>취소</button></div></>}
     {p.action === 'request_review' && <><b>{p.kind.toUpperCase()} v{p.version} 검토 요청 확인</b>
       <p>검증 {p.validation}. 검토자({p.approver_role})를 선택하면 서버가 정책·배정·문서 해시를 다시 확인한 뒤 요청합니다. 이것은 승인이 아닙니다.</p>
       <fieldset className="row-gap" disabled={busy}><legend className="muted">검토자</legend>{p.candidates.map((c: J) => <label key={c.user_id} className="row-gap"><input type="radio" name={`rv-${run.run_id}`} value={c.user_id} checked={who === c.user_id} onChange={() => setWho(c.user_id)}/>{c.name} · {c.role}</label>)}</fieldset>

@@ -60,7 +60,7 @@ def test_d0_is_offered_first_and_filled_only_after_yes_and_only_a_person_submits
     assert "채워 드릴까요" in offer["pending"]["question"]
     no = ok(c.post(f"/agent/runs/{offer['run_id']}/resume", json={"token": offer["pending"]["token"],
                                                                   "confirm": False}, headers=H("alice")), 200)
-    assert no["status"] == "COMPLETED" and not any(s["tool"] == "fill_triage" for s in no["steps"])
+    assert no["status"] == "CANCELLED" and not any(s["tool"] == "fill_triage" for s in no["steps"])
     offer = run(c, "8D로 가야 할지 판정해 줘")
     filled = ok(answer(c, offer), 200)
     step = next(s for s in filled["steps"] if s["tool"] == "fill_triage")

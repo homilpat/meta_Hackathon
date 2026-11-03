@@ -323,7 +323,128 @@ def responsibilities(session: Session, case_id: str) -> dict:
                      "actor_role": e.actor_role, "from": e.from_user, "to": e.to_user, "reason": e.reason,
                      "version": e.target_version, "at": e.created_at} for e in events],
         "identity_note": "X-User는 데모 신원이며 실제 책임자 인증이나 법적 책임 입증이 아닙니다.",
+        **chains(session, case_id, case, body),
     }
+
+
+STALE_DOC = ("BASIS_CHANGED", "REVALIDATION_REQUIRED", "SUPERSEDED")
+
+
+def request_states(r: dict) -> list[str]:
+    """What a request is waiting for, from its own record (RW-UI-01, 04)."""
+    out = []
+    if not r["owner_id"]:
+        out.append("UNASSIGNED")
+    if r["pending_owner_id"]:
+        out.append("HANDOVER_PENDING")
+    if r["overdue"]:
+        out.append("OVERDUE")
+    out.append({"DRAFT": "NOT_SENT", "OPEN": "AWAITING_REPLY", "SUBMITTED": "AWAITING_REVIEW",
+                "IN_REVIEW": "IN_REVIEW", "NEEDS_REVISION": "REVISION_REQUESTED", "ACCEPTED": "REPLY_ACCEPTED",
+                "REJECTED": "REPLY_REJECTED"}.get(r["status"], r["status"]))
+    return out
+
+
+def action_states(a: dict, effects: list[dict]) -> list[str]:
+    """Plan approval, execution, verification and effect are separate records (RW-UI-02; spec §25.6)."""
+    kinds = [e["event_type"] for e in a["events"]]
+    if "CANCELLED" in kinds:
+        return ["CANCELLED"]
+    out = ["PLAN_APPROVED" if "PLAN_APPROVED" in kinds else "PLAN_NOT_APPROVED"] if a["stage"] != "URGENT" else []
+    out.append("EXECUTED" if "EXECUTED" in kinds else "NOT_EXECUTED")
+    if "EXECUTED" in kinds:
+        out.append("VERIFIED" if "INDEPENDENTLY_VERIFIED" in kinds else "NOT_VERIFIED")
+        if a["stage"] == "D5":  # effectiveness is its own decision on its own plan
+            out.append(f"EFFECT_{effects[-1]['decision']}" if effects else "EFFECT_UNVERIFIED")
+    if "NOT_EFFECTIVE" in kinds:
+        out.append("NOT_EFFECTIVE")
+    return out
+
+
+def chains(session: Session, case_id: str, case: QualityCase, body: dict) -> dict:
+    """Per request, per action and per document version: who was assigned, who accepted, who did it, who checked
+    it and who decided, with ids, versions, hashes and audit events. Read from the existing records only
+    (RW-UI-06); a record that does not exist is shown as missing, never inferred."""
+    from app import actions as act
+    from app.db import (
+        Action,
+        ActionEvent,
+        ApprovalEvent,
+        DocumentVersion,
+        EffectivenessResult,
+        Review,
+        WorkflowEvent,
+    )
+    from app.eightd import stage_state
+    from app.workflow import DEMO_USERS, STEP
+
+    role = lambda u: DEMO_USERS.get(u, ("", "UNKNOWN"))[1] if u else None
+    reqs = [request_out(session, r) for r in session.scalars(
+        select(CaseRequest).where(CaseRequest.case_id == case_id).order_by(CaseRequest.id))]
+    for r in reqs:
+        r["states"] = request_states(r)
+        r["links"] = {"request": f"/requests/{r['request_id']}"}
+    acts = []
+    for a in session.scalars(select(Action).where(Action.case_id == case_id).order_by(Action.id)):
+        o = act.out(session, a)
+        effects = [{"result_id": x.id, "reviewer_id": x.reviewer_id, "reviewer_role": role(x.reviewer_id),
+                    "decision": x.decision, "computed": x.computed, "at": x.created_at}
+                   for x in session.scalars(select(EffectivenessResult).where(EffectivenessResult.action_id == a.id)
+                                            .order_by(EffectivenessResult.id))]
+        who = {e["event_type"]: e for e in o["events"]}
+        plan_doc = session.get(DocumentVersion, a.document_version_id) if a.document_version_id else None
+        acts.append({
+            "action_id": a.id, "stage": a.stage, "description": a.description, "status": o["status"],
+            "plan_document": {"doc_type": plan_doc.doc_type, "version": plan_doc.version, "status": plan_doc.status}
+            if plan_doc else None,
+            "requested_by": o["created_by"],
+            "plan_approved_by": who.get("PLAN_APPROVED", {}).get("actor_id"),
+            "executed_by": who.get("EXECUTED", {}).get("actor_id"),
+            "verified_by": who.get("INDEPENDENTLY_VERIFIED", {}).get("actor_id"),
+            "effect_reviews": effects, "events": o["events"], "execution_mode": o["execution_mode"],
+            "audit_event_ids": list(session.scalars(select(ActionEvent.id).where(ActionEvent.action_id == a.id)
+                                                    .order_by(ActionEvent.id))),
+            "states": action_states(o, effects)})
+    decisions = []
+    for d in session.scalars(select(DocumentVersion).where(DocumentVersion.case_id == case_id)
+                             .order_by(DocumentVersion.doc_type, DocumentVersion.version)):
+        approver = body["approval_gates"].get(STEP.get(d.doc_type, ""), {}).get("approver")
+        reviews = session.scalars(select(Review).where(Review.document_version_id == d.id).order_by(Review.id)).all()
+        decisions.append({
+            "doc_type": d.doc_type, "version": d.version, "status": d.status, "content_sha256": d.content_sha256,
+            "author_id": d.author_id, "based_on": d.based_on, "approver_role": approver,
+            "assigned_reviewers": [{"reviewer_id": v.reviewer_id, "state": v.state} for v in reviews],
+            # a role named by the policy but nobody asked yet: show it, never hide it as "no one responsible"
+            "reviewer": "ASSIGNED" if reviews else "ROLE_ONLY_UNASSIGNED",
+            "decisions": [{"event_id": e.id, "by": e.actor_id, "role": role(e.actor_id), "action": e.action,
+                           "at": e.created_at, "reason": e.comment, "content_sha256": e.content_sha256,
+                           "on_current_content": e.content_sha256 == d.content_sha256}
+                          for e in session.scalars(select(ApprovalEvent).where(
+                              ApprovalEvent.document_version_id == d.id).order_by(ApprovalEvent.id))],
+            "states": ["RE_REVIEW_NEEDED"] if d.status in STALE_DOC else [d.status],
+            "audit_event_ids": list(session.scalars(select(WorkflowEvent.id).where(
+                WorkflowEvent.document_version_id == d.id).order_by(WorkflowEvent.id)))})
+    state = stage_state(session, case_id)
+    current = next((st for st, v in state.items() if v not in ("DONE", "APPROVED", "CLOSED")), None)
+    open_items = ([{"what": f"요청 #{r['request_id']} {r['title']}", "owner": r["pending_owner_id"] or r["owner_id"],
+                    "due_at": r["due_at"], "states": r["states"]} for r in reqs
+                   if r["status"] not in ("ACCEPTED", "REJECTED")]
+                  + [{"what": f"조치 #{x['action_id']} ({x['stage']})", "owner": None, "due_at": None,
+                      "states": x["states"]} for x in acts
+                     if "NOT_EXECUTED" in x["states"] or "EFFECT_UNVERIFIED" in x["states"]
+                     or "NOT_VERIFIED" in x["states"]]
+                  + [{"what": f"{d['doc_type']} v{d['version']} 재검토", "owner": None, "due_at": None,
+                      "states": d["states"]} for d in decisions if "RE_REVIEW_NEEDED" in d["states"]])
+    blocked = [f"{i['what']}: {', '.join(st for st in i['states'] if st in ('OVERDUE', 'HANDOVER_PENDING', 'UNASSIGNED', 'RE_REVIEW_NEEDED', 'NOT_EXECUTED', 'EFFECT_UNVERIFIED', 'NOT_VERIFIED'))}"
+               for i in open_items if set(i["states"]) & {"OVERDUE", "HANDOVER_PENDING", "UNASSIGNED", "RE_REVIEW_NEEDED",
+                                                          "NOT_EXECUTED", "EFFECT_UNVERIFIED", "NOT_VERIFIED"}]
+    nxt = open_items[0] if open_items else None
+    return {"summary": {"case_owner": case.owner_id or None, "pending_owner": owner_pending(session, case_id),
+                        "current_stage": current, "stage_state": state.get(current) if current else None,
+                        "blocked_by": blocked, "next_action": nxt and nxt["what"],
+                        "next_owner": nxt and nxt["owner"], "due_at": nxt and nxt["due_at"],
+                        "overdue": any("OVERDUE" in i["states"] for i in open_items)},
+            "requests": reqs, "actions": acts, "decisions": decisions}
 
 
 def make_requests_router(sessions: sessionmaker, current_user, provider: ModelProvider | None = None) -> APIRouter:

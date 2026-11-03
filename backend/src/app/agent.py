@@ -43,6 +43,19 @@ INTENTS = {  # keyword rules of the offline planner; the model planner returns i
     "TRIAGE": r"판정|트리아지|triage|d0|8d.{0,8}(할지|필요|해야|여부)|단순\s*처리|ncr로|경로",
 }
 REPORT_8D = r"8d\s*(보고서|리포트|report)"
+# What the agent never does, found by the server before any planner or tool runs (prompt §2, spec §22)
+UNSUPPORTED = {"메일·이메일 발송": r"메일|이메일|e-?mail|발송|송부|send\b",
+               "메신저 전송": r"문자\s*(보내|전송)|카톡|카카오톡|slack|슬랙|teams",
+               "사내 시스템 등록·전송": r"(erp|mes|qms|sap|plm).{0,12}(등록|입력|전송|올려|반영)"}
+HUMAN_ONLY = {"문서 승인·결재": r"승인해|결재해|approve\b|승인\s*처리",
+              "원인 확정": r"원인.{0,4}(확정해|확정\s*처리|결론\s*내)|root cause.{0,12}confirm",
+              "사건 종결": r"종결해|종결\s*처리|사건.{0,4}(닫아|종료해)|close the case",
+              "조치 실행·완료 처리": r"(조치|시정).{0,4}(실행해|완료\s*처리|완료해)"}
+GENERIC = r"분석|이상|analy"  # alone these do not make a quality investigation ("점심 메뉴 분석해줘")
+DOMAIN = (r"불량|원인|조사|spc|spi|aoi|\blot|(?<![a-z0-9])l\d{2}|defect|cause|investigat|ncr|8d|솔더|납땜|solder|"
+          r"stencil|스텐실|불합격|검사|경보|관리도|사건")
+LABEL_OF = {"INVESTIGATE": "불량 원인 조사", "DRAFT_DOC": "다음 8D 문서 초안·검증", "TASKS": "내 할 일·담당 확인",
+            "STATUS": "진행 상태 확인", "EXPORT": "승인본 내보내기 링크", "TRIAGE": "D0 판정 권장안"}
 READ_PLAN = {
     "INVESTIGATE": ["data_integrity", "spc", "predictions", "evidence_gaps", "experience", "history", "references"],
     "DRAFT_DOC": ["stages"],
@@ -178,8 +191,38 @@ def report_rule(goal: str, intents: list[str]) -> list[str]:
 
 
 def intents_of(goal: str) -> list[str]:
-    """Keyword intents; [] means the goal is too vague and the agent asks back instead of guessing."""
-    return report_rule(goal, [k for k, rx in INTENTS.items() if re.search(rx, goal, re.IGNORECASE)])
+    """Keyword intents; [] means the goal is too vague and the agent asks back instead of guessing. A generic word
+    alone ("분석", "이상") is not an investigation: it needs a quality-domain word too."""
+    intents = [k for k, rx in INTENTS.items() if re.search(rx, goal, re.IGNORECASE)]
+    if "INVESTIGATE" in intents and not re.search(DOMAIN, goal, re.IGNORECASE) and re.search(
+            GENERIC, goal, re.IGNORECASE):
+        intents.remove("INVESTIGATE")
+    return report_rule(goal, intents)
+
+
+def request_class(goal: str, intents: list[str], role: str) -> dict:
+    """SUPPORTED, NEEDS_INFO, UNSUPPORTED, HUMAN_ONLY or PARTIAL, with what is out and why. Decided by server
+    rules for both planners, before any model call or tool, so an unsupported request touches nothing."""
+    out = [k for k, rx in UNSUPPORTED.items() if re.search(rx, goal, re.IGNORECASE)]
+    human = [k for k, rx in HUMAN_ONLY.items() if re.search(rx, goal, re.IGNORECASE)]
+    reasons = ([f"NO_PERMISSION: 문서 초안 작성은 AUTHOR 역할입니다 (현재 {role}); 서버가 다시 확인합니다"]
+               if "DRAFT_DOC" in intents and role != "AUTHOR" else [])
+    cls = ("NEEDS_INFO" if not (intents or out or human) else ("UNSUPPORTED" if out else "HUMAN_ONLY")
+           if not intents else "PARTIAL" if out or human else "SUPPORTED")
+    return {"class": cls, "supported": [LABEL_OF[i] for i in intents], "unsupported": out, "human_only": human,
+            "reasons": reasons}
+
+
+def explain(req: dict) -> str:
+    """Why a part is not done and what to do instead; never claims the part was done."""
+    parts = []
+    if req["unsupported"]:
+        parts.append(f"지원하지 않는 작업: {', '.join(req['unsupported'])}. 이 에이전트는 메일·메신저·사내 시스템으로 "
+                     "보내지 않습니다(후속 범위). 대안: 초안이나 승인본 DOCX/PDF를 만든 뒤 담당자가 직접 보냅니다.")
+    if req["human_only"]:
+        parts.append(f"사람만 결정하는 작업: {', '.join(req['human_only'])}. 권한 있는 담당자가 결재·8D 화면에서 "
+                     "처리합니다. 에이전트는 근거와 초안까지만 준비합니다.")
+    return " ".join(parts)
 
 
 def check_polish(lines: Any, facts: list[str]) -> list[str]:
@@ -649,7 +692,8 @@ def run_out(session, run: AgentRun) -> dict:
     steps = session.scalars(select(AgentStep).where(AgentStep.run_id == run.id).order_by(AgentStep.seq)).all()
     return {"run_id": run.id, "case_id": run.case_id, "user_id": run.user_id, "goal": run.goal,
             "intents": run.intents, "planner": run.planner, "status": run.status, "plan": run.plan,
-            "pending": run.pending, "reply": run.reply, "created_at": run.created_at, "updated_at": run.updated_at,
+            "pending": run.pending, "reply": run.reply, "request": run.request or {},
+            "created_at": run.created_at, "updated_at": run.updated_at,
             "steps": [step_out(s) for s in steps]}
 
 
@@ -933,12 +977,15 @@ def make_agent_router(app: FastAPI, sessions: sessionmaker, current_user: Callab
             if (seen := s.scalar(select(AgentRun).where(AgentRun.user_id == actor.id, AgentRun.idem_key == key))):
                 return JSONResponse(run_out(s, seen), status_code=200)  # retry of the same request: no new run
         intents = intents_of(body.goal)
+        req = request_class(body.goal, intents, actor.role)
+        if req["class"] in ("UNSUPPORTED", "HUMAN_ONLY"):
+            intents = []  # nothing to run: no planner, no tool
         planner = provider.mode if provider else "SERVER_RULES"
         plan = [] if provider or not intents else [_item(t) for t in server_plan(intents)]
         try:
             with sessions.begin() as s:
                 run = AgentRun(case_id=body.case_id, user_id=actor.id, idem_key=key, goal=body.goal, intents=intents,
-                               planner=planner, status="PLANNED", plan=plan, pending=None, reply=[],
+                               planner=planner, status="PLANNED", plan=plan, pending=None, reply=[], request=req,
                                created_at=now(), updated_at=now())
                 s.add(run)
                 s.flush()
@@ -954,7 +1001,14 @@ def make_agent_router(app: FastAPI, sessions: sessionmaker, current_user: Callab
         reply: list[dict] = [{"text": NOT_8D_REPORT_YET, "steps": []}] \
             if re.search(REPORT_8D, body.goal, re.IGNORECASE) else []
         try:
-            if provider:
+            if req["class"] in ("UNSUPPORTED", "HUMAN_ONLY"):
+                reply.append({"text": explain(req), "steps": []})
+                finish(ex, plan, reply, "BLOCKED", None)
+            elif req["class"] == "PARTIAL":  # show what can run and what cannot; run nothing until the user says so
+                q = (f"지원하는 작업: {', '.join(req['supported'])}. {explain(req)} 지원하는 범위만 진행할까요?")
+                reply.append({"text": q, "steps": []})
+                finish(ex, plan, reply, "NEEDS_HUMAN", {"action": "confirm_partial", "question": q})
+            elif provider:
                 execute_model(ex, reply)
             elif not intents:
                 ask_back(ex, plan, reply, CLARIFY)
@@ -962,6 +1016,7 @@ def make_agent_router(app: FastAPI, sessions: sessionmaker, current_user: Callab
                 execute(ex, plan, reply)
         finally:
             fail_if_running(run_id)
+            partial_done(run_id)
         return load(run_id, actor)
 
     @router.get("/agent/runs")
@@ -991,15 +1046,45 @@ def make_agent_router(app: FastAPI, sessions: sessionmaker, current_user: Callab
                 raise HTTPException(409, "This decision was already answered or the run moved on; reload the run")
             run.status, run.pending, run.updated_at = "RUNNING", None, now()
             case_id, goal, plan, reply = run.case_id, run.goal, list(run.plan), list(run.reply)
+            req = dict(run.request or {})
             log(s, case_id, actor, "AGENT_RESUMED", f"run{run_id} {pending['action']} confirm={body.confirm}")
         ex = Executor(app, sessions, actor, run_id, case_id, goal)
         try:
-            if not body.confirm:
+            answer = (body.answer or "").strip()
+            if not body.confirm:  # cancel: close what has not run; nothing on the server changes
                 for i in plan:
                     if i["status"] in ("PENDING", "NEEDS_HUMAN"):
                         i["status"] = "SKIPPED"
-                reply.append({"text": "사용자가 이 작업을 보류했습니다. 서버 상태는 변경되지 않았습니다.", "steps": []})
-                finish(ex, plan, reply, "COMPLETED", None)
+                reply.append({"text": "취소했습니다. 아직 실행하지 않은 작업을 닫았고 서버 상태는 변경되지 않았습니다.",
+                              "steps": []})
+                finish(ex, plan, reply, "CANCELLED", None)
+            elif answer and pending["action"] in ("confirm_scope", "confirm_partial"):
+                # a changed scope ("아니 L03으로"): the earlier confirmation no longer holds; check the new one again
+                for i in plan:
+                    if i["status"] in ("PENDING", "NEEDS_HUMAN"):
+                        i["status"] = "SKIPPED"
+                ex.goal = re.sub(r"(?<![A-Za-z0-9])L\d{2}(?![0-9])", "", goal, flags=re.IGNORECASE) + f" / {answer}"
+                save(run_id, goal=ex.goal)
+                reply.append({"text": f"범위 변경: {answer}. 이전 확인은 무효이며 새 조건으로 다시 확인합니다.",
+                              "steps": []})
+                intents = intents_of(ex.goal)
+                new = request_class(ex.goal, intents, actor.role)
+                save(run_id, intents=intents, request=new)
+                if new["class"] in ("UNSUPPORTED", "HUMAN_ONLY", "PARTIAL"):
+                    reply.append({"text": explain(new), "steps": []})
+                if new["class"] in ("UNSUPPORTED", "HUMAN_ONLY") or not intents:
+                    finish(ex, plan, reply, "BLOCKED" if new["class"] != "NEEDS_INFO" else "NEEDS_HUMAN",
+                           None if new["class"] != "NEEDS_INFO" else {"action": "clarify", "question": CLARIFY})
+                elif provider:
+                    execute_model(ex, reply)
+                else:
+                    execute(ex, plan + [_item(t) for t in server_plan(intents)], reply)
+            elif pending["action"] == "confirm_partial":  # yes: run only the supported part
+                reply.append({"text": f"지원하는 범위만 진행합니다: {', '.join(req.get('supported', []))}", "steps": []})
+                if provider:
+                    execute_model(ex, reply)
+                else:
+                    execute(ex, plan, reply)
             elif pending["action"] == "confirm_scope":
                 for i in plan:
                     if i["status"] == "SKIPPED":
@@ -1035,7 +1120,16 @@ def make_agent_router(app: FastAPI, sessions: sessionmaker, current_user: Callab
                 execute(ex, plan, reply, skip_scope=True)
         finally:
             fail_if_running(run_id)
+            partial_done(run_id)
         return load(run_id, actor)
+
+    def partial_done(run_id: int) -> None:
+        """A partly supported request that ran is PARTIAL, never COMPLETED: part of what was asked is not done."""
+        with sessions.begin() as s:
+            run = s.get(AgentRun, run_id)
+            if run.status == "COMPLETED" and (run.request or {}).get("class") == "PARTIAL":
+                run.status = "PARTIAL"
+                log(s, run.case_id, Actor(run.user_id, ""), "AGENT_RUN", f"run{run_id} PARTIAL")
 
     def review(ex: Executor, plan: list[dict], reply: list[dict], pending: dict, reviewer: str | None) -> None:
         """The user confirmed a review request. Recheck the document, call the existing route, then confirm the

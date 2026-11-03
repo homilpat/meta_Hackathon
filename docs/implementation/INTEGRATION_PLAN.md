@@ -43,3 +43,33 @@ Out of scope (spec §28.7): mail, in-house APIs, company-specific XLSX output, a
 - **Data warnings.** A quoted instruction or claim found in the data goes into `data_warnings`, which is checked for ids only, never as a claim.
 - **Limits.** Repairs count toward `INVESTIGATION_MAX_ROUNDS`, time and cost limits as before.
 - **Not done.** A server-side scan of tool results for instructions, the way intake flags them.
+
+## P3 done: request classes and resume (prompt §2, spec §22)
+
+- `agent.request_class` runs server rules before any planner or tool, for both planners. The class is stored on the run (`agent_runs.request`, migration 0027).
+
+| Class | When | What the agent does |
+|---|---|---|
+| SUPPORTED | intents found, nothing excluded | runs as before |
+| NEEDS_INFO | no intent | asks back (clarify) |
+| UNSUPPORTED | mail, messenger, in-house systems | `BLOCKED`: says what cannot be done and the alternative; 0 tools, 0 model calls |
+| HUMAN_ONLY | approve, confirm a cause, close, mark an action executed | `BLOCKED`: says who decides and where; 0 tools |
+| PARTIAL | supported intents plus any of the above | `confirm_partial`; after yes it runs only the supported part, and the run ends `PARTIAL`, never `COMPLETED` |
+
+- **NO_PERMISSION** is given as a reason up front, for example a draft asked for by a non-AUTHOR. The route still refuses: the label does not replace the check.
+- **A generic word alone** ("분석", "이상") no longer starts an investigation without a quality-domain word.
+- **Cancel** gives `CANCELLED`, and items not yet run are closed.
+- **A scope change** given as an answer to `confirm_scope` or `confirm_partial` voids the earlier confirmation, replaces the old LOT and is checked again.
+- **"응"** applies only to the pending token, and a repeated answer is a 409.
+
+## P4 done: responsibility view (RW-UI-01..06)
+
+- `GET /cases/{id}/responsibilities` keeps its earlier fields and adds four more. They are read from the existing records only: requests, ResponsibilityEvent, actions, ActionEvent, EffectivenessResult, DocumentVersion, Review, ApprovalEvent and WorkflowEvent.
+  - `summary`: current stage, blocked-by, next action, owner, due date, overdue.
+  - `requests`: each request with its states and handover history.
+  - `actions`: for each action, who requested it, approved the plan, executed it and verified it; the effect reviews; the action's own audit event ids.
+  - `decisions`: for each document version, the approver role, named reviewers or `ROLE_ONLY_UNASSIGNED`, each decision with role, time, reason and hash, `on_current_content`, `RE_REVIEW_NEEDED` and audit events.
+- **Requests screen.**
+  - A "지금 누가 무엇을" summary card.
+  - A "작업별 책임 연결" card per request, action and document version. AI reviews are marked as reference, and links go to D0–D8, 문서 · 결재 and 감사.
+  - The old one-line list of executors and verifiers, which mixed actions, is removed.

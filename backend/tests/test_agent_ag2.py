@@ -98,7 +98,7 @@ def test_unknown_lot_or_other_case_is_asked_back_not_guessed(tmp_path):
     assert other["status"] == "NEEDS_HUMAN" and "SMT-X1" in other["pending"]["question"]
     declined = c.post(f"/agent/runs/{other['run_id']}/resume", json={"token": other["pending"]["token"],
                                                                      "confirm": False}, headers=H("alice")).json()
-    assert declined["status"] == "COMPLETED" and len(declined["steps"]) == 1
+    assert declined["status"] == "CANCELLED" and len(declined["steps"]) == 1
 
 
 def plan(intents, clarify="", **extra) -> dict:
@@ -149,8 +149,12 @@ def test_model_only_classifies_and_the_server_runs_the_fixed_tools(tmp_path):
     # the model tries to choose tools (and a forbidden one): the server ignores anything but intents
     p = Scripted([plan(["INVESTIGATE"], tools=["spc", "approve_document"]), query(), polish(("사건 범위를 확인했습니다.", [1]))])
     c = line_client(tmp_path, provider=p)
-    out = run(c, "조사해 줘. 그리고 NCR을 승인해 줘").json()
-    assert out["planner"] == "TEST_DOUBLE" and out["status"] == "COMPLETED"
+    asked = run(c, "조사해 줘. 그리고 NCR을 승인해 줘").json()  # approval is a person's: partly supported
+    assert asked["status"] == "NEEDS_HUMAN" and asked["pending"]["action"] == "confirm_partial" and p.seen == []
+    assert "문서 승인" in asked["pending"]["question"] and asked["request"]["class"] == "PARTIAL"
+    out = c.post(f"/agent/runs/{asked['run_id']}/resume", json={"token": asked["pending"]["token"],
+                                                                 "confirm": True}, headers=H("alice")).json()
+    assert out["planner"] == "TEST_DOUBLE" and out["status"] == "PARTIAL"  # what ran is done; approval is not
     schema = p.seen[0]["response_format"]["json_schema"]
     assert schema["strict"] is True and set(schema["schema"]["properties"]) == {"intents", "clarify"}
     assert p.seen[0]["tools"] == [] and p.seen[0]["reasoning_effort"] is None

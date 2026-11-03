@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Badge, Card, Cite, Empty, Field, Note, Page, SectionTitle } from '../../components/ui'
 import { useLoad } from '../../hooks/useLoad'
+import { InputRequests } from './InputRequests'
 import type { Ctx, J, Tone } from '../../types'
 import { toBase64 } from '../intake/Intake'
 
@@ -33,6 +34,7 @@ export function Requests({ ctx }: { ctx: Ctx }) {
           <p className="muted">{resp.identity_note}</p></>}</Card>
       {resp?.summary && <Summary s={resp.summary}/>}
       {resp && <Chains ctx={ctx} resp={resp}/>}
+      <InputRequests ctx={ctx}/>
       <NewRequest ctx={ctx} busy={busy} act={act}/>
       {list.map(r => <RequestCard key={r.request_id} ctx={ctx} r={r} busy={busy} act={act}/>)}
       {!list.length && <Card><Empty>이 사건의 요청이 없습니다.</Empty></Card>}

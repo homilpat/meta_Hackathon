@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.db import Calculation
 
-OPS = ("mean", "sum", "count", "ratio")
+OPS = ("mean", "sum", "count", "ratio", "quotient")  # quotient: sum of a quantity over another (§30.2)
 UNITS = {"volume_mm3": "mm3", "area_pct": "%", "height_um": "um", "offset_um": "um"}  # field -> unit
 MISSING = "refuse: an input without the field is an error, never skipped or zero-filled"
 
@@ -40,8 +40,16 @@ def _numeric(v) -> bool:
     return isinstance(v, (int, float)) and not isinstance(v, bool)
 
 
+def _quantity(rec: dict, name: str):
+    """A quantity of an inspection row (its own column) or of a customer/user value ({"field": name, "value": v})."""
+    from app.input_requests import qty
+
+    return qty(rec, name)
+
+
 def compute(session: Session, case_id: str, op: str, evidence_ids: list[str], field: str | None = None,
-            denominator_evidence_ids: list[str] | None = None, recs: dict | None = None) -> dict:
+            denominator_evidence_ids: list[str] | None = None, recs: dict | None = None,
+            denominator_field: str | None = None) -> dict:
     recs = records(session, case_id) if recs is None else recs
     ids, den = list(dict.fromkeys(evidence_ids)), list(dict.fromkeys(denominator_evidence_ids or []))
     if op not in OPS:
@@ -56,6 +64,16 @@ def compute(session: Session, case_id: str, op: str, evidence_ids: list[str], fi
         values = [float(recs[i][field]) for i in ids]
         value, unit, denominator = (sum(values) if op == "sum" else sum(values) / len(values)), UNITS.get(field), \
             None if op == "sum" else f"count of the {len(ids)} inputs"
+    elif op == "quotient":  # e.g. defective_qty over inspected_qty of the same LOT: a defect rate
+        if not den or not denominator_field:
+            raise CalcError("BAD_DENOMINATOR", "quotient needs denominator_evidence_ids and denominator_field")
+        nums, dens = [_quantity(recs[i], field or "") for i in ids], [_quantity(recs[i], denominator_field) for i in den]
+        if None in nums or None in dens:
+            raise CalcError("EVIDENCE_TYPE_MISMATCH", f"inputs without a numeric {field!r} / {denominator_field!r}")
+        if sum(dens) <= 0:
+            raise CalcError("BAD_DENOMINATOR", "the denominator is 0")
+        value, unit = sum(nums) / sum(dens), "ratio"
+        denominator = f"sum of {denominator_field} over {len(den)} record(s)"
     elif op == "count":
         value, unit, denominator, field = float(len(ids)), "count", None, None
     else:
@@ -63,11 +81,14 @@ def compute(session: Session, case_id: str, op: str, evidence_ids: list[str], fi
             raise CalcError("BAD_DENOMINATOR", "ratio needs denominator_evidence_ids containing every numerator id")
         value, unit, denominator, field = len(ids) / len(den), "ratio", f"the {len(den)} denominator records", None
     source = _sha({i: recs[i] for i in ids + den})
-    cid = "CALC-" + _sha([case_id, op, field, sorted(ids), sorted(den), source])[:16]
+    key = [case_id, op, field, sorted(ids), sorted(den), source] + ([denominator_field] if op == "quotient" else [])
+    cid = "CALC-" + _sha(key)[:16]
     row = session.get(Calculation, cid)
     if row is None:
         row = Calculation(id=cid, case_id=case_id, operation=op, field=field, value=value, unit=unit,
-                          input_evidence_ids=ids, denominator_evidence_ids=den, filters={}, missing_policy=MISSING,
+                          input_evidence_ids=ids, denominator_evidence_ids=den,
+                          filters={"denominator_field": denominator_field} if op == "quotient" else {},
+                          missing_policy=MISSING,
                           denominator_definition=denominator, source_sha256=source,
                           created_at=datetime.now(UTC).isoformat())
         session.add(row)

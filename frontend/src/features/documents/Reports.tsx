@@ -4,6 +4,7 @@ import { Stages } from '../../components/Stages'
 import { Badge, Card, Cite, Empty, Icon, Note, Page, SectionTitle } from '../../components/ui'
 import { useLoad } from '../../hooks/useLoad'
 import { DocEditor } from './DocEditor'
+import { CustomerForms } from './CustomerForms'
 import { ExportButtons } from '../../components/ExportButtons'
 import type { Ctx, J } from '../../types'
 
@@ -76,5 +77,6 @@ export function Reports({ ctx }: { ctx: Ctx }) {
           <time>{t.at.slice(11, 19)}</time><div><b>{t.event} · {t.actor_id} ({t.role})</b><span>{t.detail}</span></div></div>)}</div></Card>
       <Card><SectionTitle title="문서 주의사항"/><p className="muted">임시조치 계획 승인은 물리적 조치 완료를 의미하지 않습니다.</p><p className="muted">원인 가설 승인은 근본원인 확정을 의미하지 않습니다.</p></Card></div>}
     </div>
+    <CustomerForms ctx={ctx}/>
   </Page>
 }

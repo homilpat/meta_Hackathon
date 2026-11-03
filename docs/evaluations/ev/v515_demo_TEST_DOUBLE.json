@@ -1,0 +1,262 @@
+{
+ "run_mode": "TEST_DOUBLE",
+ "model": "scripted-gold-with-one-swap",
+ "model_calls": 3,
+ "cost_usd": 0.0,
+ "docx_mapping_accuracy": [
+  {
+   "form": "customer_form_A_8d_table.docx",
+   "slots": 8,
+   "correct": 7,
+   "wrong": {
+    "T0.R6.C1": "d4.occurrence_cause"
+   },
+   "unresolved": []
+  },
+  {
+   "form": "customer_form_B_reply_paragraph.docx",
+   "slots": 6,
+   "correct": 5,
+   "wrong": {
+    "P4": "d4.occurrence_cause"
+   },
+   "unresolved": []
+  }
+ ],
+ "steps": [
+  {
+   "step": "DOCX 8D 회신서 A",
+   "slots": 8,
+   "route_at_register": "NEEDS_REVIEW",
+   "proposal": {
+    "status": "OK",
+    "mode": "TEST_DOUBLE",
+    "model": "scripted-gold-with-one-swap",
+    "wrong": {
+     "T0.R6.C1": "d4.occurrence_cause"
+    }
+   },
+   "mapping_version": 1,
+   "edits": 1,
+   "preview": [
+    [
+     "Customer",
+     "case.customer",
+     "FILLED",
+     "DEFAULT",
+     "case context / confirmed intake"
+    ],
+    [
+     "Case No.",
+     "case.id",
+     "FILLED",
+     "L",
+     "case"
+    ],
+    [
+     "LOT",
+     "case.lot",
+     "FILLED",
+     "L01, L02, L03, L04",
+     "line data (lots)"
+    ],
+    [
+     "D2 Problem Description",
+     "d2.problem",
+     "FILLED",
+     "30 of 141 AOI inspections reported FAIL. (all lots) Lot L01:",
+     "NCR v2 (APPROVED)"
+    ],
+    [
+     "D3 Containment Action",
+     "d3.containment",
+     "FILLED",
+     "No containment proposed for L01-P05/B2: human verification o",
+     "CONTAINMENT v1 (APPROVED)"
+    ],
+    [
+     "D4 Root Cause",
+     "d4.occurrence_cause",
+     "FILLED",
+     "Worn stencil STN-2 under-deposits paste in L02",
+     "confirmed cause H1"
+    ],
+    [
+     "Escape Point (why not detected)",
+     "d4.escape_cause",
+     "FILLED",
+     "AOI program did not flag low-volume joints on L02",
+     "confirmed cause H2"
+    ],
+    [
+     "Approved by",
+     "d4.approved_by",
+     "FILLED",
+     "frank (2026-11-03)",
+     "approval #3"
+    ]
+   ],
+   "final": {
+    "status": 200,
+    "sha256": "d735eb90c8f370e2af80d46d1bd942a2f000123cd0a496df6c6feffbca16038b",
+    "mapping_version": "1",
+    "case_data_version": "1a54c20c9a4c5881",
+    "first_lines": [
+     "SYNTHETIC 8D Report (customer form A)"
+    ]
+   }
+  },
+  {
+   "step": "DOCX 품질 회신서 B",
+   "slots": 6,
+   "route_at_register": "NEEDS_REVIEW",
+   "proposal": {
+    "status": "OK",
+    "mode": "TEST_DOUBLE",
+    "model": "scripted-gold-with-one-swap",
+    "wrong": {
+     "P4": "d4.occurrence_cause"
+    }
+   },
+   "mapping_version": 1,
+   "edits": 1,
+   "preview": [
+    [
+     "고객사",
+     "case.customer",
+     "FILLED",
+     "DEFAULT",
+     "case context / confirmed intake"
+    ],
+    [
+     "사건 번호",
+     "case.id",
+     "FILLED",
+     "L",
+     "case"
+    ],
+    [
+     "발생 원인",
+     "d4.occurrence_cause",
+     "FILLED",
+     "Worn stencil STN-2 under-deposits paste in L02",
+     "confirmed cause H1"
+    ],
+    [
+     "유출 원인",
+     "d4.escape_cause",
+     "FILLED",
+     "AOI program did not flag low-volume joints on L02",
+     "confirmed cause H2"
+    ],
+    [
+     "봉쇄 조치",
+     "d3.containment",
+     "FILLED",
+     "No containment proposed for L01-P05/B2: human verification o",
+     "CONTAINMENT v1 (APPROVED)"
+    ],
+    [
+     "비고",
+     null,
+     "UNMAPPED",
+     "",
+     null
+    ]
+   ],
+   "final": {
+    "status": 200,
+    "sha256": "bcb83037ff99644e4235631952af2540a4eb1efab32ad65ea619264eb8ea94f6",
+    "mapping_version": "1",
+    "case_data_version": "1a54c20c9a4c5881",
+    "first_lines": [
+     "SYNTHETIC 품질 회신서 (고객 양식 B)",
+     "고객사: DEFAULT",
+     "사건 번호: L"
+    ]
+   }
+  },
+  {
+   "step": "reuse on another case, form change, other customer",
+   "new_case": "CC-1",
+   "route": "CONFIRMED",
+   "values": {
+    "Customer": "DEFAULT",
+    "Case No.": "CC-1",
+    "LOT": "LOT-NEW-42",
+    "D2 Problem Description": "작성 필요",
+    "D3 Containment Action": "작성 필요",
+    "D4 Root Cause": "작성 필요",
+    "Escape Point (why not detected)": "작성 필요",
+    "Approved by": "작성 필요"
+   },
+   "final_on_new_case": [
+    409,
+    "완성본 출력 불가: D2 Problem Description: 제출 필수 값이 없습니다 (D2 문제 기술); D3 Containment Action: 제출 필수 값이 없습니다 (D3 봉쇄 조치); D4 Root Cause: 제출 필수 값이 없습니다 (D4 발생 원인); Escape Po"
+   ],
+   "changed_form": [
+    2,
+    "NEEDS_REVIEW"
+   ],
+   "other_customer_preview": 403
+  },
+  {
+   "step": "held defect rate LOT 0007",
+   "held": [
+    "NEEDS_INPUT",
+    "LOT 0007 (2026-10)의 검사 수량(개)이 확인되지 않아 defect_rate 계산을 보류했습니다. 숫자를 직접 입력하거나, 그 값이 있는 원본 파일의 시트·셀 위치를 알려주세요."
+   ],
+   "suggestion": {
+    "status": "OK",
+    "mode": "TEST_DOUBLE",
+    "model": "scripted-gold-with-one-swap",
+    "candidates": [
+     {
+      "source_id": "F3:T1:B",
+      "file_id": 3,
+      "file": "inspection.xlsx",
+      "sheet": "검사",
+      "column": "B",
+      "header": "검사 수량",
+      "reason": "header"
+     }
+    ]
+   },
+   "wrong_row_answer": "범위 불일치: A3의 LOT은 0008이고 요청은 0007입니다",
+   "answer": "ANSWERED",
+   "result": {
+    "rate_percent": 2.5,
+    "calculation_id": "CALC-cca634c1d5247f61",
+    "inputs": [
+     {
+      "evidence_id": "EV-IN2-2",
+      "field": "defective_qty",
+      "value": 3,
+      "source_type": "CUSTOMER_REPORTED"
+     },
+     {
+      "evidence_id": "EV-IR1",
+      "field": "inspected_qty",
+      "value": 120,
+      "source_type": "SOURCE_CELL"
+     }
+    ]
+   },
+   "second_resume_same": true
+  }
+ ],
+ "person": "scripted: corrects every proposed slot to the gold mapping",
+ "run": {
+  "code_sha": "1dbeda506895c0ee9bc09ed63e183eaedb3cc952+dirty",
+  "parser_version": "docparse-4",
+  "evaluator": "scripts.v515_demo",
+  "evaluator_sha256": "ac5c64684ec40325",
+  "sampling": {
+   "temperature": 0.0,
+   "seed": 1
+  },
+  "python": "3.12.8",
+  "command": "python -m scripts.v515_demo --double",
+  "at": "2026-11-03T07:54:28+00:00"
+ }
+}

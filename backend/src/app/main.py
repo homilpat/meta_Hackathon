@@ -51,6 +51,7 @@ from app.synthetic import (
     generate_post_window,
     spi_correction,
 )
+from app.v515 import make_v515_router
 from app.validation import make_validation_router
 from app.vision import make_vision_router
 from app.workflow import DEMO_USERS, Actor, log, make_auth, make_router, require_case, require_role
@@ -157,6 +158,7 @@ def create_app(database_url: str | None = None,
     app.include_router(make_intake_case_router(sessions, current_user))
     app.include_router(make_vision_router(sessions, current_user))
     app.include_router(make_requests_router(sessions, current_user, app.state.provider))
+    app.include_router(make_v515_router(sessions, current_user, app.state.provider))
 
     @app.get("/task-router")
     def task_router(actor: Who) -> list[dict]:

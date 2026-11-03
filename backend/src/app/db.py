@@ -256,6 +256,110 @@ class InspectionForm(Base):
     edits: Mapped[int | None] = mapped_column(Integer, nullable=True)  # fields the person changed from the proposal
 
 
+class CustomerTemplate(Base):
+    """A customer's blank DOCX form (§30.1 DOC-OUT-01): the file, its hash and the slots the server found.
+    Append-only: a changed file is a new version of the same customer and name."""
+
+    __tablename__ = "customer_templates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    customer: Mapped[str] = mapped_column(String(60), index=True)
+    name: Mapped[str] = mapped_column(String(80))
+    version: Mapped[int] = mapped_column(Integer)
+    content: Mapped[bytes] = mapped_column(LargeBinary, deferred=True)
+    sha256: Mapped[str] = mapped_column(String(64))
+    slots: Mapped[list] = mapped_column(JSON)
+    structure_sha: Mapped[str] = mapped_column(String(64))
+    data_origin: Mapped[str] = mapped_column(String(20))
+    reason: Mapped[str] = mapped_column(Text)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class CustomerTemplateProposal(Base):
+    """One AI proposal of slot -> case field for a customer form (DOC-OUT-02). Append-only."""
+
+    __tablename__ = "customer_template_proposals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    template_id: Mapped[int] = mapped_column(ForeignKey("customer_templates.id"), index=True)
+    mode: Mapped[str] = mapped_column(String(20))
+    model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    status: Mapped[str] = mapped_column(String(20))
+    sent: Mapped[dict] = mapped_column(JSON)
+    reply: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    proposal: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    issues: Mapped[list] = mapped_column(JSON)
+    usage: Mapped[dict] = mapped_column(JSON)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class CustomerTemplateMapping(Base):
+    """A person's confirmed slot -> case field mapping of one form version (DOC-OUT-04). Append-only."""
+
+    __tablename__ = "customer_template_mappings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    template_id: Mapped[int] = mapped_column(ForeignKey("customer_templates.id"), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    mapping: Mapped[dict] = mapped_column(JSON)
+    required: Mapped[list] = mapped_column(JSON)
+    proposal_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    edits: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reason: Mapped[str] = mapped_column(Text)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class CustomerTemplateExport(Base):
+    """Every filled form that left: form and mapping version, case data version, file hash, sources. Append-only."""
+
+    __tablename__ = "customer_template_exports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    template_id: Mapped[int] = mapped_column(ForeignKey("customer_templates.id"))
+    template_version: Mapped[int] = mapped_column(Integer)
+    mapping_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"), index=True)
+    mode: Mapped[str] = mapped_column(String(10))  # draft | final
+    case_data_version: Mapped[str] = mapped_column(String(20))
+    file_sha256: Mapped[str] = mapped_column(String(64))
+    sources: Mapped[list] = mapped_column(JSON)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class InputRequest(Base):
+    """A held calculation and the input it misses (§30.2 ASK-RESUME-01). Append-only; its state is its events."""
+
+    __tablename__ = "input_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"), index=True)
+    action: Mapped[str] = mapped_column(String(30))
+    lot: Mapped[str] = mapped_column(String(60))
+    period: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    missing_field: Mapped[str] = mapped_column(String(40))
+    held: Mapped[dict] = mapped_column(JSON)
+    question: Mapped[str] = mapped_column(Text)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class InputEvent(Base):
+    """SUGGESTED, ANSWER_ACCEPTED, ANSWER_REJECTED, RESUME_HELD, RESUMED (ASK-RESUME-02/03). Append-only."""
+
+    __tablename__ = "input_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    request_id: Mapped[int] = mapped_column(ForeignKey("input_requests.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(20))
+    payload: Mapped[dict] = mapped_column(JSON)
+    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
 class InspectionMappingProposal(Base):
     """One AI proposal of a column mapping for an unregistered inspection XLSX (§29 AI-CFG-01/02): what was sent
     (headers and structure only), the reply, and the server's verdict on it. Append-only."""
@@ -1222,7 +1326,7 @@ class LimitSetting(Base):
 
 
 # Audit rows are append-only at the database level, not just by convention.
-APPEND_ONLY = ("inspection_forms", "inspection_mapping_proposals", "calculations", "model_responses", "approval_events", "workflow_events", "doc_comments", "audit_chain",
+APPEND_ONLY = ("customer_templates", "customer_template_proposals", "customer_template_mappings", "customer_template_exports", "input_requests", "input_events", "inspection_forms", "inspection_mapping_proposals", "calculations", "model_responses", "approval_events", "workflow_events", "doc_comments", "audit_chain",
                "workflow_policies", "evidence_quality", "process_contexts", "affected_objects",
                "triage_assessments", "team_events", "actions", "action_events",
                "cause_hypotheses", "why_links", "experiments", "causal_decisions",

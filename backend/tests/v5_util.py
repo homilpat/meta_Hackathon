@@ -59,11 +59,11 @@ def valid(c: TestClient, case_id: str, kind: str, **match) -> list[str]:
 
 
 def confirmed_cause(c: TestClient, case_id: str = "L", text: str = "Worn stencil STN-2 under-deposits paste in L02",
-                    category: str = "MACHINE") -> int:
+                    category: str = "MACHINE", cause_type: str = "OCCURRENCE") -> int:
     """A D4 cause CONFIRMED the legitimate way: hypothesis, supporting experiment by alice, decision by frank."""
     ev = valid(c, case_id, "equipment_events")[:1] + valid(c, case_id, "lots", lot_id="L02")[:1]
     h = c.post(f"/cases/{case_id}/hypotheses", headers=H("alice"), json={
-        "cause_type": "OCCURRENCE", "category": category, "text": text, "evidence_ids": ev}).json()["hypothesis_id"]
+        "cause_type": cause_type, "category": category, "text": text, "evidence_ids": ev}).json()["hypothesis_id"]
     e = c.post(f"/cases/{case_id}/experiments", headers=H("alice"), json={
         "hypothesis_id": h, "method": "Swap STN-2 for a fresh stencil, same paste lot, compare SPI volume",
         "controlled_conditions": ["paste lot unchanged", "same line"], "baseline": {"stencil": "STN-2"},

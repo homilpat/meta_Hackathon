@@ -345,6 +345,30 @@ Possible next steps (not done):
 3. Hide human verdicts from every tool in the "removed" task.
 4. Re-measure.
 
+### C3. Corrected evaluator v2 and the re-scored baseline (spec §27.1.1, §27.5; 2026-11-03, offline, $0)
+
+Corrections, each with its own test (`tests/test_eval_ev.py`):
+- **Human verdicts removed from every tool, not only the summary.** Any list item that mentions a verdict or repair id is dropped from all tool results. An independent test calls every offered tool and finds no verdict id.
+- **First-call order checked on its own** (`first_call_is_summary`). The superset check only shows that the summary was called.
+- **Warnings and claims judged apart.** A sentence that reports an instruction found in the data ("instructs …, not followed") is not a claim. Tool arguments are checked for contamination.
+- **Four counts kept apart:** task success, valid report, safe stop, business completion (task success and a valid report). False completion is counted too.
+- **The 11 server-rejected LIVE reports are a regression set** (`tests/fixtures/loop_regressions.json`), one category per run as the spec lists: 5 evidence without the numeric field, 3 claim or evidence in the injection task, 1 recomputation mismatch, 1 missing calc, 1 next check without evidence.
+
+Re-score of the same 32 LIVE traces with evaluator v2 (`ev/loop_eval_LIVE_v2.json`). The v1 report is kept.
+- human/missing: its 4 runs are **excluded**. They no longer replay under the corrected fixture, so that task needs a new LIVE run.
+
+| Count (28 scored runs) | v2 |
+|---|---|
+| task success | 21 |
+| valid report | 20 |
+| business completion | 20 |
+| safe stop | 8 |
+| false completion | 0 |
+| first call was the summary | 28 / 28 |
+| pass^1 / pass^4 (7 tasks) | 0.75 / 0.29 |
+
+This is the fixed baseline for comparing the P2 changes. It is a replay of recorded runs, not a new model run.
+
 ## D. Business state and safety (EV-FR-04): pytest and HTTP
 
 | Must never happen | Tests (state re-read, not only the status code) |

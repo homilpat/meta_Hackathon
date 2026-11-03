@@ -156,3 +156,28 @@ def test_a_broken_file_is_refused_with_a_reason_and_another_case_sees_nothing(tm
     assert c.get(f"/cases/{case}/inspection-imports/{imp['import_id']}/reconciliation",
                  headers=H("gina")).status_code in (403, 404)
     assert c.get(f"/intakes/{iid}/files/{fid}/inspection", headers=H("bob")).status_code in (403, 404)
+
+
+def test_a_company_form_registered_by_the_admin_is_recognized_and_versioned(tmp_path):
+    c, case = case_with_customer_lot(tmp_path)
+    blank = c.get("/inspection-forms", headers=H("alice")).json()
+    assert blank["template"]["lot"] == [] and blank["forms"][0]["builtin"]  # blanks to fill for a real form
+    form = {"name": "ACME 수입검사", "reason": "고객사 ACME 양식 등록", "required": ["lot", "inspected_qty", "defective_qty"],
+            "fields": {**blank["template"], "lot": ["제조번호"], "inspected_qty": ["검사량"], "defective_qty": ["부적합수"],
+                       "part_number": ["자재코드"]}}  # unit, item, value left blank: not used
+    assert c.post("/inspection-forms", json=form, headers=H("alice")).status_code == 403  # admin only
+    v1 = c.post("/inspection-forms", json=form, headers=H("gina"))
+    assert v1.status_code == 201 and v1.json()["version"] == 1 and "unit" not in v1.json()["fields"]
+    data = workbook([["PCB-ECU-200", "L02", 480, 12]], head=["자재코드", "제조번호", "검사량", "부적합수"])
+    iid, fid = upload_xlsx(c, data)
+    v = preview(c, iid, fid)
+    assert v["form"]["name"] == "ACME 수입검사" and v["mapping"]["lot"] == "B" and v["mapping"]["defective_qty"] == "D"
+    imp = c.post(f"/cases/{case}/inspection-imports", json={**body(v, iid, fid), "form": "ACME 수입검사"},
+                 headers=H("alice")).json()
+    assert imp["form"] == "ACME 수입검사" and imp["mapping_version"] == v["form"]["form_version"]
+    v2 = c.post("/inspection-forms", json={**form, "reason": "검사일 열 추가", "fields": {**form["fields"],
+                                                                                   "inspected_on": ["검사일"]}},
+                headers=H("gina")).json()
+    assert v2["version"] == 2 and v2["form_version"] != v["form"]["form_version"]  # the import keeps v1's id
+    bad = c.post("/inspection-forms", json={**form, "required": ["inspected_qty"]}, headers=H("gina"))
+    assert bad.status_code == 422  # LOT stays required: it is how rows reach a case and a reconciliation

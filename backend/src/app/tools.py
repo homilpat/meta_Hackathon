@@ -80,9 +80,18 @@ ARGS = {s["function"]["name"]: set(s["function"]["parameters"]["properties"])
         for s in SPECS + HISTORY_SPECS + HYBRID_SPECS}
 
 
+# entity types the summary computes from directly (not through _rows): a protected row of these is refused, so
+# the summary never carries an unmasked value (sources are exact synthetic fixtures today: main.upload_sources)
+SUMMARY_TYPES = ("aoi_inspections", "spi_measurements", "human_verifications", "repair_dispositions", "lots",
+                 "shipments", "panels", "boards")
+
+
 class EvidenceTools:
     def __init__(self, session: Session, case_id: str, use_history: bool = False, hybrid: bool = False,
-                 role: str = "AUTHOR"):
+                 role: str = "AUTHOR", masker=None):
+        # masker (egress.Masker): rows not approved for external processing go out as tokens instead of being
+        # refused, as protected intake files do (user 2026-11-03). Without one they are refused (fail closed).
+        self.masker, self.protected = masker, set()
         self.session, self.case_id, self.use_history = session, case_id, use_history
         self.hybrid, self.role = hybrid, role  # the requesting user's role scopes every retrieval (ACL before egress)
 
@@ -102,11 +111,30 @@ class EvidenceTools:
             .join(SourceEvent, Evidence.source_event_id == SourceEvent.id)
             .join(SourceAsset, SourceEvent.source_asset_id == SourceAsset.id)
             .where(Evidence.case_id == self.case_id, *conditions).order_by(Evidence.id)).all()
-        if any((e.data_origin, e.sensitivity) != APPROVED for _, e, _ in rows):
+        protected = [(v, e) for v, e, _ in rows if (e.data_origin, e.sensitivity) != APPROVED]
+        if protected and (self.masker is None or any(e.entity_type in SUMMARY_TYPES for _, e in protected)):
             raise ToolDenied("denied: source not approved for external processing")
-        return [{"evidence_id": v.evidence_id, "entity_type": e.entity_type, "entity_key": e.entity_key,
-                 "source_version": a.source_version, "validity": v.validity,
-                 "record": json.loads(e.raw_json)} for v, e, a in rows]
+        self.protected = {v.evidence_id for v, _ in protected}
+        return [self._item(v, e, a) for v, e, a in rows]
+
+    def _item(self, v, e, a) -> dict:
+        item = {"evidence_id": v.evidence_id, "entity_type": e.entity_type, "entity_key": e.entity_key,
+                "source_version": a.source_version, "validity": v.validity, "record": json.loads(e.raw_json)}
+        if v.evidence_id not in self.protected:
+            return item
+        return {**item, "entity_key": self._mask(e.entity_key), "record": self._mask(item["record"]), "masked": True}
+
+    def _mask(self, x):
+        """Values become tokens (the same value, the same token); keys and structure stay. Numbers too."""
+        if isinstance(x, dict):
+            return {k: self._mask(v) for k, v in x.items() if k not in ("data_origin", "sensitivity")}
+        if isinstance(x, list):
+            return [self._mask(v) for v in x]
+        if isinstance(x, bool) or x is None:
+            return x
+        if isinstance(x, (int, float)):
+            return self.masker.token(str(x))
+        return self.masker.mask(str(x))
 
     def get_case_summary(self) -> dict:
         """One compact call instead of paging raw events: fewer rounds and tokens, numbers the server can recheck."""
@@ -171,9 +199,12 @@ class EvidenceTools:
 
         self._rows()  # same egress gate as raw evidence
         try:
-            return compute(self.session, self.case_id, op, evidence_ids, field, denominator_evidence_ids, recs)
+            out = compute(self.session, self.case_id, op, evidence_ids, field, denominator_evidence_ids, recs)
         except CalcError as exc:
             raise ToolError(str(exc)) from None
+        if self.masker and (set(evidence_ids) | set(denominator_evidence_ids or [])) & self.protected:
+            out = {**out, "value": self.masker.token(str(out["value"])), "masked": True}  # the server fills it
+        return out
 
     def get_evidence(self, evidence_ids: list[str]) -> dict:
         if not isinstance(evidence_ids, list) or len(evidence_ids) > 20 or not all(

@@ -52,6 +52,7 @@ class DataWarning(BaseModel):
     model_config = ConfigDict(extra="forbid")
     text: str = Field(min_length=1, max_length=600)
     evidence_ids: list[str] = []
+    source: Literal["MODEL", "SERVER"] = "MODEL"  # SERVER: found by the server's own scan of the tool results
 
 
 class InvestigationReport(BaseModel):

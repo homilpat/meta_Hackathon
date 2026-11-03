@@ -19,6 +19,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.fields import FreeText
+
 FORM = "inspection_results_v1"  # the one supported form: one row per LOT (and item), quantities per row
 FIELDS = {  # field -> header words (lower case, spaces removed) of the reference form and its usual wordings
     "part_number": ("품번", "부품번호", "partno", "partnumber", "pn", "itemcode"),
@@ -30,8 +32,64 @@ FIELDS = {  # field -> header words (lower case, spaces removed) of the referenc
     "value": ("측정값", "value", "measured"),
     "unit": ("단위", "unit"),
 }
-REQUIRED = ("lot", "inspected_qty", "defective_qty")  # the form's contract
-MAPPING_VERSION = hashlib.sha256(json.dumps([FORM, FIELDS, REQUIRED]).encode()).hexdigest()[:12]
+REQUIRED = ("lot", "inspected_qty", "defective_qty")  # the built-in form's contract
+BUILTIN = {"name": FORM, "version": 1, "fields": {k: list(v) for k, v in FIELDS.items()}, "required": list(REQUIRED),
+           "header_search_rows": 20, "builtin": True}
+
+
+def form_version(form: dict) -> str:
+    """The id of a form definition: its name, version, header words and required fields (stored on each import)."""
+    return hashlib.sha256(json.dumps([form["name"], form["version"], form["fields"], form["required"]],
+                                     ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:12]
+
+
+MAPPING_VERSION = form_version(BUILTIN)
+
+
+def forms(session: Session) -> list[dict]:
+    """The built-in synthetic form and, per name, the latest version a person registered (append-only)."""
+    from app.db import InspectionForm
+
+    latest: dict[str, dict] = {}
+    for f in session.scalars(select(InspectionForm).order_by(InspectionForm.id)):
+        latest[f.name] = {"name": f.name, "version": f.version, "fields": f.fields, "required": f.required,
+                          "header_search_rows": f.header_search_rows, "builtin": False, "reason": f.reason,
+                          "created_by": f.created_by, "created_at": f.created_at}
+    return [BUILTIN, *latest.values()]
+
+
+class FormIn(BaseModel):
+    """A company form: header words per field (blank fields are simply not used), required fields, reason."""
+    name: str = Field(min_length=1, max_length=80)
+    fields: dict[str, list[str]]
+    required: list[str]
+    header_search_rows: int = Field(20, ge=1, le=200)
+    reason: FreeText
+
+
+def register(session: Session, body: FormIn, actor) -> dict:
+    from app.db import InspectionForm
+    from app.workflow import now
+
+    if unknown := sorted(set(body.fields) - set(FIELDS)):
+        raise HTTPException(422, f"모르는 필드: {unknown} (가능: {sorted(FIELDS)})")
+    words = {k: [_key(w) for w in v if _key(w)] for k, v in body.fields.items()}
+    words = {k: v for k, v in words.items() if v}  # a blank field is left out, not an error
+    if missing := [f for f in body.required if f not in words]:
+        raise HTTPException(422, f"필수 필드에 헤더 단어가 없습니다: {missing}")
+    if "lot" not in body.required:
+        raise HTTPException(422, "LOT는 필수여야 합니다 (대조·근거 연결의 기준)")
+    if body.name == FORM:
+        raise HTTPException(409, "기본 합성 양식 이름은 쓸 수 없습니다")
+    prev = session.scalar(select(InspectionForm).where(InspectionForm.name == body.name)
+                          .order_by(InspectionForm.version.desc()).limit(1))
+    row = InspectionForm(name=body.name, version=(prev.version + 1) if prev else 1, fields=words,
+                         required=list(dict.fromkeys(body.required)), header_search_rows=body.header_search_rows,
+                         reason=body.reason, created_by=actor.id, created_at=now())
+    session.add(row)
+    session.flush()
+    out = next(f for f in forms(session) if f["name"] == body.name)
+    return {**out, "form_version": form_version(out)}
 AMBIGUOUS_DATE = re.compile(r"^\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}$")  # 03/04/2026: day or month first?
 THOUSANDS = re.compile(r"^\d{1,3}(,\d{3})+$")
 
@@ -51,24 +109,35 @@ def _workbook(data: bytes):
     return values, formulas
 
 
-def suggest(headers: dict[str, str]) -> dict[str, str | None]:
+def suggest(headers: dict[str, str], fields: dict | None = None) -> dict[str, str | None]:
     """field -> column letter by the form's header words; a suggestion until a person confirms it."""
     out: dict[str, str | None] = {}
     taken: set[str] = set()
-    for field, words in FIELDS.items():
+    for field, words in (fields or FIELDS).items():
         out[field] = next((col for col, h in headers.items() if col not in taken and _key(h) in words), None)
         if out[field]:
             taken.add(out[field])
     return out
 
 
-def header_row(ws, limit: int = 20) -> int | None:
+def header_row(ws, limit: int = 20, fields: dict | None = None) -> int | None:
     """The first row (within the first `limit`) that names at least two of the form's fields."""
     for r in range(1, min(ws.max_row, limit) + 1):
         heads = {c.column_letter: c.value for c in ws[r] if c.value is not None}
-        if sum(1 for v in suggest(heads).values() if v) >= 2:
+        if sum(1 for v in suggest(heads, fields).values() if v) >= 2:
             return r
     return None
+
+
+def best_form(ws, candidates: list[dict]) -> tuple[dict, int | None]:
+    """The form whose header words name the most columns of this sheet (the built-in form on a tie)."""
+    scored = []
+    for f in candidates:
+        r = header_row(ws, f["header_search_rows"], f["fields"])
+        heads = {c.column_letter: c.value for c in ws[r] if c.value is not None} if r else {}
+        scored.append((sum(1 for v in suggest(heads, f["fields"]).values() if v), not f["builtin"], f, r))
+    _, _, f, r = max(scored, key=lambda x: (x[0], not x[1]))
+    return f, r
 
 
 def _cell(ws_v, ws_f, ref: str) -> dict:
@@ -78,7 +147,7 @@ def _cell(ws_v, ws_f, ref: str) -> dict:
             "type": cv.data_type, "format": cv.number_format, "formula": formula}
 
 
-def _normalize(field: str, c: dict) -> tuple[object, list[dict]]:
+def _normalize(field: str, c: dict, required=REQUIRED) -> tuple[object, list[dict]]:
     """(normalized value, issues) for one cell; the raw value stays beside it, never overwritten."""
     raw, issues = c["raw"], []
 
@@ -91,7 +160,7 @@ def _normalize(field: str, c: dict) -> tuple[object, list[dict]]:
             return None, issues
         issue("INFO", "FORMULA_CACHED", "수식의 저장된 값입니다 (재계산하지 않음, 최신 여부 미확인)")
     if raw is None or (isinstance(raw, str) and not raw.strip()):
-        if field in REQUIRED:
+        if field in required:
             issue("BLOCK", "MISSING", "필수 값이 비어 있습니다 (0으로 채우지 않음)")
         return None, issues
     if field in ("lot", "part_number"):
@@ -146,7 +215,8 @@ def _normalize(field: str, c: dict) -> tuple[object, list[dict]]:
 
 
 def read(data: bytes, file_sha256: str, sheet: str | None = None, header: int | None = None,
-         mapping: dict[str, str | None] | None = None) -> dict:
+         mapping: dict[str, str | None] | None = None, candidates: list[dict] | None = None,
+         form_name: str | None = None) -> dict:
     """Preview and row checks: sheets, the header row, columns, a suggested mapping and every data row with its
     cells, normalized values and issues. Hidden rows are excluded by default and listed."""
     from app import docparse
@@ -162,13 +232,25 @@ def read(data: bytes, file_sha256: str, sheet: str | None = None, header: int | 
     if sheet not in names:
         raise HTTPException(422, f"시트 {sheet!r}가 없습니다")
     ws_v, ws_f = wb_v[sheet], wb_f[sheet]
-    header = header or header_row(ws_v)
+    candidates = candidates or [BUILTIN]
+    if form_name:
+        form = next((f for f in candidates if f["name"] == form_name), None)
+        if form is None:
+            raise HTTPException(422, f"등록되지 않은 양식: {form_name}")
+        header = header or header_row(ws_v, form["header_search_rows"], form["fields"])
+    else:
+        form, found = best_form(ws_v, candidates)
+        header = header or found
+    fields, required = form["fields"], tuple(form["required"])
+    form_info = {"name": form["name"], "version": form["version"], "form_version": form_version(form),
+                 "builtin": form["builtin"], "required": list(required),
+                 "candidates": [f["name"] for f in candidates]}
     if header is None:
-        return {"form": FORM, "sheets": sheets, "sheet": sheet, "header_row": None, "columns": {}, "rows": [],
+        return {"form": form_info, "sheets": sheets, "sheet": sheet, "header_row": None, "columns": {}, "rows": [],
                 "suggested_mapping": {}, "mapping": {}, "issues": [{"level": "BLOCK", "code": "NO_HEADER",
                                                                      "message": "양식의 헤더 행을 찾지 못했습니다"}]}
     columns = {c.column_letter: c.value for c in ws_v[header] if c.value is not None}
-    suggested = suggest(columns)
+    suggested = suggest(columns, fields)
     mapping = mapping or suggested
     rows, stopped = [], None
     for r in range(header + 1, ws_v.max_row + 1):
@@ -180,7 +262,7 @@ def read(data: bytes, file_sha256: str, sheet: str | None = None, header: int | 
             if not col:
                 continue
             c = _cell(ws_v, ws_f, f"{col}{r}")
-            v, iss = _normalize(field, c)
+            v, iss = _normalize(field, c, required)
             cells[field], values[field] = c, v
             issues += iss
         if all(c["raw"] is None for c in cells.values()):
@@ -204,8 +286,9 @@ def read(data: bytes, file_sha256: str, sheet: str | None = None, header: int | 
             if x["values"].get("unit"):
                 x["issues"].append({"level": "WARN", "code": "UNIT_MIXED", "field": "unit", "cell": x["cells"]["unit"]["cell"],
                                     "message": f"파일 안에 단위가 섞여 있습니다: {', '.join(sorted(units))}"})
-    missing = [f for f in REQUIRED if not mapping.get(f)]
-    return {"form": FORM, "mapping_version": MAPPING_VERSION, "file_sha256": file_sha256, "sheets": sheets,
+    missing = [f for f in required if not mapping.get(f)]
+    return {"form": form_info, "mapping_version": form_info["form_version"], "file_sha256": file_sha256,
+            "sheets": sheets,
             "sheet": sheet, "header_row": header, "columns": columns, "suggested_mapping": suggested,
             "mapping": mapping, "rows": rows, "stopped_at_row": stopped,
             "issues": [{"level": "BLOCK", "code": "REQUIRED_NOT_MAPPED", "message": f"필수 열 미연결: {', '.join(missing)}"}]
@@ -222,6 +305,7 @@ class ImportIn(BaseModel):
     mapping: dict[str, str | None]
     include_rows: list[int]
     exclude: dict[str, str] = {}  # row -> reason; every data row is included or excluded with a reason
+    form: str | None = None  # the form the person confirmed (None: the best match, as the preview showed)
 
 
 def confirm(session: Session, case_id: str, body: ImportIn, f, actor) -> tuple[int, dict]:
@@ -237,7 +321,8 @@ def confirm(session: Session, case_id: str, body: ImportIn, f, actor) -> tuple[i
 
     if set(body.mapping) - set(FIELDS):
         raise HTTPException(422, f"모르는 필드: {sorted(set(body.mapping) - set(FIELDS))}")
-    view = read(data, body.file_sha256, body.sheet, body.header_row, body.mapping)
+    view = read(data, body.file_sha256, body.sheet, body.header_row, body.mapping, forms(session), body.form)
+    version_of_form = view["mapping_version"]
     if view["issues"]:
         raise HTTPException(422, view["issues"][0]["message"])
     rows = {x["row"]: x for x in view["rows"]}
@@ -251,7 +336,7 @@ def confirm(session: Session, case_id: str, body: ImportIn, f, actor) -> tuple[i
     if blocked := sorted(r for r in inc if any(i["level"] == "BLOCK" for i in rows[r]["issues"])):
         raise HTTPException(422, f"BLOCK 오류가 있는 행은 포함할 수 없습니다: {blocked[:10]}")
     sig = hashlib.sha256(json.dumps([case_id, body.file_sha256, body.sheet, body.header_row, body.mapping,
-                                     sorted(inc), sorted(exc.items()), MAPPING_VERSION], sort_keys=True).encode()
+                                     sorted(inc), sorted(exc.items()), version_of_form], sort_keys=True).encode()
                          ).hexdigest()
     if (same := session.scalar(select(InspectionImport).where(InspectionImport.case_id == case_id,
                                                               InspectionImport.signature == sig))):
@@ -262,7 +347,8 @@ def confirm(session: Session, case_id: str, body: ImportIn, f, actor) -> tuple[i
     version = (prev.version + 1) if prev else 1
     imp = InspectionImport(case_id=case_id, intake_id=body.intake_id, file_id=body.file_id,
                            file_sha256=body.file_sha256, sheet=body.sheet, header_row=body.header_row,
-                           mapping=body.mapping, mapping_version=MAPPING_VERSION, included_rows=sorted(inc),
+                           mapping=body.mapping, mapping_version=version_of_form, form=view["form"]["name"],
+                           included_rows=sorted(inc),
                            excluded={str(k): v for k, v in sorted(exc.items())},
                            rows=[rows[r] for r in sorted(inc)], version=version,
                            supersedes_id=prev.id if prev else None, signature=sig, created_by=actor.id,
@@ -282,7 +368,8 @@ def confirm(session: Session, case_id: str, body: ImportIn, f, actor) -> tuple[i
         x = rows[r]
         record = {**x["values"], "row": r, "sheet": body.sheet, "original_row_id": f"{body.sheet}!{r}", "cells": {f: c["cell"] for f, c in x["cells"].items()},
                   "raw": {f: c["raw"] for f, c in x["cells"].items()}, "file_sha256": body.file_sha256,
-                  "mapping_version": MAPPING_VERSION, "import_id": imp.id, "import_version": version}
+                  "mapping_version": version_of_form, "form": view["form"]["name"], "import_id": imp.id,
+                  "import_version": version}
         raw = json.dumps(record, ensure_ascii=False, sort_keys=True, default=str)
         ev = SourceEvent(case_id=case_id, source_asset_id=asset.id, event_id=f"XL{imp.id}-{r}",
                          original_row_id=f"{body.sheet}!{r}", entity_type="inspection_results",
@@ -297,14 +384,15 @@ def confirm(session: Session, case_id: str, body: ImportIn, f, actor) -> tuple[i
         ids.append(f"EV-XL{imp.id}-{r}")
     imp.evidence_ids = ids
     log(session, case_id, actor, "INSPECTION_IMPORTED", f"import{imp.id} v{version} rows={len(inc)} "
-        f"excluded={len(exc)} file={body.file_sha256[:12]} mapping={MAPPING_VERSION}")
+        f"excluded={len(exc)} file={body.file_sha256[:12]} form={view['form']['name']} mapping={version_of_form}")
     return 201, import_out(imp)
 
 
 def import_out(imp) -> dict:
     return {"import_id": imp.id, "case_id": imp.case_id, "version": imp.version, "supersedes_id": imp.supersedes_id,
             "file_id": imp.file_id, "file_sha256": imp.file_sha256, "sheet": imp.sheet, "header_row": imp.header_row,
-            "mapping": imp.mapping, "mapping_version": imp.mapping_version, "included_rows": imp.included_rows,
+            "mapping": imp.mapping, "mapping_version": imp.mapping_version, "form": imp.form,
+            "included_rows": imp.included_rows,
             "excluded": imp.excluded, "denominator": {"included": len(imp.included_rows),
                                                       "excluded": len(imp.excluded)},
             "evidence_ids": imp.evidence_ids, "created_by": imp.created_by, "created_at": imp.created_at}

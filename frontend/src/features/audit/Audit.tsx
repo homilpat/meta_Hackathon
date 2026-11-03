@@ -16,6 +16,7 @@ export function Audit({ ctx }: { ctx: Ctx }) {
       {tl.map((t, i) => <tr key={i}><td>{t.at.slice(0, 19)}</td><td>{t.actor_id}</td><td><Badge tone={t.event.includes('REVALIDATION') ? 'red' : t.event.startsWith('BASIS') ? 'amber' : t.event === 'APPROVE' ? 'green' : 'slate'}>{t.event}</Badge></td><td className="wrap">{t.detail}</td></tr>)}
     </tbody></table></div></Card>
     <Limits ctx={ctx}/>
+    <InspectionForms ctx={ctx}/>
   </Page>
 }
 
@@ -36,4 +37,31 @@ function Limits({ ctx }: { ctx: Ctx }) {
       <input aria-label="변경 사유" placeholder="사유 (필수)" value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))}/>
       <button className="button primary" disabled={!form.name || !form.value || !form.reason.trim()} onClick={save}>변경</button></div>}
     {data.history.length > 0 && <Field label="변경 이력">{data.history.map((h: J, i: number) => <span key={i} className="muted">{h.at.slice(0, 19)} · {h.actor_id} · {h.name} = {h.value} · {h.reason}</span>)}</Field>}</Card>
+}
+
+// Company inspection XLSX forms (spec §28): blanks to fill with a real form's header words; AI operations registers.
+const FLABEL: Record<string, string> = { part_number: '품번', lot: 'LOT', inspected_on: '검사일', inspected_qty: '검사 수량', defective_qty: '불량 수량', item: '측정 항목', value: '측정값', unit: '단위' }
+
+function InspectionForms({ ctx }: { ctx: Ctx }) {
+  const data = useLoad<J>(ctx, '/inspection-forms', null)
+  const [name, setName] = useState('')
+  const [words, setWords] = useState<Record<string, string>>({})
+  const [req, setReq] = useState<string[]>(['lot', 'inspected_qty', 'defective_qty'])
+  const [reason, setReason] = useState('')
+  const admin = ctx.me?.role === data?.admin_role
+  if (!data) return null
+  const save = async () => {
+    const fields = Object.fromEntries(data.fields.map((k: string) => [k, (words[k] ?? '').split(',').map(w => w.trim()).filter(Boolean)]))
+    try { await ctx.api('/inspection-forms', 'POST', { name, fields, required: req, reason }, true); setName(''); setWords({}); setReason(''); ctx.refresh() } catch { /* error bar */ }
+  }
+  return <Card><SectionTitle title="검사 결과 XLSX 양식" sub={`실제 회사 양식의 헤더 단어를 빈칸에 채워 등록합니다. 고치면 새 버전으로 남습니다. 등록: ${data.admin_role}`}/>
+    {data.forms.map((f: J) => <p key={f.name} className="muted wrap"><b>{f.name}</b> v{f.version} {f.builtin ? '(기본 합성 양식)' : `· ${f.created_by} · ${f.reason}`} · 필수 {f.required.map((k: string) => FLABEL[k] ?? k).join(', ')} · {Object.entries(f.fields).map(([k, w]) => `${FLABEL[k] ?? k}: ${(w as string[]).join('/')}`).join(' · ')}</p>)}
+    {admin ? <div className="mt">
+      <Field label="양식 이름"><input className="input" aria-label="양식 이름" value={name} onChange={e => setName(e.target.value)}/></Field>
+      {data.fields.map((k: string) => <div key={k} className="row-gap"><label className="row-gap"><input type="checkbox" aria-label={`${FLABEL[k] ?? k} 필수`} checked={req.includes(k)} onChange={e => setReq(e.target.checked ? [...req, k] : req.filter(x => x !== k))}/> 필수</label>
+        <Field label={`${FLABEL[k] ?? k} 열의 헤더 단어 (쉼표로 구분, 비우면 사용 안 함)`}><input className="input" aria-label={`${FLABEL[k] ?? k} 헤더 단어`} value={words[k] ?? ''} onChange={e => setWords({ ...words, [k]: e.target.value })}/></Field></div>)}
+      <Field label="등록 사유"><input className="input" aria-label="양식 등록 사유" value={reason} onChange={e => setReason(e.target.value)}/></Field>
+      <button className="button primary" disabled={!name.trim() || !reason.trim()} onClick={save}>양식 등록 (새 버전)</button>
+    </div> : <p className="muted">양식 등록·수정은 {data.admin_role} 역할만 할 수 있습니다.</p>}
+  </Card>
 }

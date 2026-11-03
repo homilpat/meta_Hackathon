@@ -339,7 +339,7 @@ def add_inspection_routes(router: APIRouter, sessions: sessionmaker, Who, IdemKe
 
     @router.get("/intakes/{intake_id}/files/{file_id}/inspection")
     def preview(intake_id: int, file_id: int, actor: Who, sheet: str | None = None,
-                header_row: int | None = None, mapping: str | None = None) -> dict:
+                header_row: int | None = None, mapping: str | None = None, form: str | None = None) -> dict:
         """mapping: the person's edited field -> column as JSON; the checks run again on it."""
         import json
 
@@ -352,7 +352,25 @@ def add_inspection_routes(router: APIRouter, sessions: sessionmaker, Who, IdemKe
         with sessions() as session:
             f = xlsx(session, intake_id, file_id, actor)
             data, sha = f.content, f.sha256
-        return ix.read(data, sha, sheet, header_row, chosen)
+        with sessions() as session:
+            known = ix.forms(session)
+        return ix.read(data, sha, sheet, header_row, chosen, known, form)
+
+    @router.get("/inspection-forms")
+    def list_forms(actor: Who) -> dict:
+        with sessions() as session:
+            return {"forms": [{**f, "form_version": ix.form_version(f)} for f in ix.forms(session)],
+                    "fields": sorted(ix.FIELDS), "admin_role": limits.ADMIN_ROLE,
+                    "template": {k: [] for k in ix.FIELDS}}  # blank: fill in a company form's header words
+
+    @router.post("/inspection-forms", status_code=201)
+    def register_form(body: ix.FormIn, key: IdemKey, actor: Who):
+        if actor.role != limits.ADMIN_ROLE:  # the department that owns operating settings (limits.py)
+            raise HTTPException(403, f"양식 등록은 {limits.ADMIN_ROLE} 역할만 할 수 있습니다")
+
+        def run(session: Session) -> tuple[int, dict]:
+            return 201, ix.register(session, body, actor)
+        return run_idempotent(sessions, "inspection_form", key, actor, run)
 
     @router.post("/cases/{case_id}/inspection-imports", status_code=201)
     def confirm_import(case_id: str, body: ix.ImportIn, key: IdemKey, actor: Who):

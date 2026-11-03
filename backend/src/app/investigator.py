@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 import time
 from datetime import UTC, datetime
 
@@ -11,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.db import ModelRun, ToolCall
 from app.model_provider import ModelProvider, ProviderError
-from app.report import InvestigationReport, structured, validate_report
+from app.report import DataWarning, InvestigationReport, structured, validate_report
 from app.tools import EvidenceTools, ToolError
 
 # Run limits live in app/limits.py (INVESTIGATION_*), with their basis; the AI operations department changes them.
@@ -88,9 +89,19 @@ and not an action; never propose a NEGATIVE_PRECEDENT action as a fix. You canno
 def investigate(session: Session, case_id: str, user_id: str, provider: ModelProvider,
                 use_history: bool = False, hybrid: bool = False, role: str = "AUTHOR") -> ModelRun:
     """Run the loop and persist the run. Never raises for model/provider problems."""
+    from app.egress import MASK_NOTE, Masker
+    from app.intake_extract import INJECTION
+
     started = _now()
-    tools = EvidenceTools(session, case_id, use_history, hybrid, role)
-    messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT + (HYBRID_PROMPT if hybrid else "")},
+    masker = Masker()  # one per run: a protected value gets the same token in every tool result of this run
+    tools = EvidenceTools(session, case_id, use_history, hybrid, role, masker=masker)
+    try:
+        tools._rows()
+        masked = bool(tools.protected)
+    except ToolError:
+        masked = False
+    messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT + (HYBRID_PROMPT if hybrid else "")
+                             + ("\n" + MASK_NOTE if masked else "")},
                             {"role": "user", "content": f"Investigate case {case_id}. Use the tools, then report."}]
     calls: list[dict] = []
     status, error, report, rounds, ptok, ctok = "FAILED", None, None, 0, 0, 0
@@ -99,7 +110,7 @@ def investigate(session: Session, case_id: str, user_id: str, provider: ModelPro
     deadline = time.monotonic() + limits.get("INVESTIGATION_DEADLINE_S")
     max_rounds, max_calls = limits.get("INVESTIGATION_MAX_ROUNDS"), limits.get("INVESTIGATION_MAX_TOOL_CALLS")
     max_usd = limits.get("INVESTIGATION_MAX_COST_USD")
-    precedents, attempts, last_sig = None, [], None
+    precedents, attempts, last_sig, flags = None, [], None, {}
     if use_history:
         try:
             precedents = tools.retrieve_historical_cases()["precedents"]
@@ -122,7 +133,7 @@ def investigate(session: Session, case_id: str, user_id: str, provider: ModelPro
             msg = reply["message"]
             if not msg.get("tool_calls"):
                 try:
-                    report = _parse_report(msg.get("content"))
+                    report = _parse_report(masker.unmask(msg.get("content") or ""))  # tokens back to values
                 except (ValueError, ValidationError) as exc:
                     report = None
                     status, error = "JSON_ERROR", f"final answer is not a valid report: {type(exc).__name__}"
@@ -148,10 +159,21 @@ def investigate(session: Session, case_id: str, user_id: str, provider: ModelPro
             for call in msg["tool_calls"]:
                 result = _run_tool(tools, call, len(calls) >= max_calls)
                 calls.append({"round": rounds, **result["log"]})
+                plain = masker.unmask(result["content"])  # scanned as the server holds it; never sent like this
+                for m in INJECTION.finditer(plain):  # the server's own scan, not left to the model
+                    snippet = plain[max(0, m.start() - 80):m.end() + 80]
+                    flags.setdefault(snippet, {"text": f"도구 {calls[-1]['tool_name']} 결과에 지시문으로 보이는 문장: "
+                                                       f"…{snippet}…",
+                                               "evidence_ids": sorted(set(re.findall(r"EV-[A-Za-z0-9-]+", snippet))),
+                                               "source": "SERVER"})
                 messages.append({"role": "tool", "tool_call_id": call.get("id", ""),
                                  "content": result["content"]})
     except ProviderError as exc:
         status, error = "FAILED", f"provider: {exc}"
+    if report is not None and flags:
+        report.data_warnings += [DataWarning(**f) for f in flags.values()]
+    elif flags:
+        error = (error or "") + f" (서버가 도구 결과에서 지시문 {len(flags)}건을 찾았습니다)"
     errors = attempts[-1]["errors"] if report is not None and attempts else []
     errors = [e["message"] for e in errors]
     if report is not None and status != "JSON_ERROR":  # rules broken / rules kept but a required item missing

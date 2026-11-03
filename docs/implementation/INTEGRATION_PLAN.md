@@ -114,3 +114,22 @@ Out of scope (spec §28.7): mail, in-house APIs, company-specific XLSX output, a
 | RW-UI-01..06 | `case_requests.chains`, `Requests.tsx` | `test_responsibility_chain`, `frontend/tests/Responsibility.test.tsx` |
 | XLS-IN-01..05 | `inspection_xlsx.py`, `intake.add_inspection_routes`, `Intake.tsx` InspectionXlsx | `test_inspection_xlsx`, `frontend/tests/InspectionXlsx.test.tsx` |
 | XLS-IN-06, §25.6 | `tests/test_v513_e2e.py`, `scripts/e2e_http.py` | in process and HTTP 7/7 |
+
+## Follow-ups decided on 2026-11-03
+
+- **Protected evidence goes masked, not refused** (user decision).
+  - The investigation gives `EvidenceTools` one `egress.Masker` per run. Evidence not approved for external processing goes to the model as tokens (`[T1]`, `[N1]`; the same value gives the same token), and the system prompt explains the tokens.
+  - A calculation over a protected input sends its value as a token; the server fills the real value from the calculation id.
+  - The final report is unmasked on the server before it is validated and stored.
+  - Without a masker (the agent's server reads) protected rows are refused, as before, so the system fails closed.
+  - Synthetic line types used by the summary still refuse a protected row, so the summary never carries a raw value.
+  - Test: `tests/test_masked_investigation.py`. No protected value appears in any message the model sees, and the stored report has the value.
+- **The server scans tool results for instructions.**
+  - It uses the same pattern as intake (`intake_extract.INJECTION`), on the unmasked text, which stays on the server.
+  - Hits are added to the report's `data_warnings` with `source: SERVER`; the model's own warnings carry `source: MODEL`.
+  - The investigation screen shows both, and marks them as text found in the data that was not followed.
+- **Company forms are registered by the admin.**
+  - `inspection_forms` (migration 0029, append-only): header words per field, required fields (LOT always required) and the number of header search rows.
+  - `GET /inspection-forms` returns the forms and a blank template. `POST /inspection-forms` is for `AGENT_ADMIN` only; each change is a new version.
+  - The preview picks the registered form that names the most columns (the built-in one on a tie), and a person can switch it. Each import stores the form name and its version hash.
+  - Screens: 감사 · 보안 → 검사 결과 XLSX 양식 (blanks to fill), and the form selector on the XLSX card.

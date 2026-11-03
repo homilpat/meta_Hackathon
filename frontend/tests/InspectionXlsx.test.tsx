@@ -7,7 +7,7 @@ afterEach(cleanup)
 
 const cell = (ref: string, raw: J) => ({ cell: ref, raw, type: 'n', format: 'General', formula: false })
 const PREVIEW: J = {
-  form: 'inspection_results_v1', mapping_version: 'abc123', file_sha256: 'f'.repeat(64), sheet: '검사결과', header_row: 2,
+  form: { name: 'ACME 수입검사', version: 2, builtin: false, candidates: ['inspection_results_v1', 'ACME 수입검사'] }, mapping_version: 'abc123', file_sha256: 'f'.repeat(64), sheet: '검사결과', header_row: 2,
   columns: { B: 'LOT', D: '검사 수량', E: '불량 수량' }, mapping: { lot: 'B', inspected_qty: 'D', defective_qty: 'E' }, issues: [],
   rows: [
     { row: 3, hidden: false, cells: { lot: cell('B3', 'L02'), inspected_qty: cell('D3', 480), defective_qty: cell('E3', 12) },
@@ -39,7 +39,8 @@ describe('inspection xlsx card', () => {
     fireEvent.click(go)
     await waitFor(() => expect(api).toHaveBeenCalledWith('/cases/L/inspection-imports', 'POST', {
       intake_id: 3, file_id: 9, file_sha256: 'f'.repeat(64), sheet: '검사결과', header_row: 2, mapping: PREVIEW.mapping,
-      include_rows: [3], exclude: { 4: '불량>검사: 원본 확인 요청' } }, true))
+      include_rows: [3], exclude: { 4: '불량>검사: 원본 확인 요청' }, form: 'ACME 수입검사' }, true))
     expect(await screen.findByText('MATCH')).toBeTruthy()
+    expect((screen.getByLabelText('검사 양식') as HTMLSelectElement).value).toBe('ACME 수입검사') // the form the import was read with
   })
 })

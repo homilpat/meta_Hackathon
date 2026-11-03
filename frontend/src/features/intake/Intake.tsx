@@ -146,8 +146,11 @@ function InspectionXlsx({ ctx, intakeId, f, cases }: { ctx: Ctx; intakeId: numbe
   const [cmp, setCmp] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
   const go = async (call: () => Promise<void>) => { if (busy) return; setBusy(true); try { await call() } catch { /* the error bar shows the server's reason */ } finally { setBusy(false) } }
-  const load = (mapping?: J) => go(async () => {
-    const q = mapping ? `?mapping=${encodeURIComponent(JSON.stringify(mapping))}` : ''
+  const load = (mapping?: J, form?: string) => go(async () => {
+    const params = new URLSearchParams()
+    if (mapping) params.set('mapping', JSON.stringify(mapping))
+    if (form ?? v?.form?.name) params.set('form', (form ?? v?.form?.name) as string)
+    const q = params.toString() ? `?${params}` : ''
     const out: J = await ctx.api(`/intakes/${intakeId}/files/${f.file_id}/inspection${q}`)
     setV(out)
     setInc(Object.fromEntries(out.rows.map((x: J) => [x.row, !x.hidden && !x.issues.some((i: J) => i.level === 'BLOCK')])))
@@ -157,13 +160,14 @@ function InspectionXlsx({ ctx, intakeId, f, cases }: { ctx: Ctx; intakeId: numbe
     const include = v.rows.filter((x: J) => inc[x.row]).map((x: J) => x.row)
     const exclude = Object.fromEntries(v.rows.filter((x: J) => !inc[x.row]).map((x: J) => [String(x.row), why[x.row] ?? '']))
     const out: J = await ctx.api(`/cases/${caseId}/inspection-imports`, 'POST', { intake_id: intakeId, file_id: f.file_id, file_sha256: v.file_sha256,
-      sheet: v.sheet, header_row: v.header_row, mapping: v.mapping, include_rows: include, exclude }, true)
+      sheet: v.sheet, header_row: v.header_row, mapping: v.mapping, include_rows: include, exclude, form: v.form?.name ?? null }, true)
     setImp(out); ctx.refresh()
     setRec(await ctx.api(`/cases/${caseId}/inspection-imports/${out.import_id}/reconciliation`))
   })
   const unexplained = v?.rows.some((x: J) => !inc[x.row] && !(why[x.row] ?? '').trim())
   if (!v) return <p><button className="button secondary" disabled={busy} onClick={() => load()}>{f.name}: 검사 결과로 읽기</button></p>
   return <Card><SectionTitle title={`검사 결과 확인 · ${f.name}`} sub={`시트 ${v.sheet} · 헤더 ${v.header_row ?? '없음'}행 · 열 연결 규칙 ${v.mapping_version ?? '-'} · 추천은 제안이며 사람이 확인해야 연결됩니다`}/>
+    {v.form && <p className="row-gap"><span className="muted">양식</span><select className="input" aria-label="검사 양식" value={v.form.name} disabled={busy} onChange={e => load(undefined, e.target.value)}>{(v.form.candidates ?? [v.form.name]).map((n: string) => <option key={n} value={n}>{n}</option>)}</select><span className="muted">v{v.form.version}{v.form.builtin ? ' · 기본 합성 양식' : ' · 등록 양식'}</span></p>}
     {v.issues.map((i: J) => <Note key={i.code}>{i.message}</Note>)}
     <div className="row-gap wrap">{Object.keys(XFIELD).map(k => <label key={k} className="muted">{XFIELD[k]}{['lot', 'inspected_qty', 'defective_qty'].includes(k) ? ' *' : ''}
       <select className="input" aria-label={`${XFIELD[k]} 열`} value={v.mapping[k] ?? ''} disabled={busy} onChange={e => load({ ...v.mapping, [k]: e.target.value || null })}>

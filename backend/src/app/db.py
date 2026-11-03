@@ -232,6 +232,23 @@ class ToolCall(Base):
     created_at: Mapped[str] = mapped_column(String(40))
 
 
+class InspectionForm(Base):
+    """A company's inspection XLSX form registered by the AI operations department: header words per field and
+    the required fields. Append-only: a change is a new version; the latest per name is used."""
+
+    __tablename__ = "inspection_forms"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(80), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    fields: Mapped[dict] = mapped_column(JSON)
+    required: Mapped[list] = mapped_column(JSON)
+    header_search_rows: Mapped[int] = mapped_column(Integer)
+    reason: Mapped[str] = mapped_column(Text)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
 class InspectionImport(Base):
     """A person-confirmed import of an inspection XLSX into a case (spec §28): file hash, sheet, header, mapping and
     its version, included rows with their cells, excluded rows with reasons. A new mapping or row set is a new
@@ -248,7 +265,8 @@ class InspectionImport(Base):
     header_row: Mapped[int] = mapped_column(Integer)
     mapping: Mapped[dict] = mapped_column(JSON)
     mapping_version: Mapped[str] = mapped_column(String(20))
-    included_rows: Mapped[list] = mapped_column(JSON)
+    form: Mapped[str | None] = mapped_column(String(80))  # the form definition read with (name; its version hash
+    included_rows: Mapped[list] = mapped_column(JSON)    # is mapping_version)
     excluded: Mapped[dict] = mapped_column(JSON)
     rows: Mapped[list] = mapped_column(JSON)
     evidence_ids: Mapped[list] = mapped_column(JSON, default=list)
@@ -1175,7 +1193,7 @@ class LimitSetting(Base):
 
 
 # Audit rows are append-only at the database level, not just by convention.
-APPEND_ONLY = ("calculations", "model_responses", "approval_events", "workflow_events", "doc_comments", "audit_chain",
+APPEND_ONLY = ("inspection_forms", "calculations", "model_responses", "approval_events", "workflow_events", "doc_comments", "audit_chain",
                "workflow_policies", "evidence_quality", "process_contexts", "affected_objects",
                "triage_assessments", "team_events", "actions", "action_events",
                "cause_hypotheses", "why_links", "experiments", "causal_decisions",

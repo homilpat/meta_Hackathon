@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { CLASS_TONE, STATUS_TONE } from '../../constants'
-import { Badge, Card, Cite, Empty, Icon, Page, SectionTitle } from '../../components/ui'
+import { Badge, Card, Cite, Empty, Icon, Note, Page, SectionTitle } from '../../components/ui'
 import { useLoad } from '../../hooks/useLoad'
 import type { Ctx, J } from '../../types'
 
@@ -22,7 +22,7 @@ export function Investigation({ ctx, provider }: { ctx: Ctx; provider: J }) {
       <div className="stack center-col">
         <Card className="ai-summary"><div className="ai-head"><div className="hero-icon"><Icon name="spark"/></div><div><b>조사 요약</b><span>{r.started_at.slice(0, 19)} · 도구 호출 {r.tool_calls.length}회</span></div></div>{!r.report ? <p>보고서 없음</p> : r.status === 'VALIDATED' ? <p>{r.report.summary}</p>
           : r.status === 'INCOMPLETE' ? <><Badge tone="amber">필수 항목 미완료 · 초안 불가</Badge><p className="muted">{r.report.summary}</p><ul className="muted">{r.validation_errors.map((e: string, i: number) => <li key={i}>{e}</li>)}</ul></>
-          : <><Badge tone="red">검증 실패 · 사용 불가</Badge><p className="muted">{r.report.summary}</p></>}{r.attempts?.length > 1 && <p className="muted">서버 검증 후 수정 {r.attempts.length - 1}회 (오류: {r.attempts.slice(0, -1).map((a: J) => a.errors.map((e: J) => e.code).join(', ')).join(' → ')})</p>}</Card>
+          : <><Badge tone="red">검증 실패 · 사용 불가</Badge><p className="muted">{r.report.summary}</p></>}{r.report?.data_warnings?.length > 0 && <div className="mt">{r.report.data_warnings.map((w: J, i: number) => <Note key={i}><Badge tone={w.source === 'SERVER' ? 'red' : 'amber'}>{w.source === 'SERVER' ? '서버 감지 · 지시문' : 'AI 보고 · 지시문'}</Badge> {w.text} <span className="muted">(데이터 속 문장이며 따르지 않았습니다)</span></Note>)}</div>}{r.attempts?.length > 1 && <p className="muted">서버 검증 후 수정 {r.attempts.length - 1}회 (오류: {r.attempts.slice(0, -1).map((a: J) => a.errors.map((e: J) => e.code).join(', ')).join(' → ')})</p>}</Card>
         <Card><SectionTitle title="도구 실행 타임라인" sub="결과 본문 대신 해시만 기록"/><div className="tool-timeline">{r.tool_calls.map((c: J, i: number) =>
           <div className="tool-item" key={i}><i className={c.ok ? 'green' : 'amber'}>{c.ok && <Icon name="check" size={12}/>}</i><time>R{c.round}</time><div><b>{c.tool_name}</b><span>{c.ok ? `sha256 ${c.result_sha256?.slice(0, 12)}…` : c.error}</span></div></div>)}</div></Card>
         {r.report?.next_evidence_requests?.length > 0 && <Card className="recommend"><SectionTitle title="다음 증거 요청" sub="조치 권고가 아닌 확인 요청"/>{r.report.next_evidence_requests.map((n: J, i: number) =>

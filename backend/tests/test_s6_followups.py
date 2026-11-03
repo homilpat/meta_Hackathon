@@ -291,9 +291,9 @@ def test_authorization_regression_on_every_case_route(env):
             for field in route.dependant.path_params:
                 if field.name in ("case_id", "kind"):
                     continue
-                assert field.type_ is int, (
+                assert field.field_info.annotation is int, (
                     f"{route.path}: no test value for path parameter {field.name!r} "
-                    f"of type {field.type_!r}"
+                    f"of type {field.field_info.annotation!r}"
                 )
                 params[field.name] = "1"
 

@@ -34,7 +34,6 @@ def make_v515_router(sessions: sessionmaker, current_user, provider: ModelProvid
         return t
 
     def for_case(session: Session, case_id: str, t, actor: Actor) -> None:
-        require_case(session, case_id, actor)
         if (cust := cd.customer_of(session, case_id)) != t.customer:
             raise HTTPException(403, f"다른 고객사의 양식입니다 (양식 {t.customer}, 사건 {cust or '미확인'})")
 
@@ -93,6 +92,7 @@ def make_v515_router(sessions: sessionmaker, current_user, provider: ModelProvid
     @router.get("/cases/{case_id}/customer-templates/{template_id}/preview")
     def preview(case_id: str, template_id: int, actor: Who) -> dict:
         with sessions() as session:
+            require_case(session, case_id, actor)  # the case first: no form lookup for outsiders
             t = template(session, template_id)
             for_case(session, case_id, t, actor)
             return cd.fill_view(session, t, mapping_for(session, t), case_id)
@@ -100,6 +100,7 @@ def make_v515_router(sessions: sessionmaker, current_user, provider: ModelProvid
     @router.get("/cases/{case_id}/customer-templates/{template_id}/export")
     def export(case_id: str, template_id: int, actor: Who, mode: Literal["draft", "final"] = "draft") -> Response:
         with sessions.begin() as session:
+            require_case(session, case_id, actor)  # the case first: no form lookup for outsiders
             t = template(session, template_id)
             for_case(session, case_id, t, actor)
             m = mapping_for(session, t)

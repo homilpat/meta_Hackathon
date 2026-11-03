@@ -5,6 +5,7 @@ does what it should on known layouts, nothing about real customer documents. Run
     python -m scripts.fixture_eval                       parser and vision checks (real code, no model) and the
                                                          replay of any saved extraction traces -> docs/evaluations/ev
     python -m scripts.fixture_eval collect --live        new LIVE extraction traces (paid; QO_EVAL_LIVE_BUDGET_USD)
+                                  [--mode M]          read mode (default HYBRID; e.g. AI_CHOICE, WHOLE_FIRST)
 
 Truths are written by hand from the generator (scripts/make_intake_fixtures.py, scripts/holdout_docs.py) and each
 locator was checked once against the parser output; they are not produced by the code under test.
@@ -192,6 +193,7 @@ def collect(args: list[str]) -> int:
         print("NOT_RUN:", why)
         return 2
     TRACES.mkdir(parents=True, exist_ok=True)
+    mode = args[args.index("--mode") + 1] if "--mode" in args else "HYBRID"  # e.g. AI_CHOICE, WHOLE_FIRST
     out = TRACES / f"{provider.mode}-{evalkit.now().replace(':', '')}.jsonl"
     spent = 0.0
     with open(out, "w", encoding="utf-8") as f:
@@ -204,12 +206,13 @@ def collect(args: list[str]) -> int:
             rec = Recorder(provider)
             t0 = time.perf_counter()
             try:
-                raw, _, info = intake_extract.extract(rec, files_of(t["files"]), "RAW", "HYBRID")
+                raw, _, info = intake_extract.extract(rec, files_of(t["files"]), "RAW", mode)
             except ProviderError as exc:
                 raw, info = None, {"error": str(exc)}
             usage = info.get("usage", {})
-            spent += evalkit.cost_usd(usage)
-            f.write(json.dumps({"case": case, "read_mode": "HYBRID", "calls": rec.calls, "raw": raw, "usage": usage,
+            spent += evalkit.cost_usd(usage) + evalkit.cost_usd((info.get("auto") or {}).get("usage") or {})
+            f.write(json.dumps({"case": case, "read_mode": mode, "chosen": info.get("mode"), "choice": info.get("auto"),
+                                "calls": rec.calls, "raw": raw, "usage": usage,
                                 "seconds": round(time.perf_counter() - t0, 2)}, ensure_ascii=False) + "\n")
     print("trace", out, f"spent {spent:.3f} USD")
     return 0

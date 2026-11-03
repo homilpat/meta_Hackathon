@@ -302,6 +302,8 @@ def prepare(args: list[str]) -> int:
 # ---- collect ----
 def blocks(messages: list[dict]) -> list[dict]:
     parts = messages[1]["content"]
+    if isinstance(parts, str):  # not an extraction call (e.g. AI_CHOICE's read-method choice): no elements sent
+        return []
     out = [json.loads(p["text"]) for p in parts if p["type"] == "text" and p["text"].startswith("{")]
     return [b for b in out if "elements" in b]
 

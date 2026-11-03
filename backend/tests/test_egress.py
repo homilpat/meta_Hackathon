@@ -46,8 +46,10 @@ def test_an_unapproved_file_goes_masked_without_images_and_its_values_come_back_
     sent = json.dumps(p.seen[0]["messages"], ensure_ascii=False)
     assert SECRET not in sent and "mine.pdf" not in sent and "image_url" not in sent
     assert "Copy tokens exactly" in p.seen[0]["messages"][0]["content"]
-    assert d["egress"]["files"] == [{"file_id": d["egress"]["files"][0]["file_id"], "name": "mine.pdf",
-                                     "sent": "MASKED"}]
+    f0 = d["egress"]["files"][0]
+    assert d["egress"]["files"] == [{"file_id": f0["file_id"], "name": "mine.pdf", "sent": "MASKED",
+                                     "read_method": f0["read_method"]}]
+    assert f0["read_method"]["method"] == "WHOLE" and f0["read_method"]["reason"]  # how it was read, and why
     assert SECRET not in d["egress"]["masked_payload"]["text"] and len(d["egress"]["masked_payload"]["sha256"]) == 64
     assert d["fields"]["phenomenon"]["status"] == "FOUND" and d["fields"]["phenomenon"]["value"] == SECRET
 

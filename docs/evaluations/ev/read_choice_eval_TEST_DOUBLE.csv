@@ -1,0 +1,21 @@
+split,contract,pages,recall_whole,recall_hybrid,better,rule,ai,ai_by,candidates,reason,rule_right,ai_right,cost_whole,cost_hybrid_at_most
+heldout,9cd648a0686c,24,0.714,0.714,TIE,WHOLE,WHOLE,AI,"[""WHOLE"", ""HYBRID""]",scripted,True,True,0.05784,0.07609
+heldout,191875361562,12,0.75,0.875,HYBRID,WHOLE,WHOLE,AI,"[""WHOLE"", ""HYBRID""]",scripted,False,False,0.02747,0.04611
+heldout,057117f7cc2d,34,0.692,0.692,TIE,WHOLE,WHOLE,AI,"[""WHOLE"", ""HYBRID""]",scripted,True,True,0.07553,0.09502
+heldout,4bbecd264e4d,47,0.636,0.182,WHOLE,WHOLE,WHOLE,AI,"[""WHOLE"", ""HYBRID""]",scripted,True,True,0.13541,0.10637
+heldout,f90ca0d2368f,21,0.778,0.667,WHOLE,WHOLE,WHOLE,AI,"[""WHOLE"", ""HYBRID""]",scripted,True,True,0.09045,0.13214
+heldout,3a531a0e4846,11,0.857,0.857,TIE,WHOLE,WHOLE,AI,"[""WHOLE"", ""HYBRID""]",scripted,True,True,0.0367,0.05598
+heldout,c974ae95fa12,16,0.857,0.857,TIE,WHOLE,WHOLE,AI,"[""WHOLE"", ""HYBRID""]",scripted,True,True,0.03997,0.07743
+heldout,5b81bbf93472,13,0.714,0.429,WHOLE,WHOLE,WHOLE,AI,"[""WHOLE"", ""HYBRID""]",scripted,True,True,0.02629,0.04807
+heldout,09945fdfc8ff,13,0.429,0.429,TIE,WHOLE,WHOLE,AI,"[""WHOLE"", ""HYBRID""]",scripted,True,True,0.029,0.04837
+heldout,3c15a3be192e,106,0.875,0.875,TIE,WHOLE,WHOLE,AI,"[""WHOLE"", ""HYBRID""]",scripted,True,True,0.21578,0.14374
+heldout_long,c92227514f57,115,0.333,0.333,TIE,WHOLE,WHOLE,AI,"[""WHOLE"", ""HYBRID""]",scripted,True,True,0.24349,0.23868
+heldout_long,412f6a035ef9,88,0.625,0.625,TIE,WHOLE,WHOLE,AI,"[""WHOLE"", ""HYBRID""]",scripted,True,True,0.23172,0.19618
+heldout_long,0437c16c2d1c,88,0.636,0.364,WHOLE,WHOLE,WHOLE,AI,"[""WHOLE"", ""HYBRID""]",scripted,True,True,0.14353,0.13737
+heldout_long,e1ba4f416436,60,0.667,0.667,TIE,WHOLE,WHOLE,AI,"[""WHOLE"", ""HYBRID""]",scripted,True,True,0.13521,0.11372
+heldout_long,3e241e193dc4,47,0.667,0.667,TIE,WHOLE,WHOLE,AI,"[""WHOLE"", ""HYBRID""]",scripted,True,True,0.13742,0.12778
+heldout_long,93a7191ff012,44,0.778,0.778,TIE,WHOLE,WHOLE,AI,"[""WHOLE"", ""HYBRID""]",scripted,True,True,0.14406,0.15665
+heldout_long,7eb54db0558f,39,0.857,0.857,TIE,WHOLE,WHOLE,AI,"[""WHOLE"", ""HYBRID""]",scripted,True,True,0.09961,0.11751
+heldout_long,a4a5f4121b48,39,0.714,0.714,TIE,WHOLE,WHOLE,AI,"[""WHOLE"", ""HYBRID""]",scripted,True,True,0.08493,0.10806
+heldout_long,af0c46173614,34,0.5,0.417,WHOLE,WHOLE,WHOLE,AI,"[""WHOLE"", ""HYBRID""]",scripted,True,True,0.07417,0.10953
+heldout_long,4ae6fb819cc7,33,0.857,0.857,TIE,WHOLE,WHOLE,AI,"[""WHOLE"", ""HYBRID""]",scripted,True,True,0.06847,0.07591

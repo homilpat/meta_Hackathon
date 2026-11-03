@@ -295,6 +295,60 @@ def whole_first(files: list[dict], task: dict | None = None) -> tuple[str, dict]
                   "rule": "WHOLE when every element fits one call (context window and cost cap), else HYBRID"}
 
 
+CHOOSE_PROMPT = """Choose how the server reads these documents for a quality intake: WHOLE sends every element in
+one call; HYBRID sends the server's selection plus each document's contents list, and you may ask for more parts.
+You see each document's structure and the server's token and cost estimate for each method, never its text.
+Prefer WHOLE when the answers may be spread across the document (dense mixed text, many small tables); HYBRID
+when the document is long and mostly material a quality intake does not need (appendices, repeated tables).
+Answer with one method from the candidates and a one-sentence reason."""
+
+
+def structure(files: list[dict]) -> list[dict]:
+    """What the AI may see to choose (AI-CFG-03): counts by element kind, pages, images; no text."""
+    from collections import Counter
+
+    out = []
+    for f in files:
+        kinds = Counter(e.get("kind", "text") for e in f["elements"])
+        pages = {e.get("page") for e in f["elements"] if e.get("page") is not None}
+        out.append({"file": f"F{f['file_id']}", "elements": len(f["elements"]), "by_kind": dict(kinds),
+                    "pages": len(pages), "images": len(f.get("images", {}))})
+    return out
+
+
+def ai_choice(provider: ModelProvider, files: list[dict], task: dict | None = None) -> tuple[str, dict]:
+    """AI_CHOICE (spec v5.14 AI-CFG-03): the server narrows the candidates by size and budget (WHOLE only when every
+    element fits one call, as WHOLE_FIRST); with one candidate no model is asked. With two, Meta picks one from the
+    documents' structure and both estimates, by enum; an invalid or failed reply falls back to WHOLE_FIRST's rule."""
+    from app.model_provider import ProviderError
+
+    rule, fit = whole_first(files, task)
+    _, est = auto_mode(files, task)
+    candidates = ["WHOLE", "HYBRID"] if rule == "WHOLE" else ["HYBRID"]
+    info = {"chosen": rule, "candidates": candidates, "whole": est["whole"], "hybrid_at_most": est["hybrid_at_most"],
+            "whole_input_tokens": fit["whole_input_tokens"], "max_input_tokens": fit["max_input_tokens"],
+            "proposed_by": "SERVER_RULE", "reason": fit["rule"],
+            "rule": "server narrows by size and budget; Meta chooses only between feasible methods"}
+    if len(candidates) == 1:
+        return rule, {**info, "reason": "does not fit one call: only HYBRID is possible (no model asked)"}
+    schema = {"type": "json_schema", "json_schema": {"name": "read_method", "strict": True, "schema": {
+        "type": "object", "additionalProperties": False, "required": ["method", "reason"],
+        "properties": {"method": {"type": "string", "enum": candidates}, "reason": {"type": "string"}}}}}
+    try:
+        r = provider.chat([{"role": "system", "content": CHOOSE_PROMPT},
+                           {"role": "user", "content": json.dumps({"candidates": candidates, "documents": structure(files),
+                                                                   "estimates": {"WHOLE": est["whole"],
+                                                                                 "HYBRID": est["hybrid_at_most"]}})}],
+                          [], response_format=schema)
+        reply = json.loads(r["message"].get("content") or "")
+    except (ProviderError, ValueError, KeyError, TypeError) as exc:
+        return rule, {**info, "reason": f"model failed ({type(exc).__name__}): {fit['rule']}"}
+    if not isinstance(reply, dict) or reply.get("method") not in candidates:
+        return rule, {**info, "reason": f"model answered outside the candidates: {fit['rule']}"}
+    return reply["method"], {**info, "chosen": reply["method"], "proposed_by": "AI",
+                             "reason": str(reply.get("reason", ""))[:300], "usage": r.get("usage") or {}}
+
+
 def extract(provider: ModelProvider, files: list[dict], protected: str = "MASK",
             mode: str | None = None, task: dict | None = None) -> tuple[dict, list[dict], dict]:
     """(model output with tokens mapped back, withheld files, what was sent). EXTRACT_MODE WHOLE (default) reads
@@ -305,12 +359,18 @@ def extract(provider: ModelProvider, files: list[dict], protected: str = "MASK",
         mode, choice = auto_mode(files, task)
     elif mode == "WHOLE_FIRST":
         mode, choice = whole_first(files, task)
+    elif mode == "AI_CHOICE":
+        mode, choice = ai_choice(provider, files, task)
     if mode == "HYBRID":
         raw, withheld, info = hybrid(provider, files, protected, task)
     else:
         raw, withheld, info = whole(provider, files, protected, task)
         info["mode"] = "WHOLE"
-    info["auto"] = choice  # AUTO's or WHOLE_FIRST's estimate and choice, None when a mode was set
+    info["auto"] = choice  # AUTO's, WHOLE_FIRST's or AI_CHOICE's estimate and choice, None when a mode was set
+    if choice:  # the method and reason, recorded on every file it was applied to
+        for s in info.get("files", []):
+            s["read_method"] = {"method": mode, "proposed_by": choice.get("proposed_by", "SERVER_RULE"),
+                                "reason": choice.get("reason", choice.get("rule"))}
     return raw, withheld, info
 
 

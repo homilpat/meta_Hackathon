@@ -1,0 +1,437 @@
+{
+ "summary": {
+  "run_mode": "LIVE",
+  "model": "muse-spark-1.3",
+  "contracts": 20,
+  "rule_right": 19,
+  "ai_right": 19,
+  "ai_asked": 20,
+  "recall_lost_vs_better": {
+   "rule": 0.125,
+   "ai": 0.125
+  },
+  "tie_band": 0.02,
+  "ai_hybrid_choices": 0,
+  "est_cost_of_choices_usd": {
+   "rule": 2.097,
+   "ai": 2.097
+  },
+  "choice_calls_usd": 0.0997,
+  "source": "recorded outcomes of cuad_{heldout,heldout_long}_{A,C}_LIVE.json",
+  "run": {
+   "code_sha": "ec30e2a6820cc6da628e83d1f1b27f9590e82073+dirty",
+   "parser_version": "docparse-4",
+   "evaluator": "scripts.read_choice_eval",
+   "evaluator_sha256": "7ae9079313af2168",
+   "sampling": {
+    "temperature": 0.0,
+    "seed": 1
+   },
+   "python": "3.12.8",
+   "command": "python -m scripts.read_choice_eval --live",
+   "at": "2026-11-03T12:09:59+00:00"
+  }
+ },
+ "rows": [
+  {
+   "split": "heldout",
+   "contract": "9cd648a0686c",
+   "pages": 24,
+   "recall_whole": 0.714,
+   "recall_hybrid": 0.714,
+   "better": "TIE",
+   "rule": "WHOLE",
+   "ai": "WHOLE",
+   "ai_by": "AI",
+   "candidates": [
+    "WHOLE",
+    "HYBRID"
+   ],
+   "reason": "The 24-page document is dense mixed text with small tables and WHOLE is cheaper in a single call.",
+   "rule_right": true,
+   "ai_right": true,
+   "cost_whole": 0.05784,
+   "cost_hybrid_at_most": 0.07609
+  },
+  {
+   "split": "heldout",
+   "contract": "191875361562",
+   "pages": 12,
+   "recall_whole": 0.75,
+   "recall_hybrid": 0.875,
+   "better": "HYBRID",
+   "rule": "WHOLE",
+   "ai": "WHOLE",
+   "ai_by": "AI",
+   "candidates": [
+    "WHOLE",
+    "HYBRID"
+   ],
+   "reason": "F1 is a short 12-page mostly-text document where answers could be spread throughout and WHOLE is cheaper with fewer tokens and one call than HYBRID.",
+   "rule_right": false,
+   "ai_right": false,
+   "cost_whole": 0.02747,
+   "cost_hybrid_at_most": 0.04611
+  },
+  {
+   "split": "heldout",
+   "contract": "057117f7cc2d",
+   "pages": 34,
+   "recall_whole": 0.692,
+   "recall_hybrid": 0.692,
+   "better": "TIE",
+   "rule": "WHOLE",
+   "ai": "WHOLE",
+   "ai_by": "AI",
+   "candidates": [
+    "WHOLE",
+    "HYBRID"
+   ],
+   "reason": "F1 is dense text with 869 text elements across 34 pages and WHOLE is cheaper in tokens and calls than HYBRID so a single full read is most efficient",
+   "rule_right": true,
+   "ai_right": true,
+   "cost_whole": 0.07553,
+   "cost_hybrid_at_most": 0.09502
+  },
+  {
+   "split": "heldout",
+   "contract": "4bbecd264e4d",
+   "pages": 47,
+   "recall_whole": 0.636,
+   "recall_hybrid": 0.182,
+   "better": "WHOLE",
+   "rule": "WHOLE",
+   "ai": "WHOLE",
+   "ai_by": "AI",
+   "candidates": [
+    "WHOLE",
+    "HYBRID"
+   ],
+   "reason": "The document is text-dense with scattered small tables across 47 pages so answers are likely spread and full context is worth the small extra cost.",
+   "rule_right": true,
+   "ai_right": true,
+   "cost_whole": 0.13541,
+   "cost_hybrid_at_most": 0.10637
+  },
+  {
+   "split": "heldout",
+   "contract": "f90ca0d2368f",
+   "pages": 21,
+   "recall_whole": 0.778,
+   "recall_hybrid": 0.667,
+   "better": "WHOLE",
+   "rule": "WHOLE",
+   "ai": "WHOLE",
+   "ai_by": "AI",
+   "candidates": [
+    "WHOLE",
+    "HYBRID"
+   ],
+   "reason": "WHOLE is cheaper and single-call for this dense 1647-element 21-page text document where answers may be spread throughout.",
+   "rule_right": true,
+   "ai_right": true,
+   "cost_whole": 0.09045,
+   "cost_hybrid_at_most": 0.13214
+  },
+  {
+   "split": "heldout",
+   "contract": "3a531a0e4846",
+   "pages": 11,
+   "recall_whole": 0.857,
+   "recall_hybrid": 0.857,
+   "better": "TIE",
+   "rule": "WHOLE",
+   "ai": "WHOLE",
+   "ai_by": "AI",
+   "candidates": [
+    "WHOLE",
+    "HYBRID"
+   ],
+   "reason": "F1 is only 11 pages but dense with 322 text blocks plus small tables and images so intake answers are likely spread throughout and WHOLE is cheaper with fewer tokens and calls.",
+   "rule_right": true,
+   "ai_right": true,
+   "cost_whole": 0.0367,
+   "cost_hybrid_at_most": 0.05598
+  },
+  {
+   "split": "heldout",
+   "contract": "c974ae95fa12",
+   "pages": 16,
+   "recall_whole": 0.857,
+   "recall_hybrid": 0.857,
+   "better": "TIE",
+   "rule": "WHOLE",
+   "ai": "WHOLE",
+   "ai_by": "AI",
+   "candidates": [
+    "WHOLE",
+    "HYBRID"
+   ],
+   "reason": "F1 is only 16 pages of dense text with 550 text elements and WHOLE is cheaper at 27643 tokens versus 53284 for HYBRID.",
+   "rule_right": true,
+   "ai_right": true,
+   "cost_whole": 0.03997,
+   "cost_hybrid_at_most": 0.07743
+  },
+  {
+   "split": "heldout",
+   "contract": "5b81bbf93472",
+   "pages": 13,
+   "recall_whole": 0.714,
+   "recall_hybrid": 0.429,
+   "better": "WHOLE",
+   "rule": "WHOLE",
+   "ai": "WHOLE",
+   "ai_by": "AI",
+   "candidates": [
+    "WHOLE",
+    "HYBRID"
+   ],
+   "reason": "The 12-page document is dense with mixed text and small tables and WHOLE is cheaper in tokens and cost than HYBRID.",
+   "rule_right": true,
+   "ai_right": true,
+   "cost_whole": 0.02629,
+   "cost_hybrid_at_most": 0.04807
+  },
+  {
+   "split": "heldout",
+   "contract": "09945fdfc8ff",
+   "pages": 13,
+   "recall_whole": 0.429,
+   "recall_hybrid": 0.429,
+   "better": "TIE",
+   "rule": "WHOLE",
+   "ai": "WHOLE",
+   "ai_by": "AI",
+   "candidates": [
+    "WHOLE",
+    "HYBRID"
+   ],
+   "reason": "With 414 mixed text and table elements across only 13 pages the document is dense with potentially dispersed answers, and WHOLE is cheaper in one call.",
+   "rule_right": true,
+   "ai_right": true,
+   "cost_whole": 0.029,
+   "cost_hybrid_at_most": 0.04837
+  },
+  {
+   "split": "heldout",
+   "contract": "3c15a3be192e",
+   "pages": 106,
+   "recall_whole": 0.875,
+   "recall_hybrid": 0.875,
+   "better": "TIE",
+   "rule": "WHOLE",
+   "ai": "WHOLE",
+   "ai_by": "AI",
+   "candidates": [
+    "WHOLE",
+    "HYBRID"
+   ],
+   "reason": "With 2635 text blocks and 733 scattered cells across 106 pages, answers are likely spread through dense mixed content rather than isolated in skippable appendices.",
+   "rule_right": true,
+   "ai_right": true,
+   "cost_whole": 0.21578,
+   "cost_hybrid_at_most": 0.14374
+  },
+  {
+   "split": "heldout_long",
+   "contract": "c92227514f57",
+   "pages": 115,
+   "recall_whole": 0.333,
+   "recall_hybrid": 0.333,
+   "better": "TIE",
+   "rule": "WHOLE",
+   "ai": "WHOLE",
+   "ai_by": "AI",
+   "candidates": [
+    "WHOLE",
+    "HYBRID"
+   ],
+   "reason": "HYBRID saves only ~4% tokens while requiring an extra call, indicating the dense 3607-text-element document is mostly relevant so whole reading avoids missing spread-out answers.",
+   "rule_right": true,
+   "ai_right": true,
+   "cost_whole": 0.24349,
+   "cost_hybrid_at_most": 0.23868
+  },
+  {
+   "split": "heldout_long",
+   "contract": "412f6a035ef9",
+   "pages": 88,
+   "recall_whole": 0.625,
+   "recall_hybrid": 0.625,
+   "better": "TIE",
+   "rule": "WHOLE",
+   "ai": "WHOLE",
+   "ai_by": "AI",
+   "candidates": [
+    "WHOLE",
+    "HYBRID"
+   ],
+   "reason": "Dense 87-page document with 2764 text elements and dispersed small tables suggests answers are spread throughout, while HYBRID saves little input.",
+   "rule_right": true,
+   "ai_right": true,
+   "cost_whole": 0.23172,
+   "cost_hybrid_at_most": 0.19618
+  },
+  {
+   "split": "heldout_long",
+   "contract": "0437c16c2d1c",
+   "pages": 88,
+   "recall_whole": 0.636,
+   "recall_hybrid": 0.364,
+   "better": "WHOLE",
+   "rule": "WHOLE",
+   "ai": "WHOLE",
+   "ai_by": "AI",
+   "candidates": [
+    "WHOLE",
+    "HYBRID"
+   ],
+   "reason": "The file is text-dense with 1587 text elements across 88 pages and HYBRID saves only about 9k tokens while adding a call, so WHOLE is safer for complete intake.",
+   "rule_right": true,
+   "ai_right": true,
+   "cost_whole": 0.14353,
+   "cost_hybrid_at_most": 0.13737
+  },
+  {
+   "split": "heldout_long",
+   "contract": "e1ba4f416436",
+   "pages": 60,
+   "recall_whole": 0.667,
+   "recall_hybrid": 0.667,
+   "better": "TIE",
+   "rule": "WHOLE",
+   "ai": "WHOLE",
+   "ai_by": "AI",
+   "candidates": [
+    "WHOLE",
+    "HYBRID"
+   ],
+   "reason": "The 60-page file is text-dense with dispersed small tables and HYBRID saves only ~20% tokens, indicating relevant answers are spread throughout rather than confined to appendices.",
+   "rule_right": true,
+   "ai_right": true,
+   "cost_whole": 0.13521,
+   "cost_hybrid_at_most": 0.11372
+  },
+  {
+   "split": "heldout_long",
+   "contract": "3e241e193dc4",
+   "pages": 47,
+   "recall_whole": 0.667,
+   "recall_hybrid": 0.667,
+   "better": "TIE",
+   "rule": "WHOLE",
+   "ai": "WHOLE",
+   "ai_by": "AI",
+   "candidates": [
+    "WHOLE",
+    "HYBRID"
+   ],
+   "reason": "The file is dense with 1360 text blocks and 623 table cells across 47 pages and HYBRID saves little cost while adding calls, so full coverage is safer for quality intake.",
+   "rule_right": true,
+   "ai_right": true,
+   "cost_whole": 0.13742,
+   "cost_hybrid_at_most": 0.12778
+  },
+  {
+   "split": "heldout_long",
+   "contract": "93a7191ff012",
+   "pages": 44,
+   "recall_whole": 0.778,
+   "recall_hybrid": 0.778,
+   "better": "TIE",
+   "rule": "WHOLE",
+   "ai": "WHOLE",
+   "ai_by": "AI",
+   "candidates": [
+    "WHOLE",
+    "HYBRID"
+   ],
+   "reason": "WHOLE is cheaper with one call and the dense 1781 text elements across 44 pages suggest answers are spread throughout.",
+   "rule_right": true,
+   "ai_right": true,
+   "cost_whole": 0.14406,
+   "cost_hybrid_at_most": 0.15665
+  },
+  {
+   "split": "heldout_long",
+   "contract": "7eb54db0558f",
+   "pages": 39,
+   "recall_whole": 0.857,
+   "recall_hybrid": 0.857,
+   "better": "TIE",
+   "rule": "WHOLE",
+   "ai": "WHOLE",
+   "ai_by": "AI",
+   "candidates": [
+    "WHOLE",
+    "HYBRID"
+   ],
+   "reason": "WHOLE is cheaper in a single call and suits the dense 1015 text blocks across 39 pages where intake answers may be spread",
+   "rule_right": true,
+   "ai_right": true,
+   "cost_whole": 0.09961,
+   "cost_hybrid_at_most": 0.11751
+  },
+  {
+   "split": "heldout_long",
+   "contract": "a4a5f4121b48",
+   "pages": 39,
+   "recall_whole": 0.714,
+   "recall_hybrid": 0.714,
+   "better": "TIE",
+   "rule": "WHOLE",
+   "ai": "WHOLE",
+   "ai_by": "AI",
+   "candidates": [
+    "WHOLE",
+    "HYBRID"
+   ],
+   "reason": "F1 is dense text-heavy with 976 text elements across 39 pages and WHOLE is cheaper in one call, so full context best captures spread answers.",
+   "rule_right": true,
+   "ai_right": true,
+   "cost_whole": 0.08493,
+   "cost_hybrid_at_most": 0.10806
+  },
+  {
+   "split": "heldout_long",
+   "contract": "af0c46173614",
+   "pages": 34,
+   "recall_whole": 0.5,
+   "recall_hybrid": 0.417,
+   "better": "WHOLE",
+   "rule": "WHOLE",
+   "ai": "WHOLE",
+   "ai_by": "AI",
+   "candidates": [
+    "WHOLE",
+    "HYBRID"
+   ],
+   "reason": "F1 is dense text with 879 text elements and only 36 cells across 34 pages so answers may be spread throughout and WHOLE is cheaper in a single call.",
+   "rule_right": true,
+   "ai_right": true,
+   "cost_whole": 0.07417,
+   "cost_hybrid_at_most": 0.10953
+  },
+  {
+   "split": "heldout_long",
+   "contract": "4ae6fb819cc7",
+   "pages": 33,
+   "recall_whole": 0.857,
+   "recall_hybrid": 0.857,
+   "better": "TIE",
+   "rule": "WHOLE",
+   "ai": "WHOLE",
+   "ai_by": "AI",
+   "candidates": [
+    "WHOLE",
+    "HYBRID"
+   ],
+   "reason": "The 33-page file is text-dense with dispersed tables where answers may be spread, and WHOLE is cheaper in a single call.",
+   "rule_right": true,
+   "ai_right": true,
+   "cost_whole": 0.06847,
+   "cost_hybrid_at_most": 0.07591
+  }
+ ]
+}

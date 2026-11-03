@@ -149,3 +149,26 @@ def test_the_map_skips_page_numbers_and_running_headers_and_a_page_brings_its_co
                                                 "conflict rules.")]
     assert [e["id"] for e in doc_map.continuation(els, "p2")] == ["pdf:p3:l1", "pdf:p3:l2"]  # stops at "13. Notices"
     assert doc_map.continuation(els, "s0") == [] and doc_map.continuation(els, "p3") == []
+
+
+def test_ai_choice_asks_only_between_feasible_methods_and_records_why(monkeypatch):  # v5.14 AI-CFG-03
+    short = [{"id": f"pdf:p1:l{i}", "kind": "text", "page": 1, "text": t} for i, t in
+             enumerate(["Customer: Hanbit Motors", "LOT L02, 12 defective boards", "Please reply by 2026-11-07"])]
+    monkeypatch.setitem(limits.OVERRIDES, "EXTRACT_MODE", "AI_CHOICE")
+    p = Scripted({"method": "HYBRID", "reason": "long appendix tables"}, *[EMPTY] * 3)
+    _, _, info = intake_extract.extract(p, files_of(short))
+    choose = json.loads(p.seen[0]["messages"][-1]["content"])
+    assert choose["candidates"] == ["WHOLE", "HYBRID"] and "Hanbit" not in json.dumps(choose)  # structure, no text
+    assert info["mode"] == "HYBRID" and info["auto"]["proposed_by"] == "AI" and info["auto"]["reason"]
+    assert all(s["read_method"]["method"] == "HYBRID" for s in info["files"])  # recorded on each file
+
+    p = Scripted({"method": "SKIM", "reason": "x"}, *[EMPTY] * 3)  # outside the candidates: the server's rule
+    _, _, info = intake_extract.extract(p, files_of(short))
+    assert info["mode"] == "WHOLE" and info["auto"]["proposed_by"] == "SERVER_RULE"
+
+    monkeypatch.setitem(limits.OVERRIDES, "MAX_COST_PER_MODEL_CALL_USD", 1e-7)  # nothing fits the cost cap
+    p = Scripted(*[EMPTY] * 3)
+    _, _, info = intake_extract.extract(p, files_of(short))
+    assert info["mode"] == "HYBRID" and info["auto"]["candidates"] == ["HYBRID"]
+    assert not any(s["response_format"]["json_schema"]["name"] == "read_method" for s in p.seen)  # not asked
+    assert limits.cast("EXTRACT_MODE", "AI_CHOICE") == "AI_CHOICE"

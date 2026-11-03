@@ -11,8 +11,8 @@
     "validation": "0/0"
    },
    "extraction": {
-    "dev": "33/33",
-    "validation": "17/17"
+    "dev": "99/99",
+    "validation": "51/51"
    }
   },
   "extraction_not_run": [],
@@ -24,17 +24,17 @@
    "whether a question to the customer is well worded (human review)"
   ],
   "run": {
-   "code_sha": "bda39ca5750b7ccc61ce6df32ef320557ebb7899+dirty",
-   "parser_version": "docparse-3",
+   "code_sha": "ec30e2a6820cc6da628e83d1f1b27f9590e82073+dirty",
+   "parser_version": "docparse-4",
    "evaluator": "scripts.fixture_eval",
-   "evaluator_sha256": "7ba75e3a3acb54bd",
+   "evaluator_sha256": "f1649c35565629cf",
    "sampling": {
     "temperature": 0.0,
     "seed": 1
    },
    "python": "3.12.8",
    "command": "python -m scripts.fixture_eval",
-   "at": "2026-11-02T02:29:45+00:00"
+   "at": "2026-11-03T12:02:59+00:00"
   }
  },
  "rows": [
@@ -301,6 +301,314 @@
     },
     "prompt_tokens_details": {
      "cached_tokens": 0
+    }
+   },
+   "checks": {
+    "lot status": true,
+    "inspected_qty status": true,
+    "inspected_qty value": true,
+    "inspected_qty locator": true
+   },
+   "passed": 4,
+   "of": 4,
+   "wrong_confirmations": 0,
+   "failed": []
+  },
+  {
+   "part": "extraction",
+   "case": "complaint",
+   "split": "dev",
+   "run_mode": "LIVE",
+   "status": "OK",
+   "trace": "LIVE-2026-11-03T115751+0000.jsonl",
+   "read_mode": "WHOLE_FIRST",
+   "usage": {
+    "completion_tokens": 1782,
+    "prompt_tokens": 2859,
+    "total_tokens": 4641,
+    "completion_tokens_details": {
+     "reasoning_tokens": 543
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    }
+   },
+   "checks": {
+    "customer_ref status": true,
+    "customer_ref value": true,
+    "customer_ref locator": true,
+    "lot status": true,
+    "lot value": true,
+    "lot locator": true,
+    "defective_qty status": true,
+    "defective_qty value": true,
+    "defective_qty locator": true,
+    "qty_unit status": true,
+    "qty_unit value": true,
+    "qty_unit locator": true,
+    "part_number status": true,
+    "part_number value": true,
+    "part_number locator": true,
+    "delivery_date status": true,
+    "delivery_date value": true,
+    "delivery_date locator": true,
+    "found_date status": true,
+    "found_date value": true,
+    "found_date locator": true,
+    "inspected_qty status": true,
+    "reply_deadline status": true,
+    "reply_deadline value": true,
+    "reply_deadline locator": true,
+    "customer_cause_claim status": true,
+    "customer_cause_claim value": true,
+    "customer_cause_claim locator": true,
+    "link pdf:p1:img1": true
+   },
+   "passed": 29,
+   "of": 29,
+   "wrong_confirmations": 0,
+   "failed": []
+  },
+  {
+   "part": "extraction",
+   "case": "complaint+supplement",
+   "split": "dev",
+   "run_mode": "LIVE",
+   "status": "OK",
+   "trace": "LIVE-2026-11-03T115751+0000.jsonl",
+   "read_mode": "WHOLE_FIRST",
+   "usage": {
+    "completion_tokens": 2769,
+    "prompt_tokens": 4252,
+    "total_tokens": 7021,
+    "completion_tokens_details": {
+     "reasoning_tokens": 570
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    }
+   },
+   "checks": {
+    "lot status": true,
+    "inspected_qty status": true,
+    "inspected_qty value": true,
+    "inspected_qty locator": true
+   },
+   "passed": 4,
+   "of": 4,
+   "wrong_confirmations": 0,
+   "failed": []
+  },
+  {
+   "part": "extraction",
+   "case": "live_complaint",
+   "split": "validation",
+   "run_mode": "LIVE",
+   "status": "OK",
+   "trace": "LIVE-2026-11-03T115751+0000.jsonl",
+   "read_mode": "WHOLE_FIRST",
+   "usage": {
+    "completion_tokens": 1670,
+    "prompt_tokens": 2464,
+    "total_tokens": 4134,
+    "completion_tokens_details": {
+     "reasoning_tokens": 474
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    }
+   },
+   "checks": {
+    "customer_ref status": true,
+    "customer_ref value": true,
+    "customer_ref locator": true,
+    "lot status": true,
+    "lot value": true,
+    "lot locator": true,
+    "defective_qty status": true,
+    "defective_qty value": true,
+    "defective_qty locator": true,
+    "inspected_qty status": true,
+    "reply_deadline status": true,
+    "reply_deadline value": true,
+    "reply_deadline locator": true
+   },
+   "passed": 13,
+   "of": 13,
+   "wrong_confirmations": 0,
+   "failed": []
+  },
+  {
+   "part": "extraction",
+   "case": "live_complaint+supplement",
+   "split": "validation",
+   "run_mode": "LIVE",
+   "status": "OK",
+   "trace": "LIVE-2026-11-03T115751+0000.jsonl",
+   "read_mode": "WHOLE_FIRST",
+   "usage": {
+    "completion_tokens": 2121,
+    "prompt_tokens": 2967,
+    "total_tokens": 5088,
+    "completion_tokens_details": {
+     "reasoning_tokens": 454
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    }
+   },
+   "checks": {
+    "lot status": true,
+    "inspected_qty status": true,
+    "inspected_qty value": true,
+    "inspected_qty locator": true
+   },
+   "passed": 4,
+   "of": 4,
+   "wrong_confirmations": 0,
+   "failed": []
+  },
+  {
+   "part": "extraction",
+   "case": "complaint",
+   "split": "dev",
+   "run_mode": "LIVE",
+   "status": "OK",
+   "trace": "LIVE-2026-11-03T120049+0000.jsonl",
+   "read_mode": "AI_CHOICE",
+   "usage": {
+    "completion_tokens": 1751,
+    "prompt_tokens": 2859,
+    "total_tokens": 4610,
+    "completion_tokens_details": {
+     "reasoning_tokens": 424
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 2801
+    }
+   },
+   "checks": {
+    "customer_ref status": true,
+    "customer_ref value": true,
+    "customer_ref locator": true,
+    "lot status": true,
+    "lot value": true,
+    "lot locator": true,
+    "defective_qty status": true,
+    "defective_qty value": true,
+    "defective_qty locator": true,
+    "qty_unit status": true,
+    "qty_unit value": true,
+    "qty_unit locator": true,
+    "part_number status": true,
+    "part_number value": true,
+    "part_number locator": true,
+    "delivery_date status": true,
+    "delivery_date value": true,
+    "delivery_date locator": true,
+    "found_date status": true,
+    "found_date value": true,
+    "found_date locator": true,
+    "inspected_qty status": true,
+    "reply_deadline status": true,
+    "reply_deadline value": true,
+    "reply_deadline locator": true,
+    "customer_cause_claim status": true,
+    "customer_cause_claim value": true,
+    "customer_cause_claim locator": true,
+    "link pdf:p1:img1": true
+   },
+   "passed": 29,
+   "of": 29,
+   "wrong_confirmations": 0,
+   "failed": []
+  },
+  {
+   "part": "extraction",
+   "case": "complaint+supplement",
+   "split": "dev",
+   "run_mode": "LIVE",
+   "status": "OK",
+   "trace": "LIVE-2026-11-03T120049+0000.jsonl",
+   "read_mode": "AI_CHOICE",
+   "usage": {
+    "completion_tokens": 2580,
+    "prompt_tokens": 4252,
+    "total_tokens": 6832,
+    "completion_tokens_details": {
+     "reasoning_tokens": 644
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 4209
+    }
+   },
+   "checks": {
+    "lot status": true,
+    "inspected_qty status": true,
+    "inspected_qty value": true,
+    "inspected_qty locator": true
+   },
+   "passed": 4,
+   "of": 4,
+   "wrong_confirmations": 0,
+   "failed": []
+  },
+  {
+   "part": "extraction",
+   "case": "live_complaint",
+   "split": "validation",
+   "run_mode": "LIVE",
+   "status": "OK",
+   "trace": "LIVE-2026-11-03T120049+0000.jsonl",
+   "read_mode": "AI_CHOICE",
+   "usage": {
+    "completion_tokens": 1756,
+    "prompt_tokens": 2464,
+    "total_tokens": 4220,
+    "completion_tokens_details": {
+     "reasoning_tokens": 564
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 2417
+    }
+   },
+   "checks": {
+    "customer_ref status": true,
+    "customer_ref value": true,
+    "customer_ref locator": true,
+    "lot status": true,
+    "lot value": true,
+    "lot locator": true,
+    "defective_qty status": true,
+    "defective_qty value": true,
+    "defective_qty locator": true,
+    "inspected_qty status": true,
+    "reply_deadline status": true,
+    "reply_deadline value": true,
+    "reply_deadline locator": true
+   },
+   "passed": 13,
+   "of": 13,
+   "wrong_confirmations": 0,
+   "failed": []
+  },
+  {
+   "part": "extraction",
+   "case": "live_complaint+supplement",
+   "split": "validation",
+   "run_mode": "LIVE",
+   "status": "OK",
+   "trace": "LIVE-2026-11-03T120049+0000.jsonl",
+   "read_mode": "AI_CHOICE",
+   "usage": {
+    "completion_tokens": 2298,
+    "prompt_tokens": 2967,
+    "total_tokens": 5265,
+    "completion_tokens_details": {
+     "reasoning_tokens": 691
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 2929
     }
    },
    "checks": {

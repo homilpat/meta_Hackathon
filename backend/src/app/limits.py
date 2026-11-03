@@ -26,7 +26,7 @@ from app.fields import FreeText
 ADMIN_ROLE = "AGENT_ADMIN"
 OVERRIDES: dict[str, object] = {}  # recorded settings of this process (loaded at start, updated on change)
 RESTART = {"MAX_FILES_PER_UPLOAD", "MAX_REQUEST_ITEMS"}  # fixed in request schemas at start
-CHOICES = {"MODEL_RESPONSE_REUSE": {"ON", "OFF"}, "INVESTIGATION_REASONING_EFFORT": {"minimal", "default"}, "EXTRACT_MODE": {"WHOLE_FIRST", "HYBRID", "WHOLE", "AUTO"}}
+CHOICES = {"MODEL_RESPONSE_REUSE": {"ON", "OFF"}, "INVESTIGATION_REASONING_EFFORT": {"minimal", "default"}, "EXTRACT_MODE": {"WHOLE_FIRST", "HYBRID", "WHOLE", "AUTO", "AI_CHOICE"}}
 OFF_ALLOWED = {"MAX_COST_PER_MODEL_CALL_USD", "MODEL_TEMPERATURE", "MODEL_SEED", "INVESTIGATION_MAX_COST_USD",
                "INVESTIGATION_MAX_REPAIRS"}  # 0 is a valid setting
 
@@ -69,7 +69,8 @@ LIMITS: dict[str, Limit] = {
     "MAX_COST_PER_MODEL_CALL_USD": Limit(0.0, "USD of input per document-model call; 0 = off", "DECISION",
                                          "user, 2026-11-01: the context window is the cap; a cost cap is optional "
                                          "and set from the company's model budget when wanted"),
-    "EXTRACT_MODE": Limit("WHOLE_FIRST", "how documents reach the model: WHOLE_FIRST, WHOLE, HYBRID or AUTO",
+    "EXTRACT_MODE": Limit("WHOLE_FIRST", "how documents reach the model: WHOLE_FIRST, WHOLE, HYBRID, AUTO or AI_CHOICE "
+                          "(the server narrows by size and budget, Meta picks between feasible methods; v5.14 AI-CFG-03)",
                           "DECISION", "user, 2026-11-02, after the CUAD LIVE runs: WHOLE_FIRST reads every element "
                           "when it fits one call (context and cost cap) and uses HYBRID (contents + server selection "
                           "+ the model asks for parts) only beyond that. WHOLE always reads all (in pieces); AUTO picks "

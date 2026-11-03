@@ -215,7 +215,7 @@ def _based_on(session: Session, case_id: str, doc_type: str, approved: bool = Tr
         if up is None or up.status in ("REJECTED", "SUPERSEDED") or (approved and up.status != "APPROVED"):
             need = "승인되어야" if approved else "초안이 있어야"
             now = STATE_WORDS.get(up.status, up.status) if up else "없음"
-            raise HTTPException(409, f"{doc_type}: 앞 단계 {t}이(가) 먼저 {need} 합니다 (지금 {now})")
+            raise HTTPException(409, f"앞 단계 {t}이(가) 먼저 {need} 합니다 (지금 {now})")
         chain.append(f"{t} v{up.version}")
     return chain[::-1]
 

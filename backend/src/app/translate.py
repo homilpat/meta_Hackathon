@@ -6,13 +6,19 @@ that drops or adds one is not shown: the original is. The provider is the respon
 translated once and every later view reuses that answer at no cost.
 """
 
+import hashlib
 import json
 import re
+from datetime import UTC, datetime
 from collections.abc import Callable
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError, OperationalError
+
+from app.db import ModelResponse
 
 from app.model_provider import ProviderError
 from app.workflow import Actor
@@ -30,9 +36,35 @@ SCHEMA = {"type": "json_schema", "json_schema": {"name": "translation", "strict"
         "properties": {"n": {"type": "integer"}, "ko": {"type": "string"}}}}}}}}
 
 
-# shortcut: per-sentence memory for this server process (a batch-level answer is also stored by the reusing
-# provider); move it to a table if translations must survive a restart without a model call.
-MEMO: dict[str, str] = {}
+MEMO: dict[str, str] = {}  # this process's view of the stored translations (model_responses, one row per sentence)
+
+
+def key(text: str) -> str:
+    return hashlib.sha256(f"translate-ko:{text}".encode()).hexdigest()
+
+
+def remember(sessions, texts: list[str]) -> None:
+    """Load stored translations of these texts (they survive a restart)."""
+    if sessions is None:
+        return
+    want = {key(t): t for t in texts if t not in MEMO}
+    if want:
+        with sessions() as s:
+            for row in s.scalars(select(ModelResponse).where(ModelResponse.request_sha256.in_(want))):
+                MEMO[want[row.request_sha256]] = row.message.get("ko", "")
+
+
+def store(sessions, provider, pairs: dict[str, str]) -> None:
+    if sessions is None or not pairs:
+        return
+    try:
+        with sessions.begin() as s:
+            for t, ko in pairs.items():
+                if not s.scalar(select(ModelResponse.id).where(ModelResponse.request_sha256 == key(t))):
+                    s.add(ModelResponse(request_sha256=key(t), model=provider.model, provider_mode=provider.mode,
+                                        message={"ko": ko, "text": t}, usage={}, created_at=datetime.now(UTC).isoformat()))
+    except (IntegrityError, OperationalError):
+        pass  # kept in MEMO; stored next time
 
 
 class TranslateIn(BaseModel):
@@ -44,9 +76,10 @@ def kept(original: str, ko: str) -> bool:
     return sorted(TOKEN.findall(original)) == sorted(TOKEN.findall(ko)) and bool(ko.strip())
 
 
-def translate(provider, texts: list[str]) -> dict[str, str]:
+def translate(provider, texts: list[str], sessions=None) -> dict[str, str]:
     """{original: Korean} for the texts that need it and passed the check; the rest are left out (shown as is)."""
     want = list(dict.fromkeys(t for t in texts if t and len(t) <= 2000 and ENGLISH.search(t)))
+    remember(sessions, want)
     todo = [t for t in want if t not in MEMO]
     if provider is None or not todo:
         return {t: MEMO[t] for t in want if t in MEMO}
@@ -63,10 +96,11 @@ def translate(provider, texts: list[str]) -> dict[str, str]:
         n = it.get("n") if isinstance(it, dict) else None
         if isinstance(n, int) and 1 <= n <= len(todo) and kept(todo[n - 1], str(it.get("ko") or "")):
             out[todo[n - 1]] = MEMO[todo[n - 1]] = str(it["ko"]).strip()
+    store(sessions, provider, {t: out[t] for t in todo if t in out})
     return out
 
 
-def make_translate_router(current_user: Callable[..., Actor], provider) -> APIRouter:
+def make_translate_router(sessions, current_user: Callable[..., Actor], provider) -> APIRouter:
     router = APIRouter()
     Who = Annotated[Actor, Depends(current_user)]
 
@@ -74,6 +108,6 @@ def make_translate_router(current_user: Callable[..., Actor], provider) -> APIRo
     def translations(body: TranslateIn, actor: Who) -> dict:
         # shortcut: no per-user quota; the request is capped at 40 texts and a repeated text reuses its stored
         # answer. Add a quota (like MODEL_RUNS_PER_USER_HOUR) if screens start sending new text at volume.
-        return {"ko": translate(provider, body.texts)}
+        return {"ko": translate(provider, body.texts, sessions)}
 
     return router

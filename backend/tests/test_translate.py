@@ -28,3 +28,22 @@ def test_only_english_is_sent_and_a_translation_must_keep_numbers_and_codes():
 
 def test_without_a_model_nothing_is_translated():
     assert translate(None, ["Clogged apertures found on affected pads"]) == {}
+
+
+def test_a_translation_is_stored_and_survives_a_restart(tmp_path):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.db import Base
+
+    engine = create_engine(f"sqlite:///{tmp_path / 't.db'}")
+    Base.metadata.create_all(engine)
+    sessions = sessionmaker(engine)
+    p = Fake([{"n": 1, "ko": "해당 패드에서 막힌 개구부 발견"}])
+    p.model, p.mode = "m", "LIVE"
+    text = "Clogged apertures found on affected pads"
+    assert translate(p, [text], sessions) == {text: "해당 패드에서 막힌 개구부 발견"}
+    MEMO.clear()  # a restart
+    again = Fake([])
+    assert translate(again, [text], sessions) == {text: "해당 패드에서 막힌 개구부 발견"} and again.sent == []
+    MEMO.clear()

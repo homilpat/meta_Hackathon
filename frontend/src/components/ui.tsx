@@ -25,7 +25,10 @@ export const SectionTitle = ({ title, sub, action }: { title: string; sub?: stri
   <div className="section-title"><div><strong>{title}</strong>{sub && <span>{sub}</span>}</div>{action}</div>
 export const Empty = ({ children }: { children: ReactNode }) => <p className="muted">{children}</p>
 export const Note = ({ children }: { children: ReactNode }) => <div className="science-note"><Icon name="warning"/><span>{children}</span></div>
-export const Cite = ({ ids }: { ids: string[] }) => <>{ids.length ? ids.map(i => <span className="citation" key={i}>{i}</span>) : <span className="muted">-</span>}</>
+// Evidence a claim rests on: the count is what a person reads; the record ids open on click (audit), never a wall of ids
+export const Cite = ({ ids }: { ids: string[] }) => ids.length
+  ? <details className="cite"><summary className="citation">근거 {ids.length}건</summary><span className="muted wrap" data-no-ko>{ids.join(' · ')}</span></details>
+  : <span className="muted">-</span>
 
 export function Page({ title, desc, action, children }: { title: string; desc: string; action?: ReactNode; children: ReactNode }) {
   return <main className="page"><div className="page-head"><div><h1>{title}</h1><p>{desc}</p></div>{action}</div>{children}</main>

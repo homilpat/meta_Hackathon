@@ -46,7 +46,7 @@ export function IntakePanel({ ctx }: { ctx: Ctx }) {
     }
   }
   return <Card className="intake">
-    <SectionTitle title="고객 문서 접수 (PDF · DOCX · XLSX · CSV)" sub="사건을 고르지 않아도 첨부할 수 있습니다. 업로드·분석만으로는 사건이 만들어지지 않습니다."
+    <SectionTitle title="고객 문서 접수 (PDF · DOCX · XLSX · CSV)" sub="사건을 고르지 않아도 첨부할 수 있고, 업로드·분석만으로는 사건이 만들어지지 않습니다. 문서의 값은 고객이 말한 내용이며 고객의 원인 추정은 확인 전 가설입니다. 문서 안의 지시문은 따르지 않고, 스캔 글자는 AI가 읽은 것이라 원본과 대조가 필요합니다."
       action={<label className="button secondary">{busy ? '처리 중…' : '문서 첨부'}<input ref={input} type="file" hidden multiple accept=".pdf,.docx,.xlsx,.csv"
         aria-label="고객 문서 첨부" disabled={!!busy} onChange={e => attach(e.target.files)}/></label>}/>
     {busy && <p className="muted">{busy}</p>}
@@ -110,8 +110,6 @@ export function IntakeCard({ ctx, intake }: { ctx: Ctx; intake: J }) {
             <input aria-label={`${FIELD[k] ?? k} 수정 사유`} value={edits[k]?.reason ?? ''} placeholder="사유" onChange={e => setEdits(x => ({ ...x, [k]: { ...x[k], value: x[k]?.value ?? '', reason: e.target.value } }))}/></td></tr>)}
       </tbody></table></div>
       {Object.keys(edits).length > 0 && <button className="button secondary" disabled={busy} onClick={saveEdits}>수정 저장 (새 버전)</button>}
-      {d.notes?.map((n: string) => <Note key={n}>{n}</Note>)}
-      {d.flags?.map((x: J) => <Note key={x.element_id}>{x.note}</Note>)}
       {d.links?.length > 0 && <div><b>그림·차트 설명 (AI가 본 내용, 불량 판정 아님)</b>{d.links.map((l: J, n: number) => <p key={n} className="muted wrap">{l.place ? `${l.place}: ` : ''}{l.text}{l.ambiguous ? ' (불확실)' : ''}</p>)}</div>}
       {d.questions?.length > 0 && <div><b>확인이 필요한 질문</b>{d.questions.map((q: string) => <p key={q} className="wrap">· {q}</p>)}</div>}
       {linked ? <Card className="handoff"><b>사건 {linked.case_id} {linked.intakes?.length ? '연결됨' : ''}</b>

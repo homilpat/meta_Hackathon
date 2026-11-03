@@ -124,3 +124,6 @@ table{font-size:13px}th{font-size:12px}td{padding:9px 10px}
 .work-log{margin:8px 0}.work-log>summary{cursor:pointer;color:var(--slate);font-size:13px;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:#f7f9fa;list-style:none}
 .work-log>summary::-webkit-details-marker{display:none}.work-log>summary:before{content:"▸ ";color:var(--muted)}.work-log[open]>summary:before{content:"▾ "}
 .work-log[open]>summary{margin-bottom:8px}
+/* responsive (user 2026-11-04): a row wraps whole buttons instead of breaking their labels; a short screen scrolls the menu */
+.row-gap{flex-wrap:wrap}.button{white-space:nowrap}
+.sidebar nav{flex:1 1 auto;min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#344255 transparent}

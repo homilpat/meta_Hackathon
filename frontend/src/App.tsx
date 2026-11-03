@@ -86,7 +86,7 @@ export default function App() {
       <nav aria-label="주 메뉴">{primary.map(n => <button key={n[0]} className={active === n[0] ? 'active' : ''} aria-current={active === n[0] ? 'page' : undefined} onClick={() => go(n[0])}><Icon name={n[2]}/><span>{n[1]}</span></button>)}
         <div className={`specialist ${showTools ? 'open' : ''}`}><button className="specialist-toggle" aria-expanded={showTools} aria-controls="specialist-items" onClick={() => setToolsOpen(!showTools)}><span>전문 도구 · 상세 화면</span><Icon name="chevron" size={13}/></button>
           {showTools && <div id="specialist-items" className="specialist-items">{specialist.map(n => <button key={n[0]} className={active === n[0] ? 'active' : ''} aria-current={active === n[0] ? 'page' : undefined} onClick={() => go(n[0])}><Icon name={n[2]}/><span>{n[1]}</span>{n[0] === 'investigation' && <i>AI</i>}</button>)}</div>}</div></nav>
-      <div className="sidebar-bottom"><div className="status-live"><i className={provider?.configured ? '' : 'off'}/><span><b>Meta · {provider?.model ?? '-'}</b><small>{provider?.live_status === 'VERIFIED' ? 'LIVE 호출 검증됨' : provider?.configured ? '키 설정됨 · LIVE 미검증' : '키 없음 · 호출 불가'}</small></span></div></div>
+      <div className="sidebar-bottom"><div className="status-live"><i className={provider?.configured ? '' : 'off'}/><span><b>Meta · {provider?.model ?? '-'}</b><small>{provider?.live_status === 'VERIFIED' ? 'LIVE 호출 검증됨' : provider?.configured ? 'AI 연결 설정됨' : '키 없음 · 호출 불가'}</small></span></div></div>
     </aside>
     <div className="shell">
       <header><div className="breadcrumb"><span>QualityOps AI</span><Icon name="chevron" size={13}/><b>{nav.find(x => x[0] === active)?.[1]}</b></div>

@@ -9,7 +9,7 @@ export function plannerLabel(provider: J): [string, Tone] {
   if (!provider?.configured) return ['AI 오프라인 · 서버 규칙 플래너', 'slate']
   if (provider.live_status === 'VERIFIED') return [`Meta ${provider.model} · LIVE 검증됨`, 'green']
   if (provider.live_status === 'TEST_DOUBLE') return ['TEST_DOUBLE 플래너 (LIVE 아님)', 'amber']
-  return [`Meta ${provider.model} · 키 설정됨, LIVE 미검증`, 'amber']
+  return ['', 'slate'] // a key is set: nothing to warn about, so no badge (user 2026-11-04)
 }
 
 const EXAMPLES = ['이번 SPC 경보, 8D로 가야 할지 판정해 줘', '이번 LOT 불량 원인을 조사해 줘', 'NCR 초안 써 줘', '내 할 일 알려줘', '8D 진행 상태와 차단 사유 알려줘']
@@ -52,7 +52,7 @@ export function Agent({ ctx, provider, go }: { ctx: Ctx; provider: J; go: (view:
   return <main className="agent-page">
     <div className="agent-heading"><div><span className="eyebrow"><i/>QualityOps Agent</span><h1>품질 조사 워크스페이스</h1>
       <p>목표를 말하면 Agent가 허용된 도구로 근거 조회부터 문서 초안·검증·검토 요청 준비까지 계획하고, 사람의 결정이 필요한 곳에서 멈춥니다.</p></div>
-      <Badge tone={tone}>{label}</Badge></div>
+      {label && <Badge tone={tone}>{label}</Badge>}</div>
     {down ? <Card className="fallback"><div className="fallback-icon"><Icon name="warning" size={24}/></div><h2>Agent 서비스에 연결할 수 없습니다</h2>
       <p>서버 응답: {down}. Agent 없이도 할 일, 승인, 8D, 문서 편집·검증은 기존 화면에서 계속할 수 있습니다.</p>
       <div className="row-gap" style={{ justifyContent: 'center' }}><button className="button secondary" onClick={ctx.refresh}>다시 연결</button>

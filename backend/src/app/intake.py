@@ -323,6 +323,67 @@ def add_draft_routes(router: APIRouter, sessions: sessionmaker, Who, IdemKey, pr
                         headers={"Content-Disposition": "attachment", "X-Content-Type-Options": "nosniff"})
 
 
+def add_inspection_routes(router: APIRouter, sessions: sessionmaker, Who, IdemKey) -> None:
+    """Inspection-result XLSX (spec §28): preview and checks on the intake file, a person's confirmation into a
+    case, and reconciliation with the customer's documents. Only the intake's owner reads the file; only people on
+    the case see or change its imports."""
+    from app import inspection_xlsx as ix
+    from app.db import InspectionImport
+    from app.workflow import require_case
+
+    def xlsx(session: Session, intake_id: int, file_id: int, actor: Actor) -> IntakeFile:
+        f = own_file(session, intake_id, file_id, actor)
+        if f.media_type != XLSX:
+            raise HTTPException(422, "검사 결과 양식은 XLSX 파일만 읽습니다 (XLS·XLSM·CSV는 지원하지 않음)")
+        return f
+
+    @router.get("/intakes/{intake_id}/files/{file_id}/inspection")
+    def preview(intake_id: int, file_id: int, actor: Who, sheet: str | None = None,
+                header_row: int | None = None, mapping: str | None = None) -> dict:
+        """mapping: the person's edited field -> column as JSON; the checks run again on it."""
+        import json
+
+        try:
+            chosen = json.loads(mapping) if mapping else None
+        except ValueError:
+            raise HTTPException(422, "mapping must be JSON") from None
+        if chosen is not None and (not isinstance(chosen, dict) or set(chosen) - set(ix.FIELDS)):
+            raise HTTPException(422, f"mapping fields must be among {sorted(ix.FIELDS)}")
+        with sessions() as session:
+            f = xlsx(session, intake_id, file_id, actor)
+            data, sha = f.content, f.sha256
+        return ix.read(data, sha, sheet, header_row, chosen)
+
+    @router.post("/cases/{case_id}/inspection-imports", status_code=201)
+    def confirm_import(case_id: str, body: ix.ImportIn, key: IdemKey, actor: Who):
+        require_role(actor, "AUTHOR")
+
+        def run(session: Session) -> tuple[int, dict]:
+            require_case(session, case_id, actor)
+            f = xlsx(session, body.intake_id, body.file_id, actor)
+            if f.sha256 != body.file_sha256:
+                raise HTTPException(409, "확인한 파일과 저장된 파일이 다릅니다; 다시 미리보기 하세요")
+            return ix.confirm(session, case_id, body, f, actor)
+        return run_idempotent(sessions, f"inspection_import:{case_id}", key, actor, run)
+
+    @router.get("/cases/{case_id}/inspection-imports")
+    def list_imports(case_id: str, actor: Who) -> list[dict]:
+        with sessions() as session:
+            require_case(session, case_id, actor)
+            return [ix.import_out(i) for i in session.scalars(select(InspectionImport).where(
+                InspectionImport.case_id == case_id).order_by(InspectionImport.id))]
+
+    @router.get("/cases/{case_id}/inspection-imports/{import_id}/reconciliation")
+    def reconciliation(case_id: str, import_id: int, actor: Who, comparable: str = "") -> dict:
+        with sessions.begin() as session:  # the server's sums are stored as calculations (calculation ids)
+            require_case(session, case_id, actor)
+            imp = session.get(InspectionImport, import_id)
+            if imp is None or imp.case_id != case_id:
+                raise HTTPException(404, "Import not found")
+            fields = {x for x in comparable.split(",") if x in ("inspected_qty", "defective_qty")}
+            return ix.reconcile(session, case_id, imp, fields)
+
+
 def make_intake_router(sessions: sessionmaker, current_user, provider: ModelProvider | None = None,
                        local: ModelProvider | None = None) -> APIRouter:
     router = APIRouter()
@@ -376,4 +437,5 @@ def make_intake_router(sessions: sessionmaker, current_user, provider: ModelProv
                 "X-Content-Type-Options": "nosniff"})
 
     add_draft_routes(router, sessions, Who, IdemKey, provider, local)
+    add_inspection_routes(router, sessions, Who, IdemKey)
     return router

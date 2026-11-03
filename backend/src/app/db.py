@@ -232,6 +232,33 @@ class ToolCall(Base):
     created_at: Mapped[str] = mapped_column(String(40))
 
 
+class InspectionImport(Base):
+    """A person-confirmed import of an inspection XLSX into a case (spec §28): file hash, sheet, header, mapping and
+    its version, included rows with their cells, excluded rows with reasons. A new mapping or row set is a new
+    version that supersedes the earlier one; the same one again is the same import (signature)."""
+
+    __tablename__ = "inspection_imports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"), index=True)
+    intake_id: Mapped[int] = mapped_column(ForeignKey("intake_records.id"))
+    file_id: Mapped[int] = mapped_column(ForeignKey("intake_files.id"))
+    file_sha256: Mapped[str] = mapped_column(String(64))
+    sheet: Mapped[str] = mapped_column(String(120))
+    header_row: Mapped[int] = mapped_column(Integer)
+    mapping: Mapped[dict] = mapped_column(JSON)
+    mapping_version: Mapped[str] = mapped_column(String(20))
+    included_rows: Mapped[list] = mapped_column(JSON)
+    excluded: Mapped[dict] = mapped_column(JSON)
+    rows: Mapped[list] = mapped_column(JSON)
+    evidence_ids: Mapped[list] = mapped_column(JSON, default=list)
+    version: Mapped[int] = mapped_column(Integer)
+    supersedes_id: Mapped[int | None] = mapped_column(Integer)
+    signature: Mapped[str] = mapped_column(String(64), unique=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
 class Calculation(Base):
     """A server calculation a report may cite by id (spec §27.2): inputs, rule and a hash of the input records."""
 

@@ -289,7 +289,8 @@ def test_authorization_regression_on_every_case_route(env):
         if "{case_id}" in route.path and "GET" in route.methods:
             for kind in APPROVERS:
                 p = route.path
-                for k, v in {"{case_id}": "C1", "{kind:doc}": kind, "{version}": "1", "{prediction_id}": "1"}.items():
+                for k, v in {"{case_id}": "C1", "{kind:doc}": kind, "{version}": "1", "{prediction_id}": "1",
+                             "{import_id}": "1"}.items():
                     p = p.replace(k, v)
                 paths.add(p)
     assert {"/cases/C1/change-impact", "/cases/C1/rca", "/cases/C1/ncr/1", "/cases/C1/timeline"} <= paths

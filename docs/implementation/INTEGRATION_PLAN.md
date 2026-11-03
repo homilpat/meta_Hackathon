@@ -73,3 +73,44 @@ Out of scope (spec §28.7): mail, in-house APIs, company-specific XLSX output, a
   - A "지금 누가 무엇을" summary card.
   - A "작업별 책임 연결" card per request, action and document version. AI reviews are marked as reference, and links go to D0–D8, 문서 · 결재 and 감사.
   - The old one-line list of executors and verifiers, which mixed actions, is removed.
+
+## P5 done: inspection XLSX (XLS-IN-01..05)
+
+`app/inspection_xlsx.py`, the `inspection_imports` table (migration 0028), routes in `app/intake.py`, and an XLSX check card on the intake screen.
+
+- **Form.** One synthetic reference form (`inspection_results_v1`). The required fields are LOT, inspected quantity and defective quantity. The rule-based mapping version is a hash. Nothing claims real company forms.
+- **Preview** (`GET /intakes/{id}/files/{fid}/inspection`) shows:
+  - sheets (hidden ones marked), the detected header row and its columns;
+  - the suggested mapping, which a person can change and the checks then run again;
+  - each row with its cell, raw value, number format and normalized value.
+  - It runs within the existing parse time budget, and rows it did not reach are reported as unread. Upload size, zip and macro checks stay at upload.
+- **Row checks.**
+  - `BLOCK`: MISSING (never 0-filled), NEGATIVE, NON_INTEGER, NOT_A_NUMBER, PRECISION_LOST, FORMULA_NO_CACHE (formulas are never executed), DEFECTIVE_EXCEEDS_INSPECTED.
+  - `WARN`: LEADING_ZERO_UNKNOWN (not restored), DATE_AMBIGUOUS, INVALID_DATE, NUMBER_AS_TEXT, DUPLICATE_CANDIDATE (never dropped), UNIT_MIXED.
+  - `INFO`: FORMULA_CACHED, LEADING_ZERO_FROM_FORMAT.
+- **Confirmation** (`POST /cases/{id}/inspection-imports`).
+  - The server re-reads the file. It refuses BLOCK rows, rows that are neither included nor excluded with a reason (so the denominator is explicit), and a changed file hash.
+  - The same confirmation again returns the same import. A different one is a new version that supersedes the old.
+  - Each included row becomes CHECKED internal-inspection evidence (`EV-XL<import>-<row>`) with file hash, sheet, cells, raw values and the mapping version. It takes the file's own origin and egress tier.
+- **Reconciliation** (`GET …/reconciliation?comparable=…`).
+  - LOT is MATCH, MISMATCH or MISSING against the customer-reported values, with both locators.
+  - Quantities are NOT_COMPARABLE until a person confirms they mean the same over the same scope. Several dated rows for a LOT are AMBIGUOUS.
+  - Sums are server calculations (`calculation_id`). The customer's number is never promoted or corrected.
+
+## P6: integrated E2E and checks
+
+- `tests/test_v513_e2e.py::integrated_scenario` runs in process and in `scripts/e2e_http.py` on real uvicorn: PDF+DOCX → manual draft → confirm → D0 → XLSX preview → one blocked row excluded with a reason → idempotent import → reconcile (server sum) → partial agent request → human-only refusal → NCR draft → validate → no export before approval → review → approval → DOCX and PDF export → responsibilities, Queue and timeline re-read.
+- Over HTTP the server has no model key, so the investigation loop is not run there. It is covered in process (`tests/test_repair_loop.py`). A LIVE re-measure is separate (budget).
+
+## Requirement → code → test
+
+| ID | Code | Tests |
+|---|---|---|
+| REL-FR-01 | `calculations.py`, `tools.calculate`, `report.validate_report` | `test_repair_loop` (fill, type, stale) |
+| REL-FR-02 | `investigator.investigate` loop, `report.structured`, `INVESTIGATION_MAX_REPAIRS` | `test_repair_loop` (repair, repeat stop, limit) |
+| REL-FR-03 | `investigator.required_missing`, `check`, INCOMPLETE, `data_warnings` | `test_repair_loop`, `test_s5_history`, `test_v5_5_g8` |
+| REL-FR-04 | `scripts/loop_eval.py` v2 | `test_eval_ev` (fixture holds in every tool, first call, warning vs claim, 11 regressions) |
+| §22 request classes | `agent.request_class`, `explain`, resume | `test_request_classes`, `test_agent_ag2`, `test_agent_hybrid` |
+| RW-UI-01..06 | `case_requests.chains`, `Requests.tsx` | `test_responsibility_chain`, `frontend/tests/Responsibility.test.tsx` |
+| XLS-IN-01..05 | `inspection_xlsx.py`, `intake.add_inspection_routes`, `Intake.tsx` InspectionXlsx | `test_inspection_xlsx`, `frontend/tests/InspectionXlsx.test.tsx` |
+| XLS-IN-06, §25.6 | `tests/test_v513_e2e.py`, `scripts/e2e_http.py` | in process and HTTP 7/7 |

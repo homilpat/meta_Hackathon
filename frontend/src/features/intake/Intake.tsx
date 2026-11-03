@@ -90,6 +90,8 @@ export function IntakeCard({ ctx, intake }: { ctx: Ctx; intake: J }) {
         const reason = window.prompt('외부 AI 원문 처리가 필요한 이유 (품질 관리자가 승인)'); if (!reason) return
         await ctx.api(`/intakes/${id}/files/${f.file_id}/egress-request`, 'POST', { reason }); ctx.refresh() })}>원문 처리 승인 요청</button>}
       {f.egress?.events?.slice(-1)[0]?.event === 'REQUESTED' && <span className="muted"> 승인 대기</span>}</span>)}</div>
+    {(view?.files ?? intake.files ?? []).filter((f: J) => /\.xlsx$/i.test(f.name ?? '')).map((f: J) =>
+      <InspectionXlsx key={`x${f.file_id}`} ctx={ctx} intakeId={id} f={f} cases={cases}/>)}
     {view?.files?.map((f: J) => f.coverage && <p key={f.file_id} className="muted wrap">{f.name}: 본문 {f.coverage.text} · 표 {f.coverage.tables} · 이미지 {f.coverage.images} · 차트 {f.coverage.charts} · 스캔 {f.coverage.scan} · 렌더 {f.coverage.render}
       {f.coverage.tables_note && ` (${f.coverage.tables_note})`}{f.coverage.charts_note && ` (${f.coverage.charts_note})`}{f.coverage.render_note && ` (${f.coverage.render_note})`}{f.checks?.active_content?.length > 0 && ` · 활성 콘텐츠 표시됨(실행 안 함)`}{f.checks?.external_links > 0 && ` · 외부 링크 ${f.checks.external_links}개(따라가지 않음)`}</p>)}
     {!d ? <button className="button primary" disabled={busy} onClick={analyze}>{busy ? '분석 중…' : '문서 분석'}</button> : <>
@@ -129,6 +131,61 @@ export function IntakeCard({ ctx, intake }: { ctx: Ctx; intake: J }) {
 }
 
 // The quality manager's list of files waiting for an external-processing decision (who asked, why).
+// Inspection-result XLSX (spec §28): the server suggests and checks; a person confirms columns and rows.
+const XFIELD: Record<string, string> = { part_number: '품번', lot: 'LOT', inspected_on: '검사일', inspected_qty: '검사 수량', defective_qty: '불량 수량', item: '측정 항목', value: '측정값', unit: '단위' }
+const LEVEL: Record<string, Tone> = { BLOCK: 'red', WARN: 'amber', INFO: 'slate' }
+const RECON: Record<string, Tone> = { MATCH: 'green', MISMATCH: 'red', MISSING: 'amber', AMBIGUOUS: 'amber', NOT_COMPARABLE: 'slate' }
+
+function InspectionXlsx({ ctx, intakeId, f, cases }: { ctx: Ctx; intakeId: number; f: J; cases: J[] }) {
+  const [v, setV] = useState<J>(null)
+  const [inc, setInc] = useState<Record<number, boolean>>({})
+  const [why, setWhy] = useState<Record<number, string>>({})
+  const [caseId, setCaseId] = useState('')
+  const [imp, setImp] = useState<J>(null)
+  const [rec, setRec] = useState<J>(null)
+  const [cmp, setCmp] = useState<string[]>([])
+  const [busy, setBusy] = useState(false)
+  const go = async (call: () => Promise<void>) => { if (busy) return; setBusy(true); try { await call() } catch { /* the error bar shows the server's reason */ } finally { setBusy(false) } }
+  const load = (mapping?: J) => go(async () => {
+    const q = mapping ? `?mapping=${encodeURIComponent(JSON.stringify(mapping))}` : ''
+    const out: J = await ctx.api(`/intakes/${intakeId}/files/${f.file_id}/inspection${q}`)
+    setV(out)
+    setInc(Object.fromEntries(out.rows.map((x: J) => [x.row, !x.hidden && !x.issues.some((i: J) => i.level === 'BLOCK')])))
+  })
+  const reconcile = (id: number, fields: string[]) => go(async () => setRec(await ctx.api(`/cases/${caseId}/inspection-imports/${id}/reconciliation?comparable=${fields.join(',')}`)))
+  const save = () => go(async () => {
+    const include = v.rows.filter((x: J) => inc[x.row]).map((x: J) => x.row)
+    const exclude = Object.fromEntries(v.rows.filter((x: J) => !inc[x.row]).map((x: J) => [String(x.row), why[x.row] ?? '']))
+    const out: J = await ctx.api(`/cases/${caseId}/inspection-imports`, 'POST', { intake_id: intakeId, file_id: f.file_id, file_sha256: v.file_sha256,
+      sheet: v.sheet, header_row: v.header_row, mapping: v.mapping, include_rows: include, exclude }, true)
+    setImp(out); ctx.refresh()
+    setRec(await ctx.api(`/cases/${caseId}/inspection-imports/${out.import_id}/reconciliation`))
+  })
+  const unexplained = v?.rows.some((x: J) => !inc[x.row] && !(why[x.row] ?? '').trim())
+  if (!v) return <p><button className="button secondary" disabled={busy} onClick={() => load()}>{f.name}: 검사 결과로 읽기</button></p>
+  return <Card><SectionTitle title={`검사 결과 확인 · ${f.name}`} sub={`시트 ${v.sheet} · 헤더 ${v.header_row ?? '없음'}행 · 열 연결 규칙 ${v.mapping_version ?? '-'} · 추천은 제안이며 사람이 확인해야 연결됩니다`}/>
+    {v.issues.map((i: J) => <Note key={i.code}>{i.message}</Note>)}
+    <div className="row-gap wrap">{Object.keys(XFIELD).map(k => <label key={k} className="muted">{XFIELD[k]}{['lot', 'inspected_qty', 'defective_qty'].includes(k) ? ' *' : ''}
+      <select className="input" aria-label={`${XFIELD[k]} 열`} value={v.mapping[k] ?? ''} disabled={busy} onChange={e => load({ ...v.mapping, [k]: e.target.value || null })}>
+        <option value="">(연결 안 함)</option>{Object.entries(v.columns).map(([col, h]) => <option key={col} value={col}>{col}: {String(h)}</option>)}</select></label>)}</div>
+    <table className="mt"><thead><tr><th>포함</th><th>행</th>{Object.keys(XFIELD).filter(k => v.mapping[k]).map(k => <th key={k}>{XFIELD[k]}</th>)}<th>확인 필요</th></tr></thead><tbody>
+      {v.rows.map((x: J) => <tr key={x.row}><td><input type="checkbox" aria-label={`${x.row}행 포함`} checked={!!inc[x.row]} disabled={busy || x.issues.some((i: J) => i.level === 'BLOCK')} onChange={e => setInc({ ...inc, [x.row]: e.target.checked })}/></td>
+        <td>{x.row}{x.hidden ? ' (숨김)' : ''}</td>
+        {Object.keys(XFIELD).filter(k => v.mapping[k]).map(k => <td key={k} title={`${x.cells[k]?.cell} 원본 ${JSON.stringify(x.cells[k]?.raw)} · 형식 ${x.cells[k]?.format}`}>{x.values[k] ?? <span className="muted">-</span>}</td>)}
+        <td>{x.issues.map((i: J, n: number) => <div key={n}><Badge tone={LEVEL[i.level]}>{i.level}</Badge> <span className="muted">{i.cell} {i.message}</span></div>)}
+          {!inc[x.row] && <input className="input" aria-label={`${x.row}행 제외 사유`} placeholder="제외 사유 (필수)" value={why[x.row] ?? ''} onChange={e => setWhy({ ...why, [x.row]: e.target.value })}/>}</td></tr>)}
+    </tbody></table>
+    {v.stopped_at_row && <Note>처리 시간 상한으로 {v.stopped_at_row}행부터 읽지 않았습니다. 전체를 읽은 것으로 표시하지 않습니다.</Note>}
+    <div className="row-gap mt"><select className="input" aria-label="연결할 사건" value={caseId} onChange={e => setCaseId(e.target.value)}><option value="">연결할 사건 선택</option>{cases.map(c => <option key={c.case_id} value={c.case_id}>{c.case_id}</option>)}</select>
+      <button className="button primary" disabled={busy || !caseId || unexplained} onClick={save}>확인한 열·행으로 사건에 연결</button>
+      {unexplained && <span className="muted">제외한 행마다 사유가 필요합니다 (분모를 남기기 위해)</span>}</div>
+    {imp && <p className="muted">연결됨: 가져오기 #{imp.import_id} v{imp.version} · 포함 {imp.denominator.included}행 · 제외 {imp.denominator.excluded}행 · 근거 {imp.evidence_ids.length}건</p>}
+    {rec && <><SectionTitle title="고객 문서 대조" sub="같은 의미·범위라고 확인한 수량만 비교합니다. 고객 수량은 내부 검사 사실로 바뀌지 않습니다."/>
+      <div className="row-gap">{['inspected_qty', 'defective_qty'].map(k => <label key={k}><input type="checkbox" checked={cmp.includes(k)} onChange={e => { const next = e.target.checked ? [...cmp, k] : cmp.filter(x => x !== k); setCmp(next); reconcile(imp.import_id, next) }}/> {XFIELD[k]}: 같은 의미·검사 범위 확인</label>)}</div>
+      {rec.items.map((i: J, n: number) => <p key={n} className="wrap"><Badge tone={RECON[i.status]}>{i.status}</Badge> {XFIELD[i.field] ?? i.field}{i.lot ? ` (LOT ${i.lot})` : ''}: 고객 {i.customer.map((c: J) => `${c.value} [${c.file ?? ''} ${c.element_id ?? ''}]`).join(', ') || '-'} · 검사 {i.inspection_value ?? i.inspection.map((x: J) => `${x.sheet}!${x.row}`).join(', ') ?? '-'}{i.reason ? ` · ${i.reason}` : ''}{i.calculation_id ? ` · 서버 합계 ${i.calculation_id}` : ''}</p>)}</>}
+  </Card>
+}
+
 function EgressQueue({ ctx }: { ctx: Ctx }) {
   const [items, setItems] = useState<J[]>([])
   const [reason, setReason] = useState('')

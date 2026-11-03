@@ -27,6 +27,7 @@ from tests.test_agent_ag4 import agent_scenario
 from tests.test_c_e2e import failure, success
 from tests.test_g10_export import opened
 from tests.test_v58_e2e import audit_scenario, intake_scenario, supplier_scenario
+from tests.test_v513_e2e import integrated_scenario
 from tests.v5_util import TEAM, H
 
 
@@ -86,7 +87,9 @@ def main() -> int:
                  ("agent draft -> G9 edit -> confirmed review -> human approval -> approved export only", agent_scenario),
                  ("v5.8 intake PDF+DOCX -> manual draft -> confirm -> D0 via Queue", intake_scenario),
                  ("v5.8 supplier request -> revision -> resubmission -> acceptance", supplier_scenario),
-                 ("v5.8 audit finding -> handover accepted -> evidence -> review", audit_scenario))
+                 ("v5.8 audit finding -> handover accepted -> evidence -> review", audit_scenario),
+                 ("v5.13 PDF+DOCX+XLSX -> confirm -> reconcile -> partial agent -> NCR approve -> DOCX/PDF -> re-read",
+                  integrated_scenario))
     for name, scenario in scenarios:
         try:
             with server(port) as c:

@@ -1,0 +1,124 @@
+{
+ "run_mode": "LIVE",
+ "model": "muse-spark-1.3",
+ "refused_first": {
+  "status": 404,
+  "detail": "Document version not found"
+ },
+ "turns": [
+  {
+   "goal": "아까 검토 요청 왜 안 돼?",
+   "status": "COMPLETED",
+   "intents": [
+    "WHY_FAILED"
+   ],
+   "tools": [
+    "plan",
+    "errors",
+    "summarize"
+   ],
+   "answer": [
+    "16:03 NCR v9 검토 요청: Document version not found → 새로고침 후 다시 찾아보세요",
+    "[LIVE 모델이 위 서버 사실을 문장으로 다듬음 · 숫자 대조 통과, 판단 아님]",
+    "16:03에 NCR v9 검토 요청 시 Document version not found 오류가 발생하여 새로고침 후 다시 찾아보시기를 안내드립니다."
+   ],
+   "asked_back": null
+  },
+  {
+   "goal": "진행 상태 알려줘",
+   "status": "COMPLETED",
+   "intents": [
+    "STATUS"
+   ],
+   "tools": [
+    "plan",
+    "case_summary",
+    "stages",
+    "queue"
+   ],
+   "answer": [
+    "AOI FAIL 30건 · AOI 기록 없는 보드 3건 · LOT L01, L02, L03",
+    "D2 NCR 없음 · D3 CONTAINMENT 없음 · D4 RCA 없음 · 경로 D0 판정 전 · 종료 전",
+    "alice의 이 사건 할 일 0건 · 부서(AUTHOR) 0건"
+   ],
+   "asked_back": null
+  },
+  {
+   "goal": "그거 무슨 뜻이야?",
+   "status": "COMPLETED",
+   "intents": [
+    "EXPLAIN"
+   ],
+   "tools": [
+    "plan",
+    "previous_answer",
+    "summarize"
+   ],
+   "answer": [
+    "앞 요청 '진행 상태 알려줘'의 답변: AOI FAIL 30건 · AOI 기록 없는 보드 3건 · LOT L01, L02, L03 / D2 NCR 없음 · D3 CONTAINMENT 없음 · D4 RCA 없음 · 경로 D0 판정 전 · 종료 전 / alice의 이 사건 할 일 0건 · 부서(AUTHOR) 0건",
+    "용어 D0의 뜻: 8D로 진행할지, 단순 NCR로 끝낼지 정하는 첫 판단",
+    "용어 D2의 뜻: 문제 기술 (NCR 문서)",
+    "용어 D3의 뜻: 봉쇄 조치: 불량이 더 퍼지지 않게 막는 임시 조치",
+    "용어 D4의 뜻: 근본 원인 분석: 발생 원인과 유출 원인을 실험과 결정으로 확정",
+    "용어 NCR의 뜻: 부적합 보고서 (D2 문서)",
+    "용어 CONTAINMENT의 뜻: 봉쇄 조치 문서 (D3)",
+    "용어 RCA의 뜻: 근본 원인 분석 문서 (D4)",
+    "용어 AOI의 뜻: 자동 광학 검사: 카메라로 보드 불량을 찾는 검사",
+    "용어 AOI FAIL의 뜻: 자동 광학 검사에서 불량 의심으로 걸린 보드",
+    "용어 LOT의 뜻: 같은 조건에서 함께 만든 생산 묶음",
+    "용어 경로의 뜻: D0에서 정한 처리 방식 (단순 NCR 또는 8D)",
+    "용어 판정 전의 뜻: 아직 정해지지 않음",
+    "용어 부서의 뜻: 같은 역할의 담당자들에게 함께 배정된 일",
+    "[LIVE 모델이 위 서버 사실을 문장으로 다듬음 · 숫자 대조 통과, 판단 아님]",
+    "이전 '진행 상태 알려줘' 요청에 대한 답변에서는 AOI FAIL 30건, AOI 기록 없는 보드 3건, LOT L01, L02, L03이며 D2 NCR 없음, D3 CONTAINMENT 없음, D4 RCA 없음, 경로는 D0 판정 전, 종료 전 상태이고 alice의 이 사건 할 일 0건, 부서(AUTHOR) 0건으로 안내되었습니다.",
+    "D0이란 8D로 진행할지, 단순 NCR로 끝낼지 정하는 첫 판단입니다.",
+    "D2란 문제를 기술하는 단계로, NCR 문서에 해당합니다.",
+    "D3란 불량이 더 퍼지지 않게 막는 임시 조치인 봉쇄 조치입니다.",
+    "D4란 발생 원인과 유출 원인을 실험과 결정으로 확정하는 근본 원인 분석입니다.",
+    "NCR이란 부적합 보고서이며 D2 문서에 해당합니다.",
+    "CONTAINMENT란 봉쇄 조치 문서이며 D3에 해당합니다.",
+    "RCA란 근본 원인 분석 문서이며 D4에 해당합니다.",
+    "AOI란 카메라로 보드 불량을 찾는 검사인 자동 광학 검사입니다.",
+    "AOI FAIL이란 자동 광학 검사에서 불량 의심으로 걸린 보드를 의미합니다.",
+    "LOT이란 같은 조건에서 함께 만든 생산 묶음을 의미합니다.",
+    "경로란 D0에서 정한 처리 방식이며 단순 NCR 또는 8D 중 하나입니다.",
+    "판정 전이란 아직 정해지지 않은 상태를 의미합니다.",
+    "부서란 같은 역할의 담당자들에게 함께 배정된 일을 의미합니다."
+   ],
+   "asked_back": null
+  },
+  {
+   "goal": "그럼 다음엔 뭐 해야 돼?",
+   "status": "COMPLETED",
+   "intents": [
+    "TASKS",
+    "STATUS"
+   ],
+   "tools": [
+    "plan",
+    "case_summary",
+    "queue",
+    "stages"
+   ],
+   "answer": [
+    "AOI FAIL 30건 · AOI 기록 없는 보드 3건 · LOT L01, L02, L03",
+    "alice의 이 사건 할 일 0건 · 부서(AUTHOR) 0건",
+    "D2 NCR 없음 · D3 CONTAINMENT 없음 · D4 RCA 없음 · 경로 D0 판정 전 · 종료 전"
+   ],
+   "asked_back": null
+  }
+ ],
+ "run": {
+  "code_sha": "b4391ed8aca5b0b95ad82bea0c887fe4812a2808+dirty",
+  "parser_version": "docparse-4",
+  "evaluator": "scripts.agent_ab_demo",
+  "evaluator_sha256": "afef09393b6db945",
+  "sampling": {
+   "temperature": 0.0,
+   "seed": 1
+  },
+  "python": "3.12.8",
+  "command": "python -m scripts.agent_ab_demo --live",
+  "at": "2026-11-03T16:03:52+00:00"
+ }
+}

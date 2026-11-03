@@ -256,6 +256,24 @@ class InspectionForm(Base):
     edits: Mapped[int | None] = mapped_column(Integer, nullable=True)  # fields the person changed from the proposal
 
 
+class RequestError(Base):
+    """Every request the server refused (4xx) or failed (5xx), recorded by one exception handler (main.py): who,
+    when, which action (route template), which case, and the server's own reason. Screens show short fixed words;
+    the agent answers "왜 안 돼?" from these rows. Append-only."""
+
+    __tablename__ = "request_errors"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)  # as sent; may be unknown
+    case_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    method: Mapped[str] = mapped_column(String(10))
+    route: Mapped[str] = mapped_column(String(200))  # the template (/cases/{case_id}/...), never the filled path
+    target: Mapped[dict] = mapped_column(JSON)  # the path values other than the case (kind, version, ids)
+    status: Mapped[int] = mapped_column(Integer)
+    detail: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
 class LimitProposal(Base):
     """One AI-proposed change of an operating limit (spec v5.14 AI-CFG-04) with the statistics it rests on and the
     server's replay of it on recorded runs. Append-only; a person's decision is a LimitProposalDecision."""
@@ -1362,7 +1380,7 @@ class LimitSetting(Base):
 
 
 # Audit rows are append-only at the database level, not just by convention.
-APPEND_ONLY = ("limit_proposals", "limit_proposal_decisions", "customer_templates", "customer_template_proposals", "customer_template_mappings", "customer_template_exports", "input_requests", "input_events", "inspection_forms", "inspection_mapping_proposals", "calculations", "model_responses", "approval_events", "workflow_events", "doc_comments", "audit_chain",
+APPEND_ONLY = ("request_errors", "limit_proposals", "limit_proposal_decisions", "customer_templates", "customer_template_proposals", "customer_template_mappings", "customer_template_exports", "input_requests", "input_events", "inspection_forms", "inspection_mapping_proposals", "calculations", "model_responses", "approval_events", "workflow_events", "doc_comments", "audit_chain",
                "workflow_policies", "evidence_quality", "process_contexts", "affected_objects",
                "triage_assessments", "team_events", "actions", "action_events",
                "cause_hypotheses", "why_links", "experiments", "causal_decisions",

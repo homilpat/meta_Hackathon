@@ -11,13 +11,14 @@ import time
 from pathlib import Path
 
 from app import EVAL_DIR
-from app.agent import PLANNER_VERSION, classify, intents_of, report_rule
+from app.agent import FINAL_8D_REPORT, PLANNER_VERSION, classify, intents_of
 from app.model_provider import MetaProvider, ProviderError
 
 GOLDEN = Path(__file__).with_name("intent_golden.json")
 SITUATION = {"user": "alice", "role": "AUTHOR", "case": "L", "d0_route": None,
              "state": dict.fromkeys(["D0", "D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8"]),
-             "documents": [], "closure_ready": False, "my_tasks": [], "may_draft_documents": True}
+             "documents": [], "closure_ready": False, "my_tasks": [], "may_draft_documents": True,
+             "recent_turns": [], "recent_refusals": [], "final_8d_report": FINAL_8D_REPORT}  # as Executor.situation
 
 
 def evaluate(items: list[dict], provider=None) -> dict:
@@ -31,7 +32,7 @@ def evaluate(items: list[dict], provider=None) -> dict:
             t0 = time.perf_counter()
             try:
                 out = classify(provider, SITUATION, it["goal"])
-                got = sorted(report_rule(it["goal"], out["intents"]))  # what the agent runs, server rule included
+                got = sorted(out["intents"])  # what the agent runs: the model's reading, no rule added (2026-11-04)
                 row.update(live=got, model_raw=sorted(out["intents"]), clarify=out["clarify"], live_ok=got == want)
             except ProviderError as exc:
                 row.update(live=None, live_error=str(exc), live_ok=False)

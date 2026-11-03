@@ -297,7 +297,8 @@ def test_recommendations_must_rest_on_case_facts_and_retrieved_sources(tmp_path)
     shown = [line for line in out["reply"] if line.get("sources")]
     assert [line["text"] for line in shown] == ["스텐실 개구부 점검을 권합니다."]
     assert shown[0]["evidence"] and shown[0]["sources"] == ["H01", "DOC:FMEA-SMT-001:5"]
-    rejected = next(line["text"] for line in out["reply"] if "추천 2건 제외" in line["text"])
+    rejected = " / ".join(next(st["result"]["rejected"] for st in out["steps"] if st["tool"] == "summarize"))
+    assert not any("추천 2건 제외" in line["text"] for line in out["reply"])  # a refusal record, not part of the answer
     assert "실패 사례 EXP:X02" in rejected and "이 사건 데이터 근거가 없습니다" in rejected
 
 

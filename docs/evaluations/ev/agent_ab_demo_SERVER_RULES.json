@@ -1,0 +1,85 @@
+{
+ "run_mode": "SERVER_RULES",
+ "model": null,
+ "refused_first": {
+  "status": 404,
+  "detail": "Document version not found"
+ },
+ "turns": [
+  {
+   "goal": "아까 검토 요청 왜 안 돼?",
+   "status": "COMPLETED",
+   "intents": [
+    "WHY_FAILED"
+   ],
+   "tools": [
+    "errors"
+   ],
+   "answer": [
+    "15:44 검토 요청: Document version not found → 새로고침 후 다시 찾아보세요"
+   ],
+   "asked_back": null
+  },
+  {
+   "goal": "진행 상태 알려줘",
+   "status": "COMPLETED",
+   "intents": [
+    "STATUS"
+   ],
+   "tools": [
+    "case_summary",
+    "stages",
+    "queue"
+   ],
+   "answer": [
+    "AOI FAIL 30건 · AOI 기록 없는 보드 3건 · LOT L01, L02, L03",
+    "D2 NCR 없음 · D3 CONTAINMENT 없음 · D4 RCA 없음 · 경로 D0 판정 전 · 종료 전",
+    "alice의 이 사건 할 일 0건 · 부서(AUTHOR) 0건"
+   ],
+   "asked_back": null
+  },
+  {
+   "goal": "그거 무슨 뜻이야?",
+   "status": "COMPLETED",
+   "intents": [
+    "EXPLAIN"
+   ],
+   "tools": [
+    "previous_answer"
+   ],
+   "answer": [
+    "앞 요청 '진행 상태 알려줘'의 답변: AOI FAIL 30건 · AOI 기록 없는 보드 3건 · LOT L01, L02, L03 / D2 NCR 없음 · D3 CONTAINMENT 없음 · D4 RCA 없음 · 경로 D0 판정 전 · 종료 전 / alice의 이 사건 할 일 0건 · 부서(AUTHOR) 0건 · 용어 뜻: D0: 8D로 진행할지, 단순 NCR로 끝낼지 정하는 첫 판단 / D2: 문제 기술 (NCR 문서) / D3: 봉쇄 조치: 불량이 더 퍼지지 않게 막는 임시 조치 / D4: 근본 원인 분석: 발생 원인과 유출 원인을 실험과 결정으로 확정 / NCR: 부적합 보고서 (D2 문서) / CONTAINMENT: 봉쇄 조치 문서 (D3) / RCA: 근본 원인 분석 문서 (D4) / AOI: 자동 광학 검사: 카메라로 보드 불량을 찾는 검사 / AOI FAIL: 자동 광학 검사에서 불량 의심으로 걸린 보드 / LOT: 같은 조건에서 함께 만든 생산 묶음 / 경로: D0에서 정한 처리 방식 (단순 NCR 또는 8D) / 판정 전: 아직 정해지지 않음 / 부서: 같은 역할의 담당자들에게 함께 배정된 일"
+   ],
+   "asked_back": null
+  },
+  {
+   "goal": "그럼 다음엔 뭐 해야 돼?",
+   "status": "COMPLETED",
+   "intents": [
+    "TASKS"
+   ],
+   "tools": [
+    "case_summary",
+    "queue"
+   ],
+   "answer": [
+    "AOI FAIL 30건 · AOI 기록 없는 보드 3건 · LOT L01, L02, L03",
+    "alice의 이 사건 할 일 0건 · 부서(AUTHOR) 0건"
+   ],
+   "asked_back": null
+  }
+ ],
+ "run": {
+  "code_sha": "b4391ed8aca5b0b95ad82bea0c887fe4812a2808+dirty",
+  "parser_version": "docparse-4",
+  "evaluator": "scripts.agent_ab_demo",
+  "evaluator_sha256": "afef09393b6db945",
+  "sampling": {
+   "temperature": 0.0,
+   "seed": 1
+  },
+  "python": "3.12.8",
+  "command": "python -m scripts.agent_ab_demo",
+  "at": "2026-11-03T15:44:50+00:00"
+ }
+}

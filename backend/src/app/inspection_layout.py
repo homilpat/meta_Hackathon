@@ -168,17 +168,6 @@ def route(cands: list[dict], forms: list[dict]) -> dict:
             "reasons": reasons}
 
 
-# --- meaning checks: quantities a count alone cannot tell apart (Accepted vs Rejected) ------------------------
-REJECT = re.compile(r"(?i)reject|fail|\bng\b|^ng|defect|불합격|불량|부적합|不良|不合格")
-ACCEPT = re.compile(r"(?i)accept|pass|\bok\b|good|합격|양품|적합|良品|合格")
-TOTAL = re.compile(r"(?i)inspect|total|sample|검사|총|수량|検査|检验|數|数")
-
-
-def meaning(header: str) -> str | None:
-    h = header or ""
-    return "REJECT" if REJECT.search(h) else "ACCEPT" if ACCEPT.search(h) else "TOTAL" if TOTAL.search(h) else None
-
-
 def check_mapping(c: dict, mapping: dict, required=ix.REQUIRED) -> list[dict]:
     """Server checks on a proposed or edited mapping: known fields, the candidate's own columns, no column used
     twice, required fields present."""
@@ -204,39 +193,50 @@ def check_mapping(c: dict, mapping: dict, required=ix.REQUIRED) -> list[dict]:
 
 
 def uncertain(c: dict, mapping: dict, data: bytes, unresolved: list[str] = ()) -> list[dict]:
-    """Fields a person must confirm, each with its header context and original cells next to the other quantity
-    columns: a count check cannot tell Accepted from Rejected, so the header's meaning decides what is asked."""
+    """Fields a person must confirm: those the AI itself left unresolved, and those the numbers contradict (user
+    2026-11-03: no guessing from header words). Each comes with its header and original cells beside the other
+    count columns, so the person compares them."""
     wb, _ = ix._workbook(data)
     ws = wb[c["sheet"]]
-    rows = list(range(c["first_data_row"], min(c["last_row"], c["first_data_row"] + SAMPLE_CELLS - 1) + 1))
+    body = list(range(c["first_data_row"], c["last_row"] + 1))
+    shown = body[:SAMPLE_CELLS]
+
+    def raw(col, r):
+        v = ws[f"{col}{r}"].value
+        return v.isoformat() if isinstance(v, (datetime, date)) else v
 
     def cells(col):
-        return [{"cell": f"{col}{r}", "raw": ws[f"{col}{r}"].value if not isinstance(ws[f"{col}{r}"].value,
-                (datetime, date)) else ws[f"{col}{r}"].value.isoformat()} for r in rows]
+        return [{"cell": f"{col}{r}", "raw": raw(col, r)} for r in shown]
 
-    qty_cols = [col for col, h in c["columns"].items()  # count columns: numbers under a quantity-like header
-                if c["types"].get(col, {}).get("number") and meaning(h) in ("ACCEPT", "REJECT", "TOTAL")]
-    context = [{"column": col, "header": c["columns"][col], "meaning": meaning(c["columns"][col]),
-                "cells": cells(col)} for col in qty_cols]
+    def nums(col):
+        return [raw(col, r) if _is_number(raw(col, r)) else None for r in body]
+
+    counts = [col for col in c["columns"] if c["types"].get(col, {}).get("number")]
+    context = [{"column": col, "header": c["columns"][col], "cells": cells(col)} for col in counts]
     out = []
 
     def ask(field, why):
+        if field in {x["field"] for x in out}:
+            return
         col = mapping.get(field)
         out.append({"field": field, "column": col, "header": c["columns"].get(col) if col else None, "why": why,
                     "cells": cells(col) if col else [], "context": context})
 
     d, i = mapping.get("defective_qty"), mapping.get("inspected_qty")
-    if d:
-        m = meaning(c["columns"].get(d, ""))
-        if m == "ACCEPT":
-            ask("defective_qty", "합격(양품) 수량으로 보이는 열이 불량 수량에 연결됐습니다")
-        elif m != "REJECT":
-            ask("defective_qty", "열 이름만으로 불량 수량인지 알 수 없습니다")
-    if i and meaning(c["columns"].get(i, "")) in ("ACCEPT", "REJECT"):
-        ask("inspected_qty", "합격·불합격 수량은 검사 수량(전체)과 다를 수 있습니다")
+    if d and i:
+        pairs = [(a, b) for a, b in zip(nums(d), nums(i), strict=True) if a is not None and b]
+        if any(a > b for a, b in pairs):
+            ask("defective_qty", "불량 수량이 검사 수량보다 큰 행이 있습니다: 두 열이 바뀌었을 수 있습니다")
+        elif pairs and all(a >= b / 2 for a, b in pairs):  # DECISION: defects are a minority of what is inspected
+            share = round(100 * sum(a for a, _ in pairs) / sum(b for _, b in pairs))
+            ask("defective_qty", f"불량 수량이 검사 수량의 {share}%입니다: 합격·양품 수량 열일 수 있습니다")
+    if i:
+        for col in counts:
+            if col != i and any(x is not None and y is not None and x > y for x, y in zip(nums(col), nums(i), strict=True)):
+                ask("inspected_qty", f"검사 수량보다 큰 수량 열({col} '{c['columns'][col]}')이 있습니다: 전체 수량이 아닐 수 "
+                                     "있습니다")
     for f in unresolved:
-        if f not in {x["field"] for x in out}:
-            ask(f, "AI가 확정하지 못한 항목입니다")
+        ask(f, "AI가 확정하지 못한 항목입니다")
     return out
 
 

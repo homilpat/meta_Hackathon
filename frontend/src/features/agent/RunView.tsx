@@ -73,6 +73,10 @@ function StepBody({ s, ctx }: { s: J; ctx: Ctx }) {
     case 'fill_triage': return <TriageForm r={r} ctx={ctx}/>
     case 'validate_document': return <><p><Badge tone={r.result === 'BLOCK' ? 'red' : r.result === 'WARN' ? 'amber' : 'green'}>검증 {r.result}</Badge> 이슈 {r.issues.length}건{r.stale && <> <Badge tone="red">STALE</Badge></>}</p>
       {r.issues.slice(0, 6).map((i: J, n: number) => <p key={n} className="muted wrap"><Badge tone={i.severity === 'BLOCK' ? 'red' : 'amber'}>{i.code}</Badge> {i.claim_id ?? '문서'}: {i.message}</p>)}</>
+    case 'errors': return r.errors.length ? <>{r.errors.map((e: J, n: number) => <p key={n} className="wrap"><Badge tone="red">{e.at.slice(11, 16)}</Badge> <b>{e.action}</b> · {e.reason} <span className="muted">→ {e.next}</span></p>)}</>
+      : <span className="muted">최근에 막힌 요청이 없습니다</span>
+    case 'previous_answer': return r.previous ? <><p className="muted wrap">앞 요청: {r.previous.goal}</p>{r.previous.answer.map((t: string, n: number) => <p key={n} className="wrap">{t}</p>)}</>
+      : <span className="muted">이 사건에서 앞선 대화가 없습니다</span>
     default: return null
   }
 }

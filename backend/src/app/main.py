@@ -1,18 +1,22 @@
 import contextlib
 import hashlib
 import json
+import logging
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, event, func, select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import app as paths
 from app import effect, limits, ncr, spc
@@ -144,6 +148,35 @@ def create_app(database_url: str | None = None,
         with sessions() as session:
             require_case(session, case_id, actor)
     app.router.dependencies.append(Depends(case_guard))  # before include_router: every route below inherits it
+
+    def record_error(request: Request, status: int, detail) -> None:
+        """One row per refused or failed request; a failure to record never changes the answer."""
+        from app.db import RequestError
+        from app.workflow import now
+
+        route = request.scope.get("route")
+        try:
+            with sessions.begin() as session:
+                session.add(RequestError(
+                    user_id=(request.headers.get("x-user") or "")[:40] or None,
+                    case_id=(request.path_params.get("case_id") or None) if request.path_params else None,
+                    method=request.method, route=(getattr(route, "path", None) or request.url.path)[:200],
+                    target={k: str(v)[:60] for k, v in (request.path_params or {}).items() if k != "case_id"},
+                    status=status, detail=(detail if isinstance(detail, str) else json.dumps(
+                        detail, ensure_ascii=False, default=str))[:2000], created_at=now()))
+        except Exception:
+            logging.getLogger(__name__).warning("request error not recorded", exc_info=True)
+
+    async def logged_http(request: Request, exc: StarletteHTTPException):
+        record_error(request, exc.status_code, exc.detail)
+        return await http_exception_handler(request, exc)
+
+    async def logged_validation(request: Request, exc: RequestValidationError):
+        record_error(request, 422, exc.errors())
+        return await request_validation_exception_handler(request, exc)
+
+    app.add_exception_handler(StarletteHTTPException, logged_http)
+    app.add_exception_handler(RequestValidationError, logged_validation)
     app.state.provider = provider or MetaProvider.from_env()  # None -> investigations return 503
     if isinstance(app.state.provider, MetaProvider):  # a real model: the same request gets the same answer
         app.state.provider = Reusing(app.state.provider, sessions)

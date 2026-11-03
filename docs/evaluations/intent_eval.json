@@ -1,5 +1,5 @@
 {
- "planner_version": "0fff6496e8c5",
+ "planner_version": "4731cc63eb62",
  "n": 30,
  "offline_correct": 28,
  "rows": [
@@ -21,7 +21,7 @@
    ],
    "clarify": "",
    "live_ok": true,
-   "live_ms": 2844
+   "live_ms": 3142
   },
   {
    "goal": "L02 SPC 경보 분석해 줘",
@@ -41,7 +41,7 @@
    ],
    "clarify": "",
    "live_ok": true,
-   "live_ms": 3072
+   "live_ms": 4693
   },
   {
    "goal": "왜 AOI 불량이 늘었는지 봐 줘",
@@ -61,7 +61,7 @@
    ],
    "clarify": "",
    "live_ok": true,
-   "live_ms": 2669
+   "live_ms": 3826
   },
   {
    "goal": "Summarize the defect cause for lot L02",
@@ -81,7 +81,7 @@
    ],
    "clarify": "",
    "live_ok": true,
-   "live_ms": 5303
+   "live_ms": 4912
   },
   {
    "goal": "NCR 초안 써 줘",
@@ -101,7 +101,7 @@
    ],
    "clarify": "",
    "live_ok": true,
-   "live_ms": 2988
+   "live_ms": 4601
   },
   {
    "goal": "임시조치 계획서 작성해 줘",
@@ -121,7 +121,7 @@
    ],
    "clarify": "",
    "live_ok": true,
-   "live_ms": 2250
+   "live_ms": 3785
   },
   {
    "goal": "draft the NCR",
@@ -141,7 +141,7 @@
    ],
    "clarify": "",
    "live_ok": true,
-   "live_ms": 1997
+   "live_ms": 4929
   },
   {
    "goal": "이번 LOT 불량을 조사하고 NCR 초안 써 줘",
@@ -165,7 +165,7 @@
    ],
    "clarify": "",
    "live_ok": true,
-   "live_ms": 2724
+   "live_ms": 4527
   },
   {
    "goal": "AOI 결과랑 SPC 같이 분석하고 보고서 초안도 만들어 줘",
@@ -189,7 +189,7 @@
    ],
    "clarify": "",
    "live_ok": true,
-   "live_ms": 2856
+   "live_ms": 4394
   },
   {
    "goal": "8D로 가야 할지 판정해 줘",
@@ -209,7 +209,7 @@
    ],
    "clarify": "",
    "live_ok": true,
-   "live_ms": 3062
+   "live_ms": 3879
   },
   {
    "goal": "이거 단순 NCR로 끝내도 돼?",
@@ -229,7 +229,7 @@
    ],
    "clarify": "",
    "live_ok": true,
-   "live_ms": 2878
+   "live_ms": 3362
   },
   {
    "goal": "D0 판정 도와줘",
@@ -249,7 +249,7 @@
    ],
    "clarify": "",
    "live_ok": true,
-   "live_ms": 2764
+   "live_ms": 3446
   },
   {
    "goal": "내 할 일 알려줘",
@@ -269,7 +269,7 @@
    ],
    "clarify": "",
    "live_ok": true,
-   "live_ms": 2765
+   "live_ms": 2766
   },
   {
    "goal": "승인 대기 중인 거 뭐 있어?",
@@ -289,7 +289,7 @@
    ],
    "clarify": "",
    "live_ok": true,
-   "live_ms": 2617
+   "live_ms": 5195
   },
   {
    "goal": "부서 업무 보여줘",
@@ -309,7 +309,7 @@
    ],
    "clarify": "",
    "live_ok": true,
-   "live_ms": 3425
+   "live_ms": 4470
   },
   {
    "goal": "8D 진행 상태 알려줘",
@@ -329,7 +329,7 @@
    ],
    "clarify": "",
    "live_ok": true,
-   "live_ms": 2692
+   "live_ms": 4020
   },
   {
    "goal": "지금 몇 단계야?",
@@ -349,7 +349,7 @@
    ],
    "clarify": "",
    "live_ok": true,
-   "live_ms": 2634
+   "live_ms": 5413
   },
   {
    "goal": "종료할 수 있어?",
@@ -369,7 +369,7 @@
    ],
    "clarify": "",
    "live_ok": true,
-   "live_ms": 2869
+   "live_ms": 6105
   },
   {
    "goal": "불량 원인 조사하고 진행 상태도 알려줘",
@@ -393,7 +393,7 @@
    ],
    "clarify": "",
    "live_ok": true,
-   "live_ms": 2148
+   "live_ms": 2904
   },
   {
    "goal": "승인본 PDF로 내보내 줘",
@@ -413,7 +413,7 @@
    ],
    "clarify": "",
    "live_ok": true,
-   "live_ms": 2546
+   "live_ms": 6006
   },
   {
    "goal": "NCR 승인본 다운로드",
@@ -433,7 +433,7 @@
    ],
    "clarify": "",
    "live_ok": true,
-   "live_ms": 3598
+   "live_ms": 16833
   },
   {
    "goal": "8D 리포트 보여줘",
@@ -452,11 +452,12 @@
     "STATUS"
    ],
    "model_raw": [
+    "EXPORT",
     "STATUS"
    ],
    "clarify": "",
    "live_ok": true,
-   "live_ms": 3994
+   "live_ms": 6168
   },
   {
    "goal": "이거 좀 처리해 줘",
@@ -466,9 +467,9 @@
    "offline_ok": true,
    "live": [],
    "model_raw": [],
-   "clarify": "구체적으로 무엇을 해드릴까요?",
+   "clarify": "‘이거’가 어떤 작업인지 알 수 없어요. 8D 시작 여부 판단, 불량 원인 조사, 문서 초안 작성 중 무엇을 원하시나요?",
    "live_ok": true,
-   "live_ms": 2867
+   "live_ms": 8166
   },
   {
    "goal": "도와줘",
@@ -478,9 +479,9 @@
    "offline_ok": true,
    "live": [],
    "model_raw": [],
-   "clarify": "무엇을 도와드릴까요?",
+   "clarify": "어떤 도움이 필요하신가요? 8D 시작 여부 판단, 불량 원인 조사, 문서 초안 작성, 진행 상황 확인 중 어느 것인가요?",
    "live_ok": true,
-   "live_ms": 2822
+   "live_ms": 7728
   },
   {
    "goal": "NCR을 승인해 줘",
@@ -490,9 +491,9 @@
    "offline_ok": true,
    "live": [],
    "model_raw": [],
-   "clarify": "어떤 NCR 관련 작업을 확인해 드릴까요?",
+   "clarify": "",
    "live_ok": true,
-   "live_ms": 5474
+   "live_ms": 12577
   },
   {
    "goal": "검토 요청 들어온 거 있어?",
@@ -510,7 +511,7 @@
    ],
    "clarify": "",
    "live_ok": true,
-   "live_ms": 2611
+   "live_ms": 2392
   },
   {
    "goal": "이 사건 D3까지 됐어?",
@@ -528,7 +529,7 @@
    ],
    "clarify": "",
    "live_ok": true,
-   "live_ms": 2258
+   "live_ms": 3381
   },
   {
    "goal": "불량 패널이 왜 생겼는지 근거 찾아줘",
@@ -548,7 +549,7 @@
    ],
    "clarify": "",
    "live_ok": true,
-   "live_ms": 2603
+   "live_ms": 2058
   },
   {
    "goal": "최종 보고서 PDF 받을래",
@@ -561,14 +562,16 @@
    ],
    "offline_ok": true,
    "live": [
-    "EXPORT"
+    "EXPORT",
+    "STATUS"
    ],
    "model_raw": [
-    "EXPORT"
+    "EXPORT",
+    "STATUS"
    ],
    "clarify": "",
-   "live_ok": true,
-   "live_ms": 4200
+   "live_ok": false,
+   "live_ms": 12997
   },
   {
    "goal": "NCR 문서 초안 좀 만들어 줄래",
@@ -588,7 +591,7 @@
    ],
    "clarify": "",
    "live_ok": true,
-   "live_ms": 3278
+   "live_ms": 3884
   }
  ],
  "by_split": {
@@ -600,11 +603,11 @@
   "holdout": {
    "n": 5,
    "offline": 3,
-   "live": 5
+   "live": 4
   }
  },
  "model": "muse-spark-1.3",
- "live_correct": 30,
- "live_ms_median": 2844,
- "live_ms_max": 5474
+ "live_correct": 29,
+ "live_ms_median": 4527,
+ "live_ms_max": 16833
 }

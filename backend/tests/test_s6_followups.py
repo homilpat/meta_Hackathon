@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import uuid
 
 import pytest
@@ -284,32 +285,23 @@ def test_authorization_regression_on_every_case_route(env):
         for r in routes:
             yield from walk(r.original_router.routes) if hasattr(r, "original_router") else [r]
 
-    paths = set()
+    # every method of every /cases/{case_id}/... route, path values filled by name only: the app-wide case guard
+    # (main.case_guard) answers before any route code, so no route-specific value or FastAPI internal is needed
+    paths, calls = set(), set()
     for route in walk(c.app_ref.routes):
-        if "{case_id}" in route.path and "GET" in route.methods:
-            params = {"case_id": "C1"}
-            for field in route.dependant.path_params:
-                if field.name in ("case_id", "kind"):
-                    continue
-                assert field.field_info.annotation is int, (
-                    f"{route.path}: no test value for path parameter {field.name!r} "
-                    f"of type {field.field_info.annotation!r}"
-                )
-                params[field.name] = "1"
-
-            converters = route.param_convertors
-            assert converters.keys() <= params.keys() | {"kind"}, (
-                f"{route.path}: missing test values for {converters.keys() - params.keys() - {'kind'}}"
-            )
-            if "kind" in converters:
-                for kind in APPROVERS:
-                    paths.add(route.path_format.format(**params, kind=kind))
-            else:
-                paths.add(route.path_format.format(**params))
+        if "{case_id}" not in getattr(route, "path", ""):
+            continue
+        kinds = APPROVERS if "{kind" in route.path else [None]
+        for kind in kinds:
+            url = re.sub(r"\{(\w+)(:\w+)?\}", lambda m, kind=kind: "C1" if m.group(1) == "case_id" else
+                         kind if m.group(1) == "kind" else "1", route.path)
+            paths.add(url)
+            calls |= {(m, url) for m in route.methods - {"HEAD"}}
     assert {"/cases/C1/change-impact", "/cases/C1/rca", "/cases/C1/ncr/1", "/cases/C1/timeline"} <= paths
-    for p in sorted(paths):
-        assert c.get(p).status_code == 401, p
-        assert c.get(p, headers={"X-User": "carol"}).status_code == 403, p  # carol is not assigned
+    for method, p in sorted(calls):
+        assert c.request(method, p, json={}).status_code == 401, (method, p)
+        r = c.request(method, p, json={}, headers={"X-User": "carol", "Idempotency-Key": "k" * 12})
+        assert r.status_code == 403, (method, p, r.status_code)  # carol is not assigned
     for kind in ("ncr", "containment", "rca"):
         assert create(c, kind).status_code in (201, 409)
         assert c.post(f"/cases/C1/{kind}", json={}, headers=H("bob")).status_code == 403

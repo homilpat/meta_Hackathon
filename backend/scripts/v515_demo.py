@@ -23,7 +23,7 @@ import docx
 from app.intake import FIXTURE_DIR
 from app.model_provider import ProviderError
 from scripts import evalkit
-from scripts.docx_samples import FORMS, gold_paragraph, gold_table
+from scripts.docx_samples import FORMATS_C, FORMS, GOLD_C, gold_paragraph, gold_table
 from scripts.xlsx_samples import book
 
 
@@ -48,12 +48,13 @@ class Double:
         body = json.loads(messages[-1]["content"])
         if "slots" in body:
             ids = [s["id"] for s in body["slots"]]
-            gold = gold_table() if ids[0].startswith("T") else gold_paragraph()
+            gold = GOLD_C if "S0" in ids else gold_table() if ids[0].startswith("T") else gold_paragraph()
             pairs = [(s, gold.get(s) or "NONE") for s in ids]
             pairs = [(s, "d4.occurrence_cause" if f == "d4.escape_cause" else f) for s, f in pairs]  # one mistake
-            return {"message": {"content": json.dumps({"slots": [{"slot_id": s, "field_id": f, "reason": "label"}
-                                                                 for s, f in pairs], "unresolved": []})}, "usage": {}}
-        col = next(c["id"] for s in body["sources"] for t in s["tables"] for c in t["columns"] if "검사" in c["header"])
+            return {"message": {"content": json.dumps({"slots": [
+                {"slot_id": s, "field_id": f, "format": FORMATS_C.get(s, "AS_IS"), "reason": "label"} for s, f in pairs],
+                "unresolved": []})}, "usage": {}}
+        col = next(c["id"] for s in body["sources"] for t in s["tables"] for c in t["columns"] if "검사 수량" in c["header"])
         return {"message": {"content": json.dumps({"candidates": [{"source_id": col, "reason": "header"}]})},
                 "usage": {}}
 
@@ -91,18 +92,23 @@ def main(args) -> int:
             "content_base64": base64.b64encode((FIXTURE_DIR / fname).read_bytes()).decode()}))
 
     accuracy = []
-    for fname, gold in (("customer_form_A_8d_table.docx", gold_table()),
-                        ("customer_form_B_reply_paragraph.docx", gold_paragraph())):
+    for fname, gold, gold_fmt in (("customer_form_A_8d_table.docx", gold_table(), {}),
+                                  ("customer_form_B_reply_paragraph.docx", gold_paragraph(), {}),
+                                  ("customer_form_C_controls.docx", GOLD_C, FORMATS_C)):
         t = reg(fname)
         gate.on = True
         p = ok(c.post(f"/customer-templates/{t['template_id']}/proposals", headers=H("alice")))
         gate.on = False
         prop = (p["proposal"] or {}).get("mapping", {})
         wrong = {s: prop.get(s) for s in gold if prop.get(s) != gold[s]}
+        got_fmt = (p["proposal"] or {}).get("formats", {})
+        fmt_wrong = {s: got_fmt.get(s) for s in gold if got_fmt.get(s, "AS_IS") != gold_fmt.get(s, "AS_IS")}
         accuracy.append({"form": fname, "slots": len(gold), "correct": len(gold) - len(wrong), "wrong": wrong,
+                         "formats_correct": len(gold) - len(fmt_wrong), "formats_wrong": fmt_wrong,
                          "unresolved": (p["proposal"] or {}).get("unresolved", [])})
         m = ok(c.post(f"/customer-templates/{t['template_id']}/mapping", headers=K(), json={
-            "mapping": gold, "proposal_id": p["proposal_id"], "reason": "원본 칸과 출처 대조 (데모)"}))
+            "mapping": gold, "formats": gold_fmt, "proposal_id": p["proposal_id"],
+            "reason": "원본 칸과 출처 대조 (데모)"}))
         v = ok(c.get(f"/cases/L/customer-templates/{t['template_id']}/preview", headers=H("alice")))
         r = c.get(f"/cases/L/customer-templates/{t['template_id']}/export", params={"mode": "final"},
                   headers=H("alice"))
@@ -140,7 +146,7 @@ def main(args) -> int:
 
     # §30.2: LOT 0007, 3 defective, no inspected quantity
     up = upload(c, [("complaint.pdf", own_pdf(b"0007")), ("inspection.xlsx", book({"검사": [
-        ["LOT", "검사 수량", "불량 수량"], ["0007", 120, 3], ["0008", 200, 1]]}))]).json()
+        ["LOT", "검사일", "검사 수량", "불량 수량"], ["0007", "2026-10-27", 120, 3], ["0008", "2026-10-28", 200, 1]]}))]).json()
     iid, xlsx = up["intake_id"], up["files"][1]["file_id"]
     c.post(f"/intakes/{iid}/analyze", headers=H("alice"))
     c.post(f"/intakes/{iid}/draft/edits", headers=H("alice"), json={"base_version": 1, "changes": [
@@ -152,9 +158,9 @@ def main(args) -> int:
     sug = ok(c.post(f"/input-requests/{req['request_id']}/suggestions", headers=H("alice")))
     gate.on = False
     bad = ok(c.post(f"/input-requests/{req['request_id']}/answers", headers=K(),
-                    json={"kind": "SOURCE_CELL", "file_id": xlsx, "sheet": "검사", "cell": "B3"}))
+                    json={"kind": "SOURCE_CELL", "file_id": xlsx, "sheet": "검사", "cell": "C3"}))
     ans = ok(c.post(f"/input-requests/{req['request_id']}/answers", headers=K(),
-                    json={"kind": "SOURCE_CELL", "file_id": xlsx, "sheet": "검사", "cell": "B2"}))
+                    json={"kind": "SOURCE_CELL", "file_id": xlsx, "sheet": "검사", "cell": "C2"}))
     res = ok(c.post(f"/input-requests/{req['request_id']}/resume", headers=K()))
     again = ok(c.post(f"/input-requests/{req['request_id']}/resume", headers=K()))
     steps.append({"step": "held defect rate LOT 0007", "held": [req["status"], req["question"]],
@@ -173,7 +179,8 @@ def main(args) -> int:
     path = evalkit.EVAL_DIR / "ev" / f"v515_demo_{inner.mode}.json"
     path.write_text(json.dumps(out, ensure_ascii=False, indent=1, default=str), encoding="utf-8", newline="\n")
     print(json.dumps({"mode": inner.mode, "calls": len(gate.calls), "cost": round(cost, 4),
-                      "accuracy": [(a["form"], a["correct"], a["slots"], a["wrong"]) for a in accuracy]},
+                      "accuracy": [(a["form"], a["correct"], a["slots"], a["wrong"], a["formats_wrong"])
+                                   for a in accuracy]},
                      ensure_ascii=False))
     for st in steps:
         print(json.dumps(st, ensure_ascii=False, default=str)[:600])

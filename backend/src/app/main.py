@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Literal
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -133,6 +133,16 @@ def create_app(database_url: str | None = None,
 
     current_user = make_auth(sessions)
     Who = Annotated[Actor, Depends(current_user)]
+
+    def case_guard(request: Request, x_user: Annotated[str | None, Header()] = None) -> None:
+        """Every /cases/{case_id}/... route, before any of its own code (lookups included): a known user assigned to
+        the case. Routes keep their own require_case, which returns the case; this makes a wrong order harmless."""
+        if (case_id := request.path_params.get("case_id")) is None:
+            return
+        actor = current_user(x_user)
+        with sessions() as session:
+            require_case(session, case_id, actor)
+    app.router.dependencies.append(Depends(case_guard))  # before include_router: every route below inherits it
     app.state.provider = provider or MetaProvider.from_env()  # None -> investigations return 503
     if isinstance(app.state.provider, MetaProvider):  # a real model: the same request gets the same answer
         app.state.provider = Reusing(app.state.provider, sessions)

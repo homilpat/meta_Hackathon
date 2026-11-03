@@ -16,7 +16,8 @@ from tests.test_intake_in1 import own_pdf, upload
 from tests.test_intake_in2 import client
 from tests.v5_util import H
 
-SHEET = [["LOT", "검사 수량", "불량 수량"], ["0007", 120, 3], ["0008", 200, 1]]
+SHEET = [["LOT", "검사일", "검사 수량", "불량 수량"], ["0007", "2026-10-27", 120, 3], ["0008", "2026-10-28", 200, 1],
+         ["0007", "2026-11-02", 90, 1]]
 
 
 class Pointer:
@@ -30,7 +31,7 @@ class Pointer:
             raise ProviderError("not this test's call")
         self.sent.append(messages[-1]["content"])
         src = json.loads(messages[-1]["content"])["sources"]
-        col = next(c["id"] for s in src for t in s["tables"] for c in t["columns"] if "검사" in c["header"])
+        col = next(c["id"] for s in src for t in s["tables"] for c in t["columns"] if "검사 수량" in c["header"])
         return {"message": {"content": json.dumps({"candidates": [
             {"source_id": col, "reason": "검사 수량 column"}, {"source_id": "F99:T1:Z", "reason": "made up"}]})},
             "usage": {}}
@@ -105,14 +106,17 @@ def test_the_original_cell_gives_the_same_rate_with_a_different_source_type(held
     c, p, _, req, xlsx = held
     rid = req["request_id"]
     s = c.post(f"/input-requests/{rid}/suggestions", headers=H("alice")).json()
-    assert [x["column"] for x in s["candidates"]] == ["B"] and s["candidates"][0]["sheet"] == "검사"  # made-up id dropped
+    assert [x["column"] for x in s["candidates"]] == ["C"] and s["candidates"][0]["sheet"] == "검사"  # made-up id dropped
     assert "120" not in p.sent[-1] and "0008" not in p.sent[-1]  # headers only, no cell values
 
-    assert "LOT은 0008" in answer(c, rid, {"kind": "SOURCE_CELL", "file_id": xlsx, "sheet": "검사", "cell": "B3"})["rejected"]
-    assert "불량 수량" in answer(c, rid, {"kind": "SOURCE_CELL", "file_id": xlsx, "sheet": "검사", "cell": "C2"})["rejected"]
-    a = answer(c, rid, {"kind": "SOURCE_CELL", "file_id": xlsx, "sheet": "검사", "cell": "B2"})
+    assert "LOT은 0008" in answer(c, rid, {"kind": "SOURCE_CELL", "file_id": xlsx, "sheet": "검사", "cell": "C3"})["rejected"]
+    assert "불량 수량" in answer(c, rid, {"kind": "SOURCE_CELL", "file_id": xlsx, "sheet": "검사", "cell": "D2"})["rejected"]
+    out = answer(c, rid, {"kind": "SOURCE_CELL", "file_id": xlsx, "sheet": "검사", "cell": "C4"})  # LOT 0007, November
+    assert "B4의 검사일 2026-11-02은 기간 2026-10 밖" in out["rejected"]
+    a = answer(c, rid, {"kind": "SOURCE_CELL", "file_id": xlsx, "sheet": "검사", "cell": "C2"})
     loc = next(e for e in a["events"] if e["kind"] == "ANSWER_ACCEPTED")["payload"]["locator"]
-    assert (loc["cell"], loc["raw"], loc["row_lot"]) == ("B2", 120, "0007") and len(loc["file_sha256"]) == 64
+    assert (loc["cell"], loc["raw"], loc["row_lot"], loc["row_date"]) == ("C2", 120, "0007", "2026-10-27")
+    assert len(loc["file_sha256"]) == 64
     res = resume(c, rid)["result"]
     assert res["rate_percent"] == 2.5
     assert {i["field"]: i["source_type"] for i in res["inputs"]}["inspected_qty"] == "SOURCE_CELL"
@@ -121,11 +125,19 @@ def test_the_original_cell_gives_the_same_rate_with_a_different_source_type(held
 def test_a_changed_original_holds_the_resume(held):
     c, _, _, req, xlsx = held
     rid = req["request_id"]
-    answer(c, rid, {"kind": "SOURCE_CELL", "file_id": xlsx, "sheet": "검사", "cell": "B2"})
+    answer(c, rid, {"kind": "SOURCE_CELL", "file_id": xlsx, "sheet": "검사", "cell": "C2"})
     with c.app.state.engine.begin() as conn:  # originals are append-only; simulate a store replaced behind its back
         conn.exec_driver_sql("DROP TRIGGER intake_files_no_update")
         conn.execute(update(IntakeFile).where(IntakeFile.id == xlsx).values(
-            content=book({"검사": [["LOT", "검사 수량", "불량 수량"], ["0007", 100, 3]]})))
+            content=book({"검사": [["LOT", "검사일", "검사 수량", "불량 수량"], ["0007", "2026-10-27", 100, 3]]})))
     out = resume(c, rid)
     assert out["status"] == "ANSWERED" and "원본" in out["held_reason"]
     assert "RESUME_HELD" in [e["kind"] for e in out["events"]]
+
+
+def test_period_needs_a_date_on_the_row_and_must_match():
+    from app.input_requests import in_period
+
+    assert in_period("2026-10-27", "2026-10") and not in_period("2026-11-02", "2026-10")
+    assert in_period("2026-10-27", "2026-10-01..2026-10-31") and not in_period("2026-11-01", "2026-10-01..2026-10-31")
+    assert in_period("2026-11-15", "2026-10..2026-11") and not in_period("2026-12-01", "2026-10..2026-11")

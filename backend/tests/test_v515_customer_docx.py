@@ -11,7 +11,7 @@ import docx
 import pytest
 
 from app.intake import FIXTURE_DIR
-from scripts.docx_samples import FORMS, gold_paragraph, gold_table
+from scripts.docx_samples import FORMATS_C, FORMS, GOLD_C, gold_paragraph, gold_table
 from tests.test_c_e2e import success
 from tests.test_intake_in1 import own_pdf, upload
 from tests.v5_util import H, confirmed_cause, line_client
@@ -28,9 +28,9 @@ class Mapper:
         return {"message": {"content": json.dumps(self.reply)}, "usage": {}}
 
 
-def reply(gold: dict, unresolved=()):
-    return {"slots": [{"slot_id": s, "field_id": f or "NONE", "reason": "label"} for s, f in gold.items()],
-            "unresolved": list(unresolved)}
+def reply(gold: dict, unresolved=(), formats=None):
+    return {"slots": [{"slot_id": s, "field_id": f or "NONE", "format": (formats or {}).get(s, "AS_IS"),
+                       "reason": "label"} for s, f in gold.items()], "unresolved": list(unresolved)}
 
 
 def K(user="alice"):
@@ -52,9 +52,10 @@ def propose(c, tid):
     return r.json()
 
 
-def confirm(c, tid, mapping, proposal_id=None, required=(), status=201):
+def confirm(c, tid, mapping, proposal_id=None, required=(), status=201, formats=None):
     r = c.post(f"/customer-templates/{tid}/mapping", headers=K(), json={
-        "mapping": mapping, "required": list(required), "proposal_id": proposal_id, "reason": "원본 칸과 출처 대조"})
+        "mapping": mapping, "required": list(required), "proposal_id": proposal_id, "reason": "원본 칸과 출처 대조",
+        "formats": formats or {}})
     assert r.status_code == status, r.text
     return r.json()
 
@@ -165,3 +166,33 @@ def test_unapproved_data_shows_in_the_draft_but_blocks_the_final(tmp_path):
     assert "NOT_APPROVED" in {b["code"] for b in v["final_blocked_by"]}
     r = c.get(f"/cases/L/customer-templates/{a['template_id']}/export", params={"mode": "final"}, headers=H("alice"))
     assert r.status_code == 409 and "승인되지 않은" in r.text
+
+
+def test_controls_text_boxes_maybe_blanks_and_a_date_format_on_a_real_style_form(closed):
+    c, p = closed
+    t = register(c, "customer_form_C_controls.docx")
+    kinds = {x["id"]: (x["kind"], x.get("certain", True)) for x in t["slots"]}
+    assert kinds == {"T0.R0.C1": ("cell", True), "T0.R1.C1": ("cell", True), "T0.R2.C1": ("cell", True),
+                     "T0.R3.C1": ("cell", False), "S0": ("control", True), "X0.P0": ("textbox", True)}
+    p.reply = reply(GOLD_C, formats=FORMATS_C)
+    out = propose(c, t["template_id"])
+    sent = json.loads(p.sent[-1])
+    assert {x["id"]: x["certain"] for x in sent["slots"]}["T0.R3.C1"] is False and "DATE_DOT" in sent["formats"]
+    assert out["proposal"]["formats"]["T0.R1.C1"] == "DATE_DOT"
+    confirm(c, t["template_id"], {"T0.R0.C1": "case.customer"}, formats={"T0.R0.C1": "DATE_DOT"})  # no date in it
+    v = c.get(f"/cases/L/customer-templates/{t['template_id']}/preview", headers=H("alice")).json()
+    assert "FORMAT_UNCONVERTIBLE" in {b["code"] for b in v["final_blocked_by"]}
+    confirm(c, t["template_id"], {k: f for k, f in GOLD_C.items()}, out["proposal_id"],
+            formats=out["proposal"]["formats"])
+    v = c.get(f"/cases/L/customer-templates/{t['template_id']}/preview", headers=H("alice")).json()
+    by = {x["id"]: x for x in v["slots"]}
+    day = by["T0.R1.C1"]["value"]
+    assert by["T0.R1.C1"]["shown"] == day.replace("-", ".") and by["T0.R1.C1"]["converted"]  # original kept beside
+    assert by["T0.R3.C1"]["status"] == "UNMAPPED" and not v["final_blocked_by"], v["final_blocked_by"]
+    r = c.get(f"/cases/L/customer-templates/{t['template_id']}/export", params={"mode": "final"}, headers=H("alice"))
+    assert r.status_code == 200, r.text
+    from app.customer_docx import text_of
+    body = text_of(r.content)
+    assert day.replace("-", ".") in body and by["S0"]["value"] in body and by["X0.P0"]["value"] in body
+    assert "N/A" in body and "Click or tap here" not in body  # the unmapped maybe-blank keeps the customer's text
+    confirm(c, t["template_id"], {"T0.R0.C1": "case.customer"}, formats={"T0.R0.C1": "ROMAN"}, status=422)

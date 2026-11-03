@@ -67,9 +67,33 @@ QO_EVAL_LIVE_BUDGET_USD=0.3 python -m scripts.v515_demo --live                  
 - A duplicate answer is kept once. A different value is 409.
 - A replaced original holds the resume. The store is append-only, so the test simulates the replacement by dropping the trigger.
 
+## Follow-ups (2026-11-03, same pattern: the AI picks from the server's options as JSON, the server checks, a person confirms)
+
+- **Slots on real-style forms.**
+  - **What the server reads now:** content controls (`w:sdt`, labeled by alias/tag, placeholder detected) and text boxes (`w:txbxContent`, skipping the VML fallback copy) as well as cells and paragraphs.
+  - **Uncertain slots:** a "-"/TBD/N/A answer is a slot with `certain: false`. The AI maps it or leaves it NONE, and the server fills it only when it is mapped.
+- **Per-slot format.**
+  - **How it works:** the AI picks one of `FORMATS` (AS_IS, DATE_ISO, DATE_DOT, DATE_SLASH_US, DATE_SLASH_EU, DATE_KO) from the label's own hint. The server converts the ISO dates in the value, and the preview shows the original beside the converted text.
+  - **When it fails:** a value the format cannot take blocks the final (`FORMAT_UNCONVERTIBLE`).
+  - **Storage:** formats are stored with the mapping (migration 0032). The fields `d2/d3/d4.approved_on` (dates only) were added for this.
+- **Period check.** A SOURCE_CELL answer's row date (the table's 검사일 column) must fall in the request period (`2026-10`, a day, or `A..B`). A row without a date is re-asked. Meta is not involved: this is a server check.
+- **LIVE** (4 calls, $0.028), form C (table, content control, text box, an N/A answer, a dated label):
+  - 4/6 correct. The content control and the text box were mapped right, and N/A was left alone.
+  - "Approval Date"/"Approved by" were left unresolved: the form does not say which approval (D2/D3/D4), and a person chose.
+  - Formats were 3/3 forms right (DATE_DOT for "YYYY.MM.DD").
+
+## CI failure of a703ede, and its root cause
+
+- **Symptom:** two new routes, `/cases/{case_id}/customer-templates/{template_id}/preview|export`, looked up the form before checking the case. An unassigned user got 404/422, not 403.
+- **Root cause:** case access was enforced by each route calling `require_case` by hand, so any new route could get the order wrong.
+- **Fix:**
+  - **Guard:** `main.case_guard`, one app-wide dependency, checks the user and the case assignment for every `/cases/{case_id}/...` route before any route code runs.
+  - **Measured:** all 86 route × method pairs return 403 for an unassigned user, whatever the body.
+  - **Test:** the regression test now covers every method of every case route and fills path values by name. It no longer reads FastAPI internals (`ModelField.type_` broke between versions).
+  - **Process:** run the full suite before pushing.
+
 ## Not verified
 
-- **Real customer forms:** none were provided. The slot finder knows empty cells right of a label, `Label: ____` lines and `{{…}}`. Forms that use content controls or text boxes are not read.
-- **Per-slot formats** (dates, number formats in the customer's style): not handled. Values are written as the case holds them.
+- **Real customer forms:** none were provided. The slot finder now also reads content controls and text boxes. Shapes other than text boxes, headers/footers and footnotes are not read.
+- **Number formats:** not offered (no numeric case field is mapped yet). Dates are handled.
 - **Protected forms with LIVE:** labels go masked except the language's terms; only synthetic (RAW) forms were run.
-- **Period checks:** the period is recorded and shown, but only LOT is compared against a source row.

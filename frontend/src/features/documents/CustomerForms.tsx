@@ -17,6 +17,7 @@ export function CustomerForms({ ctx }: { ctx: Ctx }) {
   const [prop, setProp] = useState<J>(null)
   const [map, setMap] = useState<Record<string, string | null>>({})
   const [req, setReq] = useState<string[]>([])
+  const [fmt, setFmt] = useState<Record<string, string>>({})
   const [why, setWhy] = useState('')
   const [reg, setReg] = useState({ customer: '', name: '', reason: '' })
   const [file, setFile] = useState<File | null>(null)
@@ -27,7 +28,7 @@ export function CustomerForms({ ctx }: { ctx: Ctx }) {
     const x: J = await ctx.api(`/customer-templates/${id}`)
     setTid(id); setT(x); setProp(null); setMsg('')
     const m = x.mapping?.mapping ?? {}
-    setMap(Object.fromEntries(x.slots.map((s: J) => [s.id, m[s.id] ?? null]))); setReq(x.mapping?.required ?? [])
+    setMap(Object.fromEntries(x.slots.map((s: J) => [s.id, m[s.id] ?? null]))); setReq(x.mapping?.required ?? []); setFmt(x.mapping?.formats ?? {})
     setView(ctx.cid && x.mapping ? await ctx.api(`/cases/${ctx.cid}/customer-templates/${id}/preview`).catch(() => null) : null)
   })
   const register = () => go(async () => {
@@ -37,10 +38,10 @@ export function CustomerForms({ ctx }: { ctx: Ctx }) {
   const ask = () => go(async () => {
     const out: J = await ctx.api(`/customer-templates/${tid}/proposals`, 'POST', {})
     setProp(out)
-    if (out.proposal) setMap(out.proposal.mapping)
+    if (out.proposal) { setMap(out.proposal.mapping); setFmt(out.proposal.formats ?? {}) }
   })
   const keep = () => go(async () => {
-    await ctx.api(`/customer-templates/${tid}/mapping`, 'POST', { mapping: map, required: req, proposal_id: prop?.proposal_id ?? null, reason: why }, true)
+    await ctx.api(`/customer-templates/${tid}/mapping`, 'POST', { mapping: map, required: req, formats: fmt, proposal_id: prop?.proposal_id ?? null, reason: why }, true)
     setWhy(''); await open(tid as number)
   })
   const download = async (mode: string) => {
@@ -66,13 +67,15 @@ export function CustomerForms({ ctx }: { ctx: Ctx }) {
         {author && <button className="button secondary" disabled={busy} onClick={ask}>AI 매핑 제안 받기</button>}</p>
       {prop && <p className="row-gap"><Badge tone={prop.status === 'OK' ? 'blue' : 'red'}>AI 제안 {prop.status}</Badge><span className="muted">{prop.mode} · {prop.model ?? '모델 없음'} · 칸 라벨과 필드 정의만 보냅니다 (사건 값은 보내지 않음)</span></p>}
       {prop?.issues?.map((i: J, n: number) => <Note key={n}>{i.message}</Note>)}
-      <div className="table-wrap"><table><thead><tr><th>칸</th><th>라벨</th><th>사건 필드</th><th>필수</th><th>이 사건의 값 · 출처</th></tr></thead><tbody>
+      <div className="table-wrap"><table><thead><tr><th>칸</th><th>라벨</th><th>사건 필드</th><th>서식</th><th>필수</th><th>이 사건의 값 · 출처</th></tr></thead><tbody>
         {t.slots.map((s: J) => { const v = view?.slots?.find((x: J) => x.id === s.id); return <tr key={s.id}>
-          <td>{s.id}</td><td className="wrap">{s.label}{unresolved.includes(s.id) && <> <Badge tone="amber">미확정</Badge></>}{prop?.proposal?.reasons?.[s.id] && <div className="muted">{prop.proposal.reasons[s.id]}</div>}</td>
+          <td>{s.id}</td><td className="wrap">{s.label}{s.certain === false && <> <Badge tone="violet">빈칸인지 확인</Badge></>}{unresolved.includes(s.id) && <> <Badge tone="amber">미확정</Badge></>}{prop?.proposal?.reasons?.[s.id] && <div className="muted">{prop.proposal.reasons[s.id]}</div>}</td>
           <td><select className="input" aria-label={`${s.label} 필드`} value={map[s.id] ?? ''} disabled={!author} onChange={e => setMap({ ...map, [s.id]: e.target.value || null })}>
             <option value="">(연결 안 함)</option>{t.fields.map((f: J) => <option key={f.id} value={f.id}>{f.label} · {f.id}</option>)}</select></td>
+          <td><select className="input" aria-label={`${s.label} 서식`} value={fmt[s.id] ?? 'AS_IS'} disabled={!author} onChange={e => setFmt({ ...fmt, [s.id]: e.target.value })}>
+            {(t.formats ?? ['AS_IS']).map((f: string) => <option key={f} value={f}>{f}</option>)}</select></td>
           <td><input type="checkbox" aria-label={`${s.label} 필수`} checked={req.includes(s.id)} disabled={!author} onChange={e => setReq(e.target.checked ? [...req, s.id] : req.filter(x => x !== s.id))}/></td>
-          <td className="wrap">{v ? <><Badge tone={STATUS[v.status]?.[1] ?? 'slate'}>{STATUS[v.status]?.[0] ?? v.status}</Badge> {v.value ?? ''} <span className="muted">{v.source ?? ''}{v.version ? ` · ${v.version}` : ''}</span></> : <span className="muted">-</span>}</td></tr> })}
+          <td className="wrap">{v ? <><Badge tone={STATUS[v.status]?.[1] ?? 'slate'}>{STATUS[v.status]?.[0] ?? v.status}</Badge> {v.shown && v.shown !== v.value ? <>{v.shown} <span className="muted">(원래 {v.value})</span></> : v.value ?? ''}{v.converted === false && <> <Badge tone="red">서식 변환 불가</Badge></>} <span className="muted">{v.source ?? ''}{v.version ? ` · ${v.version}` : ''}</span></> : <span className="muted">-</span>}</td></tr> })}
       </tbody></table></div>
       {author && <p className="row-gap wrap"><input className="input" aria-label="매핑 확정 사유" placeholder="확정 사유 (필수)" value={why} onChange={e => setWhy(e.target.value)}/>
         <button className="button primary" disabled={busy || !why.trim()} onClick={keep}>원본 칸·출처 확인 후 매핑 확정</button></p>}

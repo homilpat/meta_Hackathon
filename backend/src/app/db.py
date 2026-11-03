@@ -305,6 +305,7 @@ class CustomerTemplateMapping(Base):
     version: Mapped[int] = mapped_column(Integer)
     mapping: Mapped[dict] = mapped_column(JSON)
     required: Mapped[list] = mapped_column(JSON)
+    formats: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # slot -> customer_docx.FORMATS id (not AS_IS)
     proposal_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     edits: Mapped[int | None] = mapped_column(Integer, nullable=True)
     reason: Mapped[str] = mapped_column(Text)

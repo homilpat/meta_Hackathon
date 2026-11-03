@@ -62,7 +62,14 @@ def find(recs: dict, lot: str, field: str) -> list[str]:
 class CalcIn(BaseModel):
     action: str = Field("defect_rate", max_length=30)
     lot: str = Field(min_length=1, max_length=60)
-    period: str | None = Field(None, max_length=40)  # e.g. 2026-10 or 2026-10-01..2026-10-31; recorded scope
+    # 2026-10, 2026-10-27 or 2026-10-01..2026-10-31: a SOURCE_CELL answer's row date must fall in it
+    period: str | None = Field(None, pattern=r"^\d{4}(-\d{2}){0,2}(\.\.\d{4}(-\d{2}){0,2})?$")
+
+
+def in_period(day: str, period: str) -> bool:
+    """ISO day against a period: a prefix (2026-10) or an inclusive range (A..B, each a prefix)."""
+    lo, _, hi = period.partition("..")
+    return day.startswith(lo) if not hi else lo <= day[:len(lo)] and day[:len(hi)] <= hi
 
 
 def events(session: Session, request_id: int) -> list:
@@ -246,13 +253,16 @@ def read_cell(session: Session, case_id: str, r, body: AnswerIn, actor: Actor) -
     t = next((t for t in lay.tables(f.content) if t["sheet"] == body.sheet
               and t["first_data_row"] <= row <= t["last_row"]), None)
     mapping = ix.suggest(t["columns"]) if t else {}
-    lot_col = mapping.get("lot")
+    lot_col, date_col = mapping.get("lot"), mapping.get("inspected_on")
+    day = ws[f"{date_col}{row}"].value if date_col else None
     return {"file_id": f.id, "intake_id": f.intake_id, "file": f.name, "file_sha256": f.sha256, "sheet": body.sheet,
             "cell": ref, "raw": raw, "row": row, "column": col,
             "column_header": t["columns"].get(col) if t else None,
             "column_field": next((k for k, v in mapping.items() if v == col), None),
             "lot_cell": f"{lot_col}{row}" if lot_col else None,
-            "row_lot": None if not lot_col or ws[f"{lot_col}{row}"].value is None else str(ws[f"{lot_col}{row}"].value)}
+            "row_lot": None if not lot_col or ws[f"{lot_col}{row}"].value is None else str(ws[f"{lot_col}{row}"].value),
+            "date_cell": f"{date_col}{row}" if date_col else None,
+            "row_date": None if day is None else (day.isoformat() if hasattr(day, "isoformat") else str(day))[:10]}
 
 
 def check_value(r, value, unit, recs) -> str | None:
@@ -298,6 +308,10 @@ def answer(session: Session, r, body: AnswerIn, actor: Actor) -> tuple[int, dict
             why = "이 행의 LOT을 확인할 수 없습니다 (LOT 열이 없는 위치)"
         elif loc["row_lot"].strip() != r.lot:
             why = f"범위 불일치: {loc['lot_cell']}의 LOT은 {loc['row_lot']}이고 요청은 {r.lot}입니다"
+        elif r.period and loc["row_date"] is None:
+            why = f"이 행의 검사일을 확인할 수 없어 기간 {r.period}과 대조할 수 없습니다 (검사일 열이 없는 위치)"
+        elif r.period and not in_period(loc["row_date"], r.period):
+            why = f"범위 불일치: {loc['date_cell']}의 검사일 {loc['row_date']}은 기간 {r.period} 밖입니다"
         elif loc["column_field"] not in (None, r.missing_field):
             why = f"범위 불일치: {loc['cell']}은 '{loc['column_header']}' 열입니다 ({LABEL[r.missing_field]} 아님)"
     content = {"kind": body.kind, "value": value if not isinstance(value, float) or not value.is_integer()

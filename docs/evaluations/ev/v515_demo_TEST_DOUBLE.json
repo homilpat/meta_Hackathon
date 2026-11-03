@@ -1,7 +1,7 @@
 {
  "run_mode": "TEST_DOUBLE",
  "model": "scripted-gold-with-one-swap",
- "model_calls": 3,
+ "model_calls": 4,
  "cost_usd": 0.0,
  "docx_mapping_accuracy": [
   {
@@ -10,6 +10,10 @@
    "correct": 7,
    "wrong": {
     "T0.R6.C1": "d4.occurrence_cause"
+   },
+   "formats_correct": 7,
+   "formats_wrong": {
+    "T0.R1.C1": "DATE_DOT"
    },
    "unresolved": []
   },
@@ -20,6 +24,19 @@
    "wrong": {
     "P4": "d4.occurrence_cause"
    },
+   "formats_correct": 6,
+   "formats_wrong": {},
+   "unresolved": []
+  },
+  {
+   "form": "customer_form_C_controls.docx",
+   "slots": 6,
+   "correct": 5,
+   "wrong": {
+    "S0": "d4.occurrence_cause"
+   },
+   "formats_correct": 6,
+   "formats_wrong": {},
    "unresolved": []
   }
  ],
@@ -98,9 +115,9 @@
    ],
    "final": {
     "status": 200,
-    "sha256": "d735eb90c8f370e2af80d46d1bd942a2f000123cd0a496df6c6feffbca16038b",
+    "sha256": "ef26d49e308a5b088cf59974163bc41643d93163a85a80a338c44d69ff6a842a",
     "mapping_version": "1",
-    "case_data_version": "1a54c20c9a4c5881",
+    "case_data_version": "11d2d84bb894ec0c",
     "first_lines": [
      "SYNTHETIC 8D Report (customer form A)"
     ]
@@ -166,13 +183,82 @@
    ],
    "final": {
     "status": 200,
-    "sha256": "bcb83037ff99644e4235631952af2540a4eb1efab32ad65ea619264eb8ea94f6",
+    "sha256": "47bd746916556ae256b23d8fd4cdfc58d10b853ada7192a332ae6d66fad1ac8a",
     "mapping_version": "1",
-    "case_data_version": "1a54c20c9a4c5881",
+    "case_data_version": "11d2d84bb894ec0c",
     "first_lines": [
      "SYNTHETIC 품질 회신서 (고객 양식 B)",
      "고객사: DEFAULT",
      "사건 번호: L"
+    ]
+   }
+  },
+  {
+   "step": "DOCX SCAR C",
+   "slots": 6,
+   "route_at_register": "NEEDS_REVIEW",
+   "proposal": {
+    "status": "OK",
+    "mode": "TEST_DOUBLE",
+    "model": "scripted-gold-with-one-swap",
+    "wrong": {
+     "S0": "d4.occurrence_cause"
+    }
+   },
+   "mapping_version": 1,
+   "edits": 1,
+   "preview": [
+    [
+     "Customer",
+     "case.customer",
+     "FILLED",
+     "DEFAULT",
+     "case context / confirmed intake"
+    ],
+    [
+     "Approval Date (YYYY.MM.DD)",
+     "d4.approved_on",
+     "FILLED",
+     "2026-11-03",
+     "approval #3"
+    ],
+    [
+     "Approved by",
+     "d4.approved_by",
+     "FILLED",
+     "frank (2026-11-03)",
+     "approval #3"
+    ],
+    [
+     "Remarks",
+     null,
+     "UNMAPPED",
+     "",
+     null
+    ],
+    [
+     "Escape Cause",
+     "d4.escape_cause",
+     "FILLED",
+     "AOI program did not flag low-volume joints on L02",
+     "confirmed cause H2"
+    ],
+    [
+     "Root Cause",
+     "d4.occurrence_cause",
+     "FILLED",
+     "Worn stencil STN-2 under-deposits paste in L02",
+     "confirmed cause H1"
+    ]
+   ],
+   "final": {
+    "status": 200,
+    "sha256": "8848616d44edfc8040eaa7ee5d2618895ef15104f89df7aceea7f817089aecc3",
+    "mapping_version": "1",
+    "case_data_version": "11d2d84bb894ec0c",
+    "first_lines": [
+     "SYNTHETIC Supplier Corrective Action (customer form C)",
+     ""
     ]
    }
   },
@@ -212,11 +298,11 @@
     "model": "scripted-gold-with-one-swap",
     "candidates": [
      {
-      "source_id": "F3:T1:B",
+      "source_id": "F3:T1:C",
       "file_id": 3,
       "file": "inspection.xlsx",
       "sheet": "검사",
-      "column": "B",
+      "column": "C",
       "header": "검사 수량",
       "reason": "header"
      }
@@ -226,7 +312,7 @@
    "answer": "ANSWERED",
    "result": {
     "rate_percent": 2.5,
-    "calculation_id": "CALC-cca634c1d5247f61",
+    "calculation_id": "CALC-c07002918d2c7b46",
     "inputs": [
      {
       "evidence_id": "EV-IN2-2",
@@ -247,16 +333,16 @@
  ],
  "person": "scripted: corrects every proposed slot to the gold mapping",
  "run": {
-  "code_sha": "1dbeda506895c0ee9bc09ed63e183eaedb3cc952+dirty",
+  "code_sha": "d0ca528d6350144da65951c54327f48f8d95a1d3+dirty",
   "parser_version": "docparse-4",
   "evaluator": "scripts.v515_demo",
-  "evaluator_sha256": "ac5c64684ec40325",
+  "evaluator_sha256": "23f856dab0ee7d0c",
   "sampling": {
    "temperature": 0.0,
    "seed": 1
   },
   "python": "3.12.8",
   "command": "python -m scripts.v515_demo --double",
-  "at": "2026-11-03T07:54:28+00:00"
+  "at": "2026-11-03T10:06:24+00:00"
  }
 }

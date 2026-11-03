@@ -33,9 +33,58 @@ def _blank(text: str) -> bool:
     return not t or bool(PLACEHOLDER.fullmatch(t))
 
 
+# text that may be a blank or may be a real answer ("-", "TBD", "N/A"): a slot with certain=False, which the AI
+# proposal maps to a field or to NONE and a person confirms (it is never filled unless mapped)
+MAYBE = re.compile(r"^(-|–|—|\.|tbd|t\.b\.d\.?|n/?a|해당\s*없음|미정|추후\s*기재|\(\s*\))$", re.IGNORECASE)
+W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+
+def _texts(el) -> str:
+    return "".join(t.text or "" for t in el.iter(f"{W}t"))
+
+
+def _sdt_slots(d) -> list[dict]:
+    """Content controls (w:sdt), anywhere: a control showing its placeholder or holding a blank is a slot, labeled by
+    its alias or tag, else by the text around it."""
+    out = []
+    for k, sdt in enumerate(d.element.body.iter(f"{W}sdt")):
+        pr = sdt.find(f"{W}sdtPr")
+        content = sdt.find(f"{W}sdtContent")
+        if pr is None or content is None:
+            continue
+        shown = _texts(content).strip()
+        placeholder = pr.find(f"{W}showingPlcHdr") is not None
+        if not (placeholder or _blank(shown) or MAYBE.fullmatch(shown)):
+            continue
+        alias = next((e.get(f"{W}val") for e in (pr.find(f"{W}alias"), pr.find(f"{W}tag")) if e is not None
+                      and e.get(f"{W}val")), "")
+        around = _texts(sdt.getparent()).replace(shown, "").strip().rstrip(":：").strip() if not alias else ""
+        if label := (alias or around)[:80]:
+            out.append({"id": f"S{k}", "kind": "control", "label": label, "context": "",
+                        **({} if placeholder or _blank(shown) else {"certain": False})})
+    return out
+
+
+def _textbox_slots(d) -> list[dict]:
+    """Paragraphs inside text boxes (w:txbxContent), read like body paragraphs. Word writes a text box twice
+    (mc:Choice and a VML mc:Fallback); the fallback copy is skipped."""
+    out = []
+    boxes = [b for b in d.element.body.iter(f"{W}txbxContent")
+             if not any(a.tag.endswith("}Fallback") for a in b.iterancestors())]
+    for k, box in enumerate(boxes):
+        for n, par in enumerate(box.iter(f"{W}p")):
+            t = _texts(par).strip()
+            m = LABELED.match(t)
+            if m and (_blank(m.group("rest")) or MAYBE.fullmatch(m.group("rest").strip())):
+                out.append({"id": f"X{k}.P{n}", "kind": "textbox", "label": m.group("label").strip(), "context": "",
+                            **({} if _blank(m.group("rest")) else {"certain": False})})
+    return out
+
+
 def slots(data: bytes) -> list[dict]:
     """Fillable places, in document order: T<table>.R<row>.C<col> for an empty cell after a label cell in its row
-    (or under a header cell), P<paragraph> for a labeled blank or a placeholder paragraph."""
+    (or under a header cell), P<paragraph> for a labeled blank or a placeholder paragraph, S<n> for a content
+    control, X<box>.P<n> for a paragraph in a text box. A "-"/TBD/N/A answer is a slot with certain=False."""
     try:
         d = docx.Document(io.BytesIO(data))
     except Exception as exc:  # noqa: BLE001 (any broken file: say why and stop)
@@ -46,8 +95,9 @@ def slots(data: bytes) -> list[dict]:
         if not t:
             continue
         m = LABELED.match(t)
-        if m and _blank(m.group("rest")):
-            out.append({"id": f"P{i}", "kind": "paragraph", "label": m.group("label").strip(), "context": heading})
+        if m and (_blank(m.group("rest")) or MAYBE.fullmatch(m.group("rest").strip())):
+            out.append({"id": f"P{i}", "kind": "paragraph", "label": m.group("label").strip(), "context": heading,
+                        **({} if _blank(m.group("rest")) else {"certain": False})})
         elif PLACEHOLDER.search(t):
             out.append({"id": f"P{i}", "kind": "paragraph", "label": PLACEHOLDER.sub("…", t), "context": heading})
         else:
@@ -59,19 +109,21 @@ def slots(data: bytes) -> list[dict]:
             seen = set()
             cells = row.cells
             for ci, cell in enumerate(cells):
-                if id(cell._tc) in seen:
+                if cell._tc in seen:
                     continue  # a merged cell repeats in row.cells
-                seen.add(id(cell._tc))
-                if not _blank(cell.text):
+                seen.add(cell._tc)
+                maybe = bool(MAYBE.fullmatch(cell.text.strip()))
+                if not (_blank(cell.text) or maybe):
                     continue
                 left = next((cells[k].text.strip() for k in range(ci - 1, -1, -1)
                              if cells[k]._tc is not cell._tc and cells[k].text.strip()), "")
                 above = header[ci] if ri > 0 and ci < len(header) else ""
-                label = left if left and not _blank(left) else above
+                label = left if left and not _blank(left) and not MAYBE.fullmatch(left) else above
                 if label:
                     out.append({"id": f"T{ti}.R{ri}.C{ci}", "kind": "cell", "label": label,
-                                "context": above if label == left and above != left else ""})
-    return out
+                                "context": above if label == left and above != left else "",
+                                **({"certain": False} if maybe else {})})
+    return out + _sdt_slots(d) + _textbox_slots(d)
 
 
 def structure_sha(sl: list[dict]) -> str:
@@ -95,8 +147,31 @@ FIELDS = {  # id -> (label, meaning). Occurrence and escape causes are different
     "d2.approved_by": ("D2 승인자", "who approved the NCR, and when"),
     "d3.approved_by": ("D3 승인자", "who approved the containment, and when"),
     "d4.approved_by": ("D4 승인자", "who approved the RCA, and when"),
+    "d2.approved_on": ("D2 승인일", "date the NCR was approved (a date only)"),
+    "d3.approved_on": ("D3 승인일", "date the containment was approved (a date only)"),
+    "d4.approved_on": ("D4 승인일", "date the RCA was approved (a date only)"),
     "case.closure": ("종결 상태", "D8 closure decision and date"),
 }
+# how a value is written into a slot: the AI picks one id from the label's own hint, the server converts (dates
+# inside the value; ISO in the case data), a person confirms; a value the format cannot take blocks the final file
+FORMATS = {"AS_IS": None, "DATE_ISO": "%Y-%m-%d", "DATE_DOT": "%Y.%m.%d", "DATE_SLASH_US": "%m/%d/%Y",
+           "DATE_SLASH_EU": "%d/%m/%Y", "DATE_KO": "%Y년 %m월 %d일"}
+ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def apply_format(value, fmt: str) -> tuple[str, bool]:
+    """(text, converted): AS_IS keeps the value; a date format rewrites every ISO date in it, and a value with none
+    cannot take that format."""
+    from datetime import date
+
+    text = str(value)
+    if not FORMATS.get(fmt):
+        return text, True
+    if not ISO_DATE.search(text):
+        return text, False
+    return ISO_DATE.sub(lambda m: date.fromisoformat(m.group(0)).strftime(FORMATS[fmt]), text), True
+
+
 SUBMISSION = ("case.id", "case.customer", "d2.problem", "d3.containment", "d4.occurrence_cause", "d4.escape_cause")
 
 
@@ -169,6 +244,7 @@ def case_values(session: Session, case_id: str) -> dict[str, dict]:
                             .order_by(ApprovalEvent.id.desc()).limit(1))
         if ap and doc.status == "APPROVED":
             put(f"{key}.approved_by", f"{ap.actor_id} ({ap.created_at[:10]})", f"approval #{ap.id}", ver, True)
+            put(f"{key}.approved_on", ap.created_at[:10], f"approval #{ap.id}", ver, True)
     by_type: dict[str, list] = {}
     for h in causes.confirmed(session, case_id):
         by_type.setdefault(h.cause_type, []).append(h)
@@ -194,7 +270,10 @@ The server found the slots (id, label, context) and lists the allowed fields (id
 values. For every slot give one field id or "NONE". Root cause of occurrence (why the defect was made) and cause of
 non-detection or escape (why it was not caught) are different fields: never put one in place of the other. A slot
 that only says "Root Cause" with no occurrence/escape hint maps to d4.occurrence_cause. Use NONE and list the slot
-in unresolved when you are not sure. Give a short reason per slot."""
+in unresolved when you are not sure. A slot with "certain": false holds text such as "-", "TBD" or "N/A" that may be
+a blank to fill or the customer's real answer: map it only when the label clearly asks for a case value. For every
+slot also pick a format id: a date format only when the label itself shows one (e.g. "YYYY.MM.DD" -> DATE_DOT,
+"MM/DD/YYYY" -> DATE_SLASH_US, "년 월 일" -> DATE_KO), else AS_IS. Give a short reason per slot."""
 
 
 def schema(sl: list[dict]) -> dict:
@@ -202,9 +281,11 @@ def schema(sl: list[dict]) -> dict:
         "type": "object", "additionalProperties": False, "required": ["slots", "unresolved"],
         "properties": {
             "slots": {"type": "array", "items": {
-                "type": "object", "additionalProperties": False, "required": ["slot_id", "field_id", "reason"],
+                "type": "object", "additionalProperties": False,
+                "required": ["slot_id", "field_id", "format", "reason"],
                 "properties": {"slot_id": {"type": "string", "enum": [s["id"] for s in sl]},
                                "field_id": {"type": "string", "enum": [*FIELDS, "NONE"]},
+                               "format": {"type": "string", "enum": list(FORMATS)},
                                "reason": {"type": "string"}}}},
             "unresolved": {"type": "array", "items": {"type": "string", "enum": [s["id"] for s in sl]}}}}}}
 
@@ -220,8 +301,9 @@ def propose(provider, sl: list[dict], protected: bool) -> dict:
 
     def m(t):
         return mask_header(t, terms, masker) if protected else t
-    sent = {"slots": [{"id": s["id"], "kind": s["kind"], "label": m(s["label"]), "context": m(s["context"])}
-                      for s in sl],
+    sent = {"slots": [{"id": s["id"], "kind": s["kind"], "label": m(s["label"]), "context": m(s["context"]),
+                       "certain": s.get("certain", True)} for s in sl],
+            "formats": list(FORMATS),
             "fields": [{"id": k, "label": v[0], "meaning": v[1]} for k, v in FIELDS.items()]}
     base = {"sent": sent, "reply": None, "proposal": None, "usage": {}}
     if provider is None:
@@ -235,7 +317,7 @@ def propose(provider, sl: list[dict], protected: bool) -> dict:
     except (ProviderError, ValueError, KeyError, TypeError) as exc:
         return {**base, "status": "FAILED", "mode": provider.mode, "model": provider.model,
                 "issues": [{"code": "MODEL_FAILED", "message": f"AI 제안 실패 ({type(exc).__name__}): 칸을 직접 연결하세요"}]}
-    ids, mapping, reasons, issues = {s["id"] for s in sl}, {}, {}, []
+    ids, mapping, reasons, formats, issues = {s["id"] for s in sl}, {}, {}, {}, []
     for x in (reply.get("slots") if isinstance(reply, dict) else None) or []:
         if not isinstance(x, dict):
             continue
@@ -245,10 +327,12 @@ def propose(provider, sl: list[dict], protected: bool) -> dict:
             continue
         mapping.setdefault(sid, None if fid == "NONE" else fid)
         reasons.setdefault(sid, str(x.get("reason", ""))[:300])
+        formats.setdefault(sid, x.get("format") if x.get("format") in FORMATS else "AS_IS")
     unresolved = sorted({u for u in (reply.get("unresolved") or []) if u in ids} | (ids - set(mapping)))
     return {**base, "status": "OK", "mode": provider.mode, "model": provider.model, "reply": reply,
             "usage": r.get("usage") or {}, "issues": issues,
             "proposal": {"mapping": {s["id"]: mapping.get(s["id"]) for s in sl}, "reasons": reasons,
+                         "formats": {s["id"]: formats.get(s["id"], "AS_IS") for s in sl},
                          "unresolved": unresolved}}
 
 
@@ -263,6 +347,7 @@ class TemplateIn(BaseModel):
 class MappingIn(BaseModel):
     mapping: dict[str, str | None]
     required: list[str] = []  # slots that must be filled for the final file (default: those mapped to SUBMISSION)
+    formats: dict[str, str] = {}  # slot -> FORMATS id; a slot left out is AS_IS
     proposal_id: int | None = None
     reason: FreeText
 
@@ -297,13 +382,14 @@ def template_out(session: Session, t) -> dict:
     return {"template_id": t.id, "customer": t.customer, "name": t.name, "version": t.version,
             "sha256": t.sha256, "structure_sha": t.structure_sha, "data_origin": t.data_origin, "slots": t.slots,
             "created_by": t.created_by, "created_at": t.created_at, "reason": t.reason, "route": route,
-            "mapping": mapping_out(m or reuse) if (m or reuse) else None,
+            "mapping": mapping_out(m or reuse) if (m or reuse) else None, "formats": list(FORMATS),
             "fields": [{"id": k, "label": v[0], "meaning": v[1], "submission": k in SUBMISSION}
                        for k, v in FIELDS.items()]}
 
 
 def mapping_out(m) -> dict:
     return {"mapping_id": m.id, "template_id": m.template_id, "version": m.version, "mapping": m.mapping,
+            "formats": m.formats or {},
             "required": m.required, "edits": m.edits, "proposal_id": m.proposal_id, "created_by": m.created_by,
             "created_at": m.created_at, "reason": m.reason}
 
@@ -337,7 +423,7 @@ def register(session: Session, body: TemplateIn, actor) -> tuple[int, dict]:
     return 201, template_out(session, t)
 
 
-def check_mapping(t, mapping: dict, required: list[str]) -> None:
+def check_mapping(t, mapping: dict, required: list[str], formats: dict | None = None) -> None:
     ids = {s["id"] for s in t.slots}
     if bad := sorted(set(mapping) - ids):
         raise HTTPException(422, f"이 양식에 없는 칸 ID: {bad[:5]}")
@@ -347,6 +433,8 @@ def check_mapping(t, mapping: dict, required: list[str]) -> None:
         raise HTTPException(422, f"이 양식에 없는 필수 칸 ID: {bad[:5]}")
     if bad := [s for s in required if not mapping.get(s)]:
         raise HTTPException(422, f"필수 칸이 사건 필드에 연결되지 않았습니다: {bad[:5]}")
+    if bad := sorted(k for k, v in (formats or {}).items() if k not in ids or v not in FORMATS):
+        raise HTTPException(422, f"없는 칸이거나 허용되지 않은 형식: {bad[:5]} (가능: {list(FORMATS)})")
 
 
 def confirm(session: Session, t, body: MappingIn, actor) -> dict:
@@ -356,7 +444,8 @@ def confirm(session: Session, t, body: MappingIn, actor) -> dict:
     mapping = {s["id"]: body.mapping.get(s["id"]) or None for s in t.slots} | \
         {k: v for k, v in body.mapping.items() if k not in {s["id"] for s in t.slots}}
     required = body.required or [s for s, f in mapping.items() if f in SUBMISSION]
-    check_mapping(t, mapping, required)
+    formats = {k: v for k, v in body.formats.items() if v != "AS_IS"}
+    check_mapping(t, mapping, required, formats)
     prop = session.get(CustomerTemplateProposal, body.proposal_id) if body.proposal_id else None
     if body.proposal_id and (prop is None or prop.template_id != t.id):
         raise HTTPException(422, "이 양식의 제안이 아닙니다")
@@ -364,7 +453,8 @@ def confirm(session: Session, t, body: MappingIn, actor) -> dict:
         if prop and prop.proposal else None
     prev = latest_mapping(session, t)
     m = CustomerTemplateMapping(template_id=t.id, version=(prev.version + 1) if prev else 1, mapping=mapping,
-                                required=required, proposal_id=prop.id if prop else None, edits=edits,
+                                required=required, formats=formats, proposal_id=prop.id if prop else None,
+                                edits=edits,
                                 reason=body.reason, created_by=actor.id, created_at=now())
     session.add(m)
     session.flush()
@@ -382,14 +472,19 @@ def fill_view(session: Session, t, m, case_id: str) -> dict:
         status = "UNMAPPED" if not f else "MISSING" if v["value"] is None else "UNAPPROVED" if not v["approved"] \
             else "FILLED"
         req = bool(m) and s["id"] in m.required
+        fmt = ((m.formats or {}) if m else {}).get(s["id"], "AS_IS")
+        shown, converted = apply_format(v["value"], fmt) if status in ("FILLED", "UNAPPROVED") else (None, True)
+        if not converted:
+            blocks.append({"slot": s["id"], "code": "FORMAT_UNCONVERTIBLE",
+                           "message": f"{s['label']}: 값 {str(v['value'])[:40]!r}을 형식 {fmt}로 바꿀 수 없습니다"})
         if req and status == "MISSING":
             blocks.append({"slot": s["id"], "code": "REQUIRED_MISSING", "message": f"{s['label']}: 제출 필수 값이 없습니다 ({FIELDS[f][0]})"})
         if status == "UNAPPROVED":
             blocks.append({"slot": s["id"], "code": "NOT_APPROVED", "message": f"{s['label']}: 승인되지 않은 값 ({v['source']})"})
         rows.append({**s, "field": f, "field_label": FIELDS[f][0] if f else None, "required": req, "status": status,
                      "value": v["value"] if v else None, "source": v["source"] if v else None,
-                     "version": v["version"] if v else None,
-                     "shown": (v["value"] if status in ("FILLED", "UNAPPROVED") else NEEDS if f else "")})
+                     "version": v["version"] if v else None, "format": fmt, "converted": converted,
+                     "shown": (shown if status in ("FILLED", "UNAPPROVED") else NEEDS if f else "")})
     if m is None:
         blocks.insert(0, {"code": "NO_CONFIRMED_MAPPING", "message": "확정된 매핑이 없습니다 (재검토 필요)"})
     return {"template_id": t.id, "template_version": t.version, "customer": t.customer, "case_id": case_id,
@@ -411,12 +506,42 @@ def render(t, view: dict, final: bool = False) -> bytes:
                 r.text = ""
         else:
             p.add_run(text)
+    def labeled(p, s):
+        m = LABELED.match(p.text.strip())
+        rest = m.group("rest").strip() if m else ""
+        write(p, f"{m.group('label').strip()}: {s['shown']}" if m and (_blank(rest) or MAYBE.fullmatch(rest))
+              else PLACEHOLDER.sub(str(s["shown"]), p.text))
     for i, p in enumerate(d.paragraphs):
         s = by.get(f"P{i}")
         if s and s["shown"]:
-            m = LABELED.match(p.text.strip())
-            write(p, f"{m.group('label').strip()}: {s['shown']}" if m and s["kind"] == "paragraph" and
-                  _blank(m.group("rest")) else PLACEHOLDER.sub(str(s["shown"]), p.text))
+            labeled(p, s)
+    from docx.oxml import OxmlElement
+    from docx.text.paragraph import Paragraph
+
+    for k, sdt in enumerate(d.element.body.iter(f"{W}sdt")):
+        s = by.get(f"S{k}")
+        content = sdt.find(f"{W}sdtContent")
+        if not (s and s["shown"]) or content is None:
+            continue
+        ts = list(content.iter(f"{W}t"))
+        if ts:
+            ts[0].text = str(s["shown"])
+            for rest in ts[1:]:
+                rest.text = ""
+        else:
+            r, wt = OxmlElement("w:r"), OxmlElement("w:t")
+            wt.text = str(s["shown"])
+            r.append(wt)
+            (content.find(f"{W}p") if content.find(f"{W}p") is not None else content).append(r)
+        if (ph := sdt.find(f"{W}sdtPr/{W}showingPlcHdr")) is not None:
+            ph.getparent().remove(ph)  # the control now holds a value, not its placeholder
+    boxes = [b for b in d.element.body.iter(f"{W}txbxContent")
+             if not any(a.tag.endswith("}Fallback") for a in b.iterancestors())]
+    for k, box in enumerate(boxes):
+        for n, par in enumerate(box.iter(f"{W}p")):
+            s = by.get(f"X{k}.P{n}")
+            if s and s["shown"]:
+                labeled(Paragraph(par, None), s)
     for ti, table in enumerate(d.tables):
         for ri, row in enumerate(table.rows):
             for ci, cell in enumerate(row.cells):
@@ -431,5 +556,7 @@ def render(t, view: dict, final: bool = False) -> bytes:
 
 
 def text_of(data: bytes) -> str:
+    """All text a reader sees, content controls and text boxes included (read back after rendering)."""
     d = docx.Document(io.BytesIO(data))
-    return "\n".join([p.text for p in d.paragraphs] + [c.text for t in d.tables for r in t.rows for c in r.cells])
+    return "\n".join([p.text for p in d.paragraphs] + [c.text for t in d.tables for r in t.rows for c in r.cells]
+                     + [_texts(p) for p in d.element.body.iter(f"{W}p")])

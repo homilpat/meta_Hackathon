@@ -1,8 +1,8 @@
 {
  "run_mode": "LIVE",
  "model": "muse-spark-1.3",
- "model_calls": 3,
- "cost_usd": 0.0182,
+ "model_calls": 4,
+ "cost_usd": 0.0279,
  "docx_mapping_accuracy": [
   {
    "form": "customer_form_A_8d_table.docx",
@@ -11,6 +11,8 @@
    "wrong": {
     "T0.R7.C1": null
    },
+   "formats_correct": 8,
+   "formats_wrong": {},
    "unresolved": [
     "T0.R7.C1"
    ]
@@ -20,8 +22,26 @@
    "slots": 6,
    "correct": 6,
    "wrong": {},
+   "formats_correct": 6,
+   "formats_wrong": {},
    "unresolved": [
     "P6"
+   ]
+  },
+  {
+   "form": "customer_form_C_controls.docx",
+   "slots": 6,
+   "correct": 4,
+   "wrong": {
+    "T0.R1.C1": null,
+    "T0.R2.C1": null
+   },
+   "formats_correct": 6,
+   "formats_wrong": {},
+   "unresolved": [
+    "T0.R1.C1",
+    "T0.R2.C1",
+    "T0.R3.C1"
    ]
   }
  ],
@@ -100,9 +120,9 @@
    ],
    "final": {
     "status": 200,
-    "sha256": "40b675d3d7663953e8c7076ed017c0fb823e0fb1460c0d99663c03414faa6519",
+    "sha256": "75d449f6c4705a751cc3f5b88379fdca6e3cda10c8c5d58785d6ff2645344f3a",
     "mapping_version": "1",
-    "case_data_version": "dd94aff65c3eafad",
+    "case_data_version": "3bbc9f5c174d0b18",
     "first_lines": [
      "SYNTHETIC 8D Report (customer form A)"
     ]
@@ -166,13 +186,83 @@
    ],
    "final": {
     "status": 200,
-    "sha256": "616407f2d9c3cade5d7b83b8411e915f7b0dda111c2175a5cc9a4e2174cbd20f",
+    "sha256": "960f484895d65efa296631049a4299d9a7365508a557589666ae57715cf96daf",
     "mapping_version": "1",
-    "case_data_version": "dd94aff65c3eafad",
+    "case_data_version": "3bbc9f5c174d0b18",
     "first_lines": [
      "SYNTHETIC 품질 회신서 (고객 양식 B)",
      "고객사: DEFAULT",
      "사건 번호: L"
+    ]
+   }
+  },
+  {
+   "step": "DOCX SCAR C",
+   "slots": 6,
+   "route_at_register": "NEEDS_REVIEW",
+   "proposal": {
+    "status": "OK",
+    "mode": "LIVE",
+    "model": "muse-spark-1.3",
+    "wrong": {
+     "T0.R1.C1": null,
+     "T0.R2.C1": null
+    }
+   },
+   "mapping_version": 1,
+   "edits": 2,
+   "preview": [
+    [
+     "Customer",
+     "case.customer",
+     "FILLED",
+     "DEFAULT",
+     "case context / confirmed intake"
+    ],
+    [
+     "Approval Date (YYYY.MM.DD)",
+     "d4.approved_on",
+     "FILLED",
+     "2026-11-03",
+     "approval #3"
+    ],
+    [
+     "Approved by",
+     "d4.approved_by",
+     "FILLED",
+     "frank (2026-11-03)",
+     "approval #3"
+    ],
+    [
+     "Remarks",
+     null,
+     "UNMAPPED",
+     "",
+     null
+    ],
+    [
+     "Escape Cause",
+     "d4.escape_cause",
+     "FILLED",
+     "AOI program did not flag low-volume joints on L02",
+     "confirmed cause H2"
+    ],
+    [
+     "Root Cause",
+     "d4.occurrence_cause",
+     "FILLED",
+     "Worn stencil STN-2 under-deposits paste in L02",
+     "confirmed cause H1"
+    ]
+   ],
+   "final": {
+    "status": 200,
+    "sha256": "5e118021966343bf2e634ef6f59ec982d471faefa787c8a4311eb79036a019ec",
+    "mapping_version": "1",
+    "case_data_version": "3bbc9f5c174d0b18",
+    "first_lines": [
+     "SYNTHETIC Supplier Corrective Action (customer form C)",
+     ""
     ]
    }
   },
@@ -212,13 +302,13 @@
     "model": "muse-spark-1.3",
     "candidates": [
      {
-      "source_id": "F3:T1:B",
+      "source_id": "F3:T1:C",
       "file_id": 3,
       "file": "inspection.xlsx",
       "sheet": "검사",
-      "column": "B",
+      "column": "C",
       "header": "검사 수량",
-      "reason": "Header 검사 수량 matches missing field and LOT column allows filtering for 0007"
+      "reason": "Header '검사 수량' matches missing label for lot 0007; table has LOT column to filter lot"
      }
     ]
    },
@@ -226,7 +316,7 @@
    "answer": "ANSWERED",
    "result": {
     "rate_percent": 2.5,
-    "calculation_id": "CALC-b4aaff19c09670d0",
+    "calculation_id": "CALC-a62fcd4c4eab7996",
     "inputs": [
      {
       "evidence_id": "EV-IN2-2",
@@ -247,16 +337,16 @@
  ],
  "person": "scripted: corrects every proposed slot to the gold mapping",
  "run": {
-  "code_sha": "1dbeda506895c0ee9bc09ed63e183eaedb3cc952+dirty",
+  "code_sha": "d0ca528d6350144da65951c54327f48f8d95a1d3+dirty",
   "parser_version": "docparse-4",
   "evaluator": "scripts.v515_demo",
-  "evaluator_sha256": "ac5c64684ec40325",
+  "evaluator_sha256": "23f856dab0ee7d0c",
   "sampling": {
    "temperature": 0.0,
    "seed": 1
   },
   "python": "3.12.8",
   "command": "python -m scripts.v515_demo --live",
-  "at": "2026-11-03T07:55:24+00:00"
+  "at": "2026-11-03T10:07:35+00:00"
  }
 }

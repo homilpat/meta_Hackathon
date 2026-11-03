@@ -74,9 +74,30 @@ The gold mapping was written in `scripts/xlsx_samples.py` before any run. Report
 - **Where rules alone failed:** headers with punctuation, abbreviations, Japanese, `Batch`/`Checked`/`NG`, merged two-row headers, a second table, and a second sheet.
 - **Demo (LIVE):** A was `NEEDS_AI` (`REQUIRED_NOT_MAPPED`). Meta proposed lot A, date B, inspected C and defective E (불합격). Nothing was asked and 0 edits were made. After the save, B was `REUSED` with the same mapping and no second proposal. B's own values (LOT 00521–00523, defective 9/0/5) were read, not A's.
 
+## Protected files: header language read on the server (user decision 2026-11-03)
+
+- **What leaves:** a protected file's headers still go masked, but the server first reads their languages by script
+  (Hangul, kana, kanji, Latin). It never sends a header to find out. The inspection terms of those languages stay
+  readable, and so do words built only from terms ("검사일자" = 검사 + 일자). The terms are the limits
+  `XLSX_HEADER_TERMS_EN/KO/JA/ZH` (DECISION; AGENT_ADMIN may change them at `POST /limits`). Every other word becomes
+  a token, CJK included.
+- **Gap found and fixed:** `egress.Masker` did not mask kana or kanji, so Japanese and Chinese words in protected
+  intake documents left the server as they were. It masks them now.
+
+Same 12 samples, LIVE, protected (headers masked):
+
+| | allow list only (before) | language + terms (now) | not masked |
+|---|---|---|---|
+| required accuracy | 0.944 | 1.000 | 1.000 |
+| hold rate | 0.333 | 0.028 | 0.028 |
+| edits | 2 (defective mapped to an Accepted column, twice; both were asked) | 0 | 0 |
+| cost | $0.21 | $0.13 | $0.11 |
+
+Reports: `xlsx_map_eval_MASKED_LIVE_allowlist.*` (before) and `xlsx_map_eval_MASKED_LIVE.*` (now).
+
 ## Not verified
 
 - **Review time:** needs people.
 - **Real company files:** none were provided. Twelve samples is a small denominator.
-- **Protected files with LIVE:** their headers go masked (allow-list words stay readable); only TEST_DOUBLE checks this.
+- **Languages beyond KO, EN, JA and ZH:** their headers are masked whole, so the proposal falls back to column types.
 - **AI-CFG-03 (PDF/DOCX reading choice) and AI-CFG-04 (operations-setting proposals):** follow-ups, not built.

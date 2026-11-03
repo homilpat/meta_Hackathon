@@ -165,9 +165,22 @@ def test_registered_form_needs_no_ai_and_protected_headers_go_masked(tmp_path):
     c = setup(tmp_path, p)
     iid, fid = upload_xlsx(c, s["builtin_control"]["data"])
     assert preview(c, iid, fid)["layout"]["route"] == "FORM"
-    iid, fid = upload_xlsx(c, book({"Data": [["Lot", "Inspected", "Accepted", "Rejected"], ["L-1", 10, 9, 1]]}))
-    propose(c, iid, fid)  # not a shipped fixture: protected, so header words outside the allow list are masked
-    assert "Accepted" not in p.sent[-1] and "Inspected" in p.sent[-1]
+    iid, fid = upload_xlsx(c, book({"ACME_PN4471": [["ACME Lot", "Inspected", "Accepted", "Rejected", "ロット", "検査数"],
+                                                    ["L-1", 10, 9, 1, "J-1", 10]]}))
+    propose(c, iid, fid)  # not a shipped fixture: protected; the header languages are read on the server
+    sent = p.sent[-1]
+    assert "ACME" not in sent and "PN4471" not in sent  # a company name and a code are values: tokens
+    assert all(w in sent for w in ("Inspected", "Accepted", "Rejected", "ロット", "検査数"))  # terms of en and ja
+
+
+def test_header_languages_and_terms_are_read_on_the_server():
+    from app.egress import Masker
+
+    assert lay.languages(["LOT 번호", "Qty"]) == ["ko", "en"] and lay.languages(["不良数", "ロット"]) == ["ja"]
+    assert lay.languages(["不良"]) == ["zh"]
+    ko = lay.header_terms(["ko"])
+    assert lay.mask_header("검사일자 홍길동", ko, Masker()) == "검사일자 [T1]"  # 검사 + 일자 stays; a name does not
+    assert lay.mask_header("ロット", ko, Masker()) == "[T1]"  # not a Korean term: masked (CJK too)
 
 
 def test_table_candidates_find_merged_two_row_headers_and_skip_meta_rows():

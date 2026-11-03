@@ -151,6 +151,14 @@ LIMITS: dict[str, Limit] = {
                                       "only (shown folded as 참고). Grades come from the sources, never from a "
                                       "model's confidence (spec §23.3)"),
     "MAX_REQUEST_ITEMS": Limit(20, "items per request card", "DEFAULT", "screen default; set by the owner"),
+    "XLSX_HEADER_TERMS_EN": Limit("lot,lots,batch,part,no,number,item,code,id,qty,quantity,inspected,inspection,insp,checked,check,sample,size,total,accepted,accept,rejected,reject,pass,passed,fail,failed,ng,ok,good,defect,defects,defective,date,unit,uom,value,measured,result,remarks,rate,count,pcs,ea",
+                                     "readable header terms, comma separated (EN)", "DECISION", "user, 2026-11-03: a protected file's header words go masked except the inspection terms of its language, read on the server (a header is a form label, not a value); terms a run may be built from"),
+    "XLSX_HEADER_TERMS_KO": Limit("로트,번호,품번,부품,검사,검사일,일자,수량,개수,합격,불합격,불량,양품,부적합,적합,단위,비고,측정,측정값,항목,값,총,합계,수입,출하,샘플,시료,판정,결과,날짜",
+                                     "readable header terms, comma separated (KO)", "DECISION", "user, 2026-11-03: a protected file's header words go masked except the inspection terms of its language, read on the server (a header is a form label, not a value); terms a run may be built from"),
+    "XLSX_HEADER_TERMS_JA": Limit("ロット,番号,品番,部品,検査,検査日,日付,数,数量,合格,不合格,不良,良品,単位,備考,測定,測定値,項目,値,合計,判定,結果",
+                                     "readable header terms, comma separated (JA)", "DECISION", "user, 2026-11-03: a protected file's header words go masked except the inspection terms of its language, read on the server (a header is a form label, not a value); terms a run may be built from"),
+    "XLSX_HEADER_TERMS_ZH": Limit("批次,批号,编号,品号,零件,检验,檢驗,检查,日期,数量,數量,合格,不合格,不良,良品,单位,單位,备注,測量,测量,项目,值,合计,判定,结果",
+                                     "readable header terms, comma separated (ZH)", "DECISION", "user, 2026-11-03: a protected file's header words go masked except the inspection terms of its language, read on the server (a header is a form label, not a value); terms a run may be built from"),
     "ALLOWED_TIMEZONES": Limit("Asia/Seoul,America/New_York,America/Chicago,America/Denver,America/Los_Angeles",
                                "IANA zones for due dates (KST = Asia/Seoul)", "DECISION",
                                "user, 2026-11-01: Korea and the US; the US has several zones, so each by its IANA "

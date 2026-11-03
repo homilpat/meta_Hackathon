@@ -84,17 +84,17 @@
    "real company files (none provided)"
   ],
   "scored": {
-   "code_sha": "95f57a8e926c9fcc123e480edad9d73ad306f0da+dirty",
+   "code_sha": "e1965af2117b824b33b6963ab63644a514925c64+dirty",
    "parser_version": "docparse-4",
    "evaluator": "scripts.xlsx_map_eval",
-   "evaluator_sha256": "5005c204d64b2e36",
+   "evaluator_sha256": "d7c0e1b37ab63b21",
    "sampling": {
     "temperature": 0.0,
     "seed": 1
    },
    "python": "3.12.8",
    "command": "python -m scripts.xlsx_map_eval score",
-   "at": "2026-11-03T06:58:03+00:00"
+   "at": "2026-11-03T07:21:59+00:00"
   }
  },
  "rows": [

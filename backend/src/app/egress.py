@@ -29,7 +29,8 @@ from app.workflow import Actor, now, require_role
 APPROVER_ROLE = "QA_PRODUCTION"
 # Form words that may stay readable: field labels and connectives, never values. Matching is case-insensitive.
 ALLOW = {"a", "an", "the", "of", "on", "in", "at", "by", "for", "to", "and", "or", "with", "from", "after", "before", "per", "is", "are", "was", "were", "be", "been", "this", "that", "these", "those", "as", "customer", "contact", "reference", "ref", "issued", "issue", "date", "delivery", "delivered", "found", "found:", "phenomenon", "request", "requested", "reply", "replies", "lot", "lots", "serial", "range", "part", "number", "no", "qty", "quantity", "defective", "inspected", "unit", "units", "total", "page", "fig", "figure", "table", "photo", "chart", "caption", "note", "notes", "remark", "remarks", "supplier", "audit", "finding", "standard", "clause", "department", "evidence", "due", "containment", "root", "cause", "corrective", "action", "actions", "report", "complaint", "supplement", "requirement", "attachment", "item", "items", "please", "within", "hours", "days", "week", "weeks", "result", "results", "status", "record", "records", "hold", "verification", "verified", "test", "고객", "고객사", "담당자", "참조번호", "발행", "발행일", "납품", "납품일", "발견", "발견일", "현상", "요청", "요청사항", "회신", "기한", "품번", "제품", "일련번호", "수량", "검사", "불량", "단위", "합계", "그림", "표", "사진", "차트", "비고", "보완", "자료", "결과", "원인", "추정", "조치", "봉쇄", "시정", "감사", "지적", "기준", "부서", "증거", "첨부", "및", "의", "에서"}
-WORD = re.compile(r"[A-Za-z가-힣]+(?:[-'][A-Za-z가-힣]+)*|\d+(?:[.,:/-]\d+)*")
+# kana and kanji runs too: a Japanese or Chinese word left the server unmasked before (found 2026-11-03)
+WORD = re.compile(r"[A-Za-z가-힣]+(?:[-'][A-Za-z가-힣]+)*|[぀-ヿ一-鿿]+|\d+(?:[.,:/-]\d+)*")
 DATE = re.compile(r"\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{2,4}")
 
 

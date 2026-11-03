@@ -1,0 +1,105 @@
+<!doctype html><meta charset='utf-8'><title>xlsx_map_eval_MASKED_LIVE</title><style>body{font:13px system-ui;margin:16px}td,th{border:1px solid #ccc;padding:2px 6px;vertical-align:top}table{border-collapse:collapse}pre{white-space:pre-wrap}</style><h1>xlsx_map_eval_MASKED_LIVE</h1><pre>{
+ &quot;run_mode&quot;: &quot;MASKED_LIVE&quot;,
+ &quot;trace&quot;: &quot;MASKED_LIVE-2026-11-03T070712+0000.jsonl&quot;,
+ &quot;collected&quot;: {
+  &quot;code_sha&quot;: &quot;95f57a8e926c9fcc123e480edad9d73ad306f0da+dirty&quot;,
+  &quot;parser_version&quot;: &quot;docparse-4&quot;,
+  &quot;evaluator&quot;: &quot;scripts.xlsx_map_eval&quot;,
+  &quot;evaluator_sha256&quot;: &quot;d7c0e1b37ab63b21&quot;,
+  &quot;sampling&quot;: {
+   &quot;temperature&quot;: 0.0,
+   &quot;seed&quot;: 1
+  },
+  &quot;python&quot;: &quot;3.12.8&quot;,
+  &quot;command&quot;: &quot;python -m scripts.xlsx_map_eval collect --live --protected&quot;,
+  &quot;at&quot;: &quot;2026-11-03T07:07:12+00:00&quot;,
+  &quot;run_mode&quot;: &quot;LIVE&quot;,
+  &quot;model&quot;: &quot;muse-spark-1.3&quot;,
+  &quot;budget_usd&quot;: 0.3
+ },
+ &quot;rules_alone&quot;: {
+  &quot;samples&quot;: 12,
+  &quot;required_fields&quot;: 36,
+  &quot;required_accuracy&quot;: 0.389,
+  &quot;hold_rate&quot;: 0.611,
+  &quot;edits&quot;: 22,
+  &quot;right_table&quot;: 10,
+  &quot;failed_samples&quot;: {
+   &quot;en_punctuated&quot;: {
+    &quot;lot&quot;: null,
+    &quot;inspected_qty&quot;: null,
+    &quot;defective_qty&quot;: null
+   },
+   &quot;merged_two_row&quot;: {
+    &quot;inspected_qty&quot;: null,
+    &quot;defective_qty&quot;: null
+   },
+   &quot;accepted_rejected&quot;: {
+    &quot;defective_qty&quot;: null
+   },
+   &quot;rejected_first&quot;: {
+    &quot;inspected_qty&quot;: null,
+    &quot;defective_qty&quot;: null
+   },
+   &quot;multiple_tables&quot;: {
+    &quot;lot&quot;: &quot;A&quot;,
+    &quot;inspected_qty&quot;: null,
+    &quot;defective_qty&quot;: null
+   },
+   &quot;two_sheets&quot;: {
+    &quot;lot&quot;: null,
+    &quot;inspected_qty&quot;: null,
+    &quot;defective_qty&quot;: null
+   },
+   &quot;japanese&quot;: {
+    &quot;lot&quot;: null,
+    &quot;inspected_qty&quot;: null,
+    &quot;defective_qty&quot;: null
+   },
+   &quot;abbreviations&quot;: {
+    &quot;lot&quot;: null,
+    &quot;inspected_qty&quot;: null
+   },
+   &quot;batch_leading_zero&quot;: {
+    &quot;lot&quot;: null,
+    &quot;inspected_qty&quot;: null,
+    &quot;defective_qty&quot;: null
+   }
+  }
+ },
+ &quot;ai_proposal&quot;: {
+  &quot;samples&quot;: 12,
+  &quot;required_fields&quot;: 36,
+  &quot;required_accuracy&quot;: 0.944,
+  &quot;hold_rate&quot;: 0.333,
+  &quot;edits&quot;: 2,
+  &quot;right_table&quot;: 12,
+  &quot;failed_samples&quot;: {
+   &quot;accepted_rejected&quot;: {
+    &quot;defective_qty&quot;: &quot;C&quot;
+   },
+   &quot;rejected_first&quot;: {
+    &quot;defective_qty&quot;: &quot;C&quot;
+   }
+  }
+ },
+ &quot;cost_usd&quot;: 0.2065,
+ &quot;gold&quot;: &quot;scripts/xlsx_samples.py (written before any run)&quot;,
+ &quot;not_evaluated&quot;: [
+  &quot;review time (needs people)&quot;,
+  &quot;real company files (none provided)&quot;
+ ],
+ &quot;scored&quot;: {
+  &quot;code_sha&quot;: &quot;e1965af2117b824b33b6963ab63644a514925c64+dirty&quot;,
+  &quot;parser_version&quot;: &quot;docparse-4&quot;,
+  &quot;evaluator&quot;: &quot;scripts.xlsx_map_eval&quot;,
+  &quot;evaluator_sha256&quot;: &quot;d7c0e1b37ab63b21&quot;,
+  &quot;sampling&quot;: {
+   &quot;temperature&quot;: 0.0,
+   &quot;seed&quot;: 1
+  },
+  &quot;python&quot;: &quot;3.12.8&quot;,
+  &quot;command&quot;: &quot;python -m scripts.xlsx_map_eval score&quot;,
+  &quot;at&quot;: &quot;2026-11-03T07:16:29+00:00&quot;
+ }
+}</pre><table><tr><th>sample</th><th>rules</th><th>ai</th></tr><tr><td>en_punctuated</td><td>{&quot;route&quot;: &quot;NEEDS_AI&quot;, &quot;reasons&quot;: [&quot;REQUIRED_NOT_MAPPED&quot;], &quot;right_table&quot;: true, &quot;correct&quot;: 0, &quot;held&quot;: 3, &quot;edits&quot;: 3, &quot;wrong&quot;: {&quot;lot&quot;: null, &quot;inspected_qty&quot;: null, &quot;defective_qty&quot;: null}}</td><td>{&quot;status&quot;: &quot;OK&quot;, &quot;issues&quot;: [], &quot;right_table&quot;: true, &quot;correct&quot;: 3, &quot;held&quot;: 0, &quot;edits&quot;: 0, &quot;wrong&quot;: {}, &quot;usage&quot;: {&quot;completion_tokens&quot;: 5391, &quot;prompt_tokens&quot;: 638, &quot;total_tokens&quot;: 6029, &quot;completion_tokens_details&quot;: {&quot;reasoning_tokens&quot;: 5136}, &quot;prompt_tokens_details&quot;: {&quot;cached_tokens&quot;: 0}}}</td></tr><tr><td>merged_two_row</td><td>{&quot;route&quot;: &quot;NEEDS_AI&quot;, &quot;reasons&quot;: [&quot;REQUIRED_NOT_MAPPED&quot;], &quot;right_table&quot;: true, &quot;correct&quot;: 1, &quot;held&quot;: 2, &quot;edits&quot;: 2, &quot;wrong&quot;: {&quot;inspected_qty&quot;: null, &quot;defective_qty&quot;: null}}</td><td>{&quot;status&quot;: &quot;OK&quot;, &quot;issues&quot;: [], &quot;right_table&quot;: true, &quot;correct&quot;: 3, &quot;held&quot;: 1, &quot;edits&quot;: 0, &quot;wrong&quot;: {}, &quot;usage&quot;: {&quot;completion_tokens&quot;: 5381, &quot;prompt_tokens&quot;: 648, &quot;total_tokens&quot;: 6029, &quot;completion_tokens_details&quot;: {&quot;reasoning_tokens&quot;: 5069}, &quot;prompt_tokens_details&quot;: {&quot;cached_tokens&quot;: 0}}}</td></tr><tr><td>accepted_rejected</td><td>{&quot;route&quot;: &quot;NEEDS_AI&quot;, &quot;reasons&quot;: [&quot;REQUIRED_NOT_MAPPED&quot;], &quot;right_table&quot;: true, &quot;correct&quot;: 2, &quot;held&quot;: 1, &quot;edits&quot;: 1, &quot;wrong&quot;: {&quot;defective_qty&quot;: null}}</td><td>{&quot;status&quot;: &quot;OK&quot;, &quot;issues&quot;: [], &quot;right_table&quot;: true, &quot;correct&quot;: 2, &quot;held&quot;: 1, &quot;edits&quot;: 1, &quot;wrong&quot;: {&quot;defective_qty&quot;: &quot;C&quot;}, &quot;usage&quot;: {&quot;completion_tokens&quot;: 4480, &quot;prompt_tokens&quot;: 579, &quot;total_tokens&quot;: 5059, &quot;completion_tokens_details&quot;: {&quot;reasoning_tokens&quot;: 4227}, &quot;prompt_tokens_details&quot;: {&quot;cached_tokens&quot;: 0}}}</td></tr><tr><td>rejected_first</td><td>{&quot;route&quot;: &quot;NEEDS_AI&quot;, &quot;reasons&quot;: [&quot;REQUIRED_NOT_MAPPED&quot;], &quot;right_table&quot;: true, &quot;correct&quot;: 1, &quot;held&quot;: 2, &quot;edits&quot;: 2, &quot;wrong&quot;: {&quot;inspected_qty&quot;: null, &quot;defective_qty&quot;: null}}</td><td>{&quot;status&quot;: &quot;OK&quot;, &quot;issues&quot;: [], &quot;right_table&quot;: true, &quot;correct&quot;: 2, &quot;held&quot;: 1, &quot;edits&quot;: 1, &quot;wrong&quot;: {&quot;defective_qty&quot;: &quot;C&quot;}, &quot;usage&quot;: {&quot;completion_tokens&quot;: 3799, &quot;prompt_tokens&quot;: 578, &quot;total_tokens&quot;: 4377, &quot;completion_tokens_details&quot;: {&quot;reasoning_tokens&quot;: 3525}, &quot;prompt_tokens_details&quot;: {&quot;cached_tokens&quot;: 0}}}</td></tr><tr><td>multiple_tables</td><td>{&quot;route&quot;: &quot;NEEDS_AI&quot;, &quot;reasons&quot;: [&quot;MULTIPLE_TABLES&quot;], &quot;right_table&quot;: false, &quot;correct&quot;: 0, &quot;held&quot;: 2, &quot;edits&quot;: 3, &quot;wrong&quot;: {&quot;lot&quot;: &quot;A&quot;, &quot;inspected_qty&quot;: null, &quot;defective_qty&quot;: null}}</td><td>{&quot;status&quot;: &quot;OK&quot;, &quot;issues&quot;: [], &quot;right_table&quot;: true, &quot;correct&quot;: 3, &quot;held&quot;: 0, &quot;edits&quot;: 0, &quot;wrong&quot;: {}, &quot;usage&quot;: {&quot;completion_tokens&quot;: 2553, &quot;prompt_tokens&quot;: 660, &quot;total_tokens&quot;: 3213, &quot;completion_tokens_details&quot;: {&quot;reasoning_tokens&quot;: 2295}, &quot;prompt_tokens_details&quot;: {&quot;cached_tokens&quot;: 0}}}</td></tr><tr><td>two_sheets</td><td>{&quot;route&quot;: &quot;NEEDS_AI&quot;, &quot;reasons&quot;: [&quot;MULTIPLE_TABLES&quot;], &quot;right_table&quot;: false, &quot;correct&quot;: 0, &quot;held&quot;: 3, &quot;edits&quot;: 3, &quot;wrong&quot;: {&quot;lot&quot;: null, &quot;inspected_qty&quot;: null, &quot;defective_qty&quot;: null}}</td><td>{&quot;status&quot;: &quot;OK&quot;, &quot;issues&quot;: [], &quot;right_table&quot;: true, &quot;correct&quot;: 3, &quot;held&quot;: 2, &quot;edits&quot;: 0, &quot;wrong&quot;: {}, &quot;usage&quot;: {&quot;completion_tokens&quot;: 3593, &quot;prompt_tokens&quot;: 662, &quot;total_tokens&quot;: 4255, &quot;completion_tokens_details&quot;: {&quot;reasoning_tokens&quot;: 3333}, &quot;prompt_tokens_details&quot;: {&quot;cached_tokens&quot;: 0}}}</td></tr><tr><td>japanese</td><td>{&quot;route&quot;: &quot;NEEDS_AI&quot;, &quot;reasons&quot;: [&quot;REQUIRED_NOT_MAPPED&quot;], &quot;right_table&quot;: true, &quot;correct&quot;: 0, &quot;held&quot;: 3, &quot;edits&quot;: 3, &quot;wrong&quot;: {&quot;lot&quot;: null, &quot;inspected_qty&quot;: null, &quot;defective_qty&quot;: null}}</td><td>{&quot;status&quot;: &quot;OK&quot;, &quot;issues&quot;: [], &quot;right_table&quot;: true, &quot;correct&quot;: 3, &quot;held&quot;: 0, &quot;edits&quot;: 0, &quot;wrong&quot;: {}, &quot;usage&quot;: {&quot;completion_tokens&quot;: 1385, &quot;prompt_tokens&quot;: 576, &quot;total_tokens&quot;: 1961, &quot;completion_tokens_details&quot;: {&quot;reasoning_tokens&quot;: 1129}, &quot;prompt_tokens_details&quot;: {&quot;cached_tokens&quot;: 0}}}</td></tr><tr><td>abbreviations</td><td>{&quot;route&quot;: &quot;NEEDS_AI&quot;, &quot;reasons&quot;: [&quot;REQUIRED_NOT_MAPPED&quot;], &quot;right_table&quot;: true, &quot;correct&quot;: 1, &quot;held&quot;: 2, &quot;edits&quot;: 2, &quot;wrong&quot;: {&quot;lot&quot;: null, &quot;inspected_qty&quot;: null}}</td><td>{&quot;status&quot;: &quot;OK&quot;, &quot;issues&quot;: [], &quot;right_table&quot;: true, &quot;correct&quot;: 3, &quot;held&quot;: 2, &quot;edits&quot;: 0, &quot;wrong&quot;: {}, &quot;usage&quot;: {&quot;completion_tokens&quot;: 5145, &quot;prompt_tokens&quot;: 563, &quot;total_tokens&quot;: 5708, &quot;completion_tokens_details&quot;: {&quot;reasoning_tokens&quot;: 4912}, &quot;prompt_tokens_details&quot;: {&quot;cached_tokens&quot;: 0}}}</td></tr><tr><td>missing_defective</td><td>{&quot;route&quot;: &quot;NEEDS_AI&quot;, &quot;reasons&quot;: [&quot;REQUIRED_NOT_MAPPED&quot;], &quot;right_table&quot;: true, &quot;correct&quot;: 3, &quot;held&quot;: 1, &quot;edits&quot;: 0, &quot;wrong&quot;: {}}</td><td>{&quot;status&quot;: &quot;OK&quot;, &quot;issues&quot;: [&quot;REQUIRED_NOT_MAPPED&quot;], &quot;right_table&quot;: true, &quot;correct&quot;: 3, &quot;held&quot;: 1, &quot;edits&quot;: 0, &quot;wrong&quot;: {}, &quot;usage&quot;: {&quot;completion_tokens&quot;: 3716, &quot;prompt_tokens&quot;: 554, &quot;total_tokens&quot;: 4270, &quot;completion_tokens_details&quot;: {&quot;reasoning_tokens&quot;: 3452}, &quot;prompt_tokens_details&quot;: {&quot;cached_tokens&quot;: 0}}}</td></tr><tr><td>builtin_control</td><td>{&quot;route&quot;: &quot;FORM&quot;, &quot;reasons&quot;: [], &quot;right_table&quot;: true, &quot;correct&quot;: 3, &quot;held&quot;: 0, &quot;edits&quot;: 0, &quot;wrong&quot;: {}}</td><td>{&quot;status&quot;: &quot;OK&quot;, &quot;issues&quot;: [], &quot;right_table&quot;: true, &quot;correct&quot;: 3, &quot;held&quot;: 0, &quot;edits&quot;: 0, &quot;wrong&quot;: {}, &quot;usage&quot;: {&quot;completion_tokens&quot;: 2800, &quot;prompt_tokens&quot;: 631, &quot;total_tokens&quot;: 3431, &quot;completion_tokens_details&quot;: {&quot;reasoning_tokens&quot;: 2519}, &quot;prompt_tokens_details&quot;: {&quot;cached_tokens&quot;: 0}}}</td></tr><tr><td>batch_leading_zero</td><td>{&quot;route&quot;: &quot;NEEDS_AI&quot;, &quot;reasons&quot;: [&quot;REQUIRED_NOT_MAPPED&quot;], &quot;right_table&quot;: true, &quot;correct&quot;: 0, &quot;held&quot;: 3, &quot;edits&quot;: 3, &quot;wrong&quot;: {&quot;lot&quot;: null, &quot;inspected_qty&quot;: null, &quot;defective_qty&quot;: null}}</td><td>{&quot;status&quot;: &quot;OK&quot;, &quot;issues&quot;: [], &quot;right_table&quot;: true, &quot;correct&quot;: 3, &quot;held&quot;: 3, &quot;edits&quot;: 0, &quot;wrong&quot;: {}, &quot;usage&quot;: {&quot;completion_tokens&quot;: 2592, &quot;prompt_tokens&quot;: 565, &quot;total_tokens&quot;: 3157, &quot;completion_tokens_details&quot;: {&quot;reasoning_tokens&quot;: 2333}, &quot;prompt_tokens_details&quot;: {&quot;cached_tokens&quot;: 369}}}</td></tr><tr><td>meta_rows</td><td>{&quot;route&quot;: &quot;FORM&quot;, &quot;reasons&quot;: [], &quot;right_table&quot;: true, &quot;correct&quot;: 3, &quot;held&quot;: 0, &quot;edits&quot;: 0, &quot;wrong&quot;: {}}</td><td>{&quot;status&quot;: &quot;OK&quot;, &quot;issues&quot;: [], &quot;right_table&quot;: true, &quot;correct&quot;: 3, &quot;held&quot;: 1, &quot;edits&quot;: 0, &quot;wrong&quot;: {}, &quot;usage&quot;: {&quot;completion_tokens&quot;: 5609, &quot;prompt_tokens&quot;: 615, &quot;total_tokens&quot;: 6224, &quot;completion_tokens_details&quot;: {&quot;reasoning_tokens&quot;: 5342}, &quot;prompt_tokens_details&quot;: {&quot;cached_tokens&quot;: 0}}}</td></tr></table>

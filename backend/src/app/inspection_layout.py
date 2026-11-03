@@ -266,10 +266,57 @@ def schema(cands: list[dict]) -> dict:
             "unresolved": {"type": "array", "items": {"type": "string", "enum": list(ix.FIELDS)}}}}}}
 
 
+# --- protected files: the server reads the header language and keeps that language's inspection terms readable --
+SCRIPT = {"ko": re.compile(r"[가-힣]"), "ja": re.compile(r"[\u3040-\u30ff]"), "zh": re.compile(r"[\u4e00-\u9fff]"),
+          "en": re.compile(r"[A-Za-z]")}
+HEADER_WORD = re.compile(r"[A-Za-z]+|[가-힣]+|[\u3040-\u30ff\u4e00-\u9fff]+|\d+(?:[.,:/-]\d+)*")
+
+
+def languages(texts: list[str]) -> list[str]:
+    """Header languages by script, counted on the server (nothing is sent to find them out). Kana means Japanese
+    even beside kanji; kanji alone means Chinese."""
+    t = " ".join(texts)
+    found = [k for k, rx in SCRIPT.items() if rx.search(t)]
+    return [k for k in found if not (k == "zh" and "ja" in found)] or ["en"]
+
+
+def header_terms(langs: list[str]) -> set[str]:
+    """The readable inspection terms of these languages (limits XLSX_HEADER_TERMS_<LANG>, AGENT_ADMIN may change
+    them) plus the intake form words: labels of a form, never values."""
+    from app import limits
+    from app.egress import ALLOW
+
+    out = set(ALLOW)
+    for lang in langs:
+        out |= {w.strip().lower() for w in limits.get(f"XLSX_HEADER_TERMS_{lang.upper()}").split(",") if w.strip()}
+    return out
+
+
+def _readable(word: str, terms: set[str]) -> bool:
+    """A term, or a run made only of terms ("검사일자" = 검사 + 일자, "不良数" = 不良 + 数)."""
+    w = word.lower()
+    ok = [True] + [False] * len(w)
+    for i in range(len(w)):
+        if ok[i]:
+            for j in range(i + 1, len(w) + 1):
+                if w[i:j] in terms:
+                    ok[j] = True
+    return ok[-1]
+
+
+def mask_header(text: str, terms: set[str], masker) -> str:
+    """Every word of a header that is not a term of its language becomes a token, CJK included."""
+    return HEADER_WORD.sub(lambda m: m.group(0) if not m.group(0)[0].isdigit() and _readable(m.group(0), terms)
+                           else masker.token(m.group(0)), text or "")
+
+
 def sent_view(cands: list[dict], protected: bool, masker) -> list[dict]:
-    """What may leave: header texts (masked when the file is protected) and column types, never values."""
+    """What may leave: header texts (masked when the file is protected, except its language's inspection terms) and
+    column types, never values."""
+    terms = header_terms(languages([h for c in cands for h in c["columns"].values()])) if protected else set()
+
     def m(t):
-        return masker.mask(t) if protected else t
+        return mask_header(t, terms, masker) if protected else t
     return [{"id": c["id"], "range": m(c["range"]), "sheet": m(c["sheet"]), "header_rows": c["header_rows"],
              "data_rows": c["data_rows"], "merged_header": c["merged_header"],
              "columns": [{"column": col, "header": m(h), "types": c["types"].get(col, {})}

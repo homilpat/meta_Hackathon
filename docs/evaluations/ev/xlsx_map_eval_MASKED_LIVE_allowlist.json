@@ -1,0 +1,550 @@
+{
+ "summary": {
+  "run_mode": "MASKED_LIVE",
+  "trace": "MASKED_LIVE-2026-11-03T070712+0000.jsonl",
+  "collected": {
+   "code_sha": "95f57a8e926c9fcc123e480edad9d73ad306f0da+dirty",
+   "parser_version": "docparse-4",
+   "evaluator": "scripts.xlsx_map_eval",
+   "evaluator_sha256": "d7c0e1b37ab63b21",
+   "sampling": {
+    "temperature": 0.0,
+    "seed": 1
+   },
+   "python": "3.12.8",
+   "command": "python -m scripts.xlsx_map_eval collect --live --protected",
+   "at": "2026-11-03T07:07:12+00:00",
+   "run_mode": "LIVE",
+   "model": "muse-spark-1.3",
+   "budget_usd": 0.3
+  },
+  "rules_alone": {
+   "samples": 12,
+   "required_fields": 36,
+   "required_accuracy": 0.389,
+   "hold_rate": 0.611,
+   "edits": 22,
+   "right_table": 10,
+   "failed_samples": {
+    "en_punctuated": {
+     "lot": null,
+     "inspected_qty": null,
+     "defective_qty": null
+    },
+    "merged_two_row": {
+     "inspected_qty": null,
+     "defective_qty": null
+    },
+    "accepted_rejected": {
+     "defective_qty": null
+    },
+    "rejected_first": {
+     "inspected_qty": null,
+     "defective_qty": null
+    },
+    "multiple_tables": {
+     "lot": "A",
+     "inspected_qty": null,
+     "defective_qty": null
+    },
+    "two_sheets": {
+     "lot": null,
+     "inspected_qty": null,
+     "defective_qty": null
+    },
+    "japanese": {
+     "lot": null,
+     "inspected_qty": null,
+     "defective_qty": null
+    },
+    "abbreviations": {
+     "lot": null,
+     "inspected_qty": null
+    },
+    "batch_leading_zero": {
+     "lot": null,
+     "inspected_qty": null,
+     "defective_qty": null
+    }
+   }
+  },
+  "ai_proposal": {
+   "samples": 12,
+   "required_fields": 36,
+   "required_accuracy": 0.944,
+   "hold_rate": 0.333,
+   "edits": 2,
+   "right_table": 12,
+   "failed_samples": {
+    "accepted_rejected": {
+     "defective_qty": "C"
+    },
+    "rejected_first": {
+     "defective_qty": "C"
+    }
+   }
+  },
+  "cost_usd": 0.2065,
+  "gold": "scripts/xlsx_samples.py (written before any run)",
+  "not_evaluated": [
+   "review time (needs people)",
+   "real company files (none provided)"
+  ],
+  "scored": {
+   "code_sha": "e1965af2117b824b33b6963ab63644a514925c64+dirty",
+   "parser_version": "docparse-4",
+   "evaluator": "scripts.xlsx_map_eval",
+   "evaluator_sha256": "d7c0e1b37ab63b21",
+   "sampling": {
+    "temperature": 0.0,
+    "seed": 1
+   },
+   "python": "3.12.8",
+   "command": "python -m scripts.xlsx_map_eval score",
+   "at": "2026-11-03T07:16:29+00:00"
+  }
+ },
+ "rows": [
+  {
+   "sample": "en_punctuated",
+   "rules": {
+    "route": "NEEDS_AI",
+    "reasons": [
+     "REQUIRED_NOT_MAPPED"
+    ],
+    "right_table": true,
+    "correct": 0,
+    "held": 3,
+    "edits": 3,
+    "wrong": {
+     "lot": null,
+     "inspected_qty": null,
+     "defective_qty": null
+    }
+   },
+   "ai": {
+    "status": "OK",
+    "issues": [],
+    "right_table": true,
+    "correct": 3,
+    "held": 0,
+    "edits": 0,
+    "wrong": {},
+    "usage": {
+     "completion_tokens": 5391,
+     "prompt_tokens": 638,
+     "total_tokens": 6029,
+     "completion_tokens_details": {
+      "reasoning_tokens": 5136
+     },
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     }
+    }
+   }
+  },
+  {
+   "sample": "merged_two_row",
+   "rules": {
+    "route": "NEEDS_AI",
+    "reasons": [
+     "REQUIRED_NOT_MAPPED"
+    ],
+    "right_table": true,
+    "correct": 1,
+    "held": 2,
+    "edits": 2,
+    "wrong": {
+     "inspected_qty": null,
+     "defective_qty": null
+    }
+   },
+   "ai": {
+    "status": "OK",
+    "issues": [],
+    "right_table": true,
+    "correct": 3,
+    "held": 1,
+    "edits": 0,
+    "wrong": {},
+    "usage": {
+     "completion_tokens": 5381,
+     "prompt_tokens": 648,
+     "total_tokens": 6029,
+     "completion_tokens_details": {
+      "reasoning_tokens": 5069
+     },
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     }
+    }
+   }
+  },
+  {
+   "sample": "accepted_rejected",
+   "rules": {
+    "route": "NEEDS_AI",
+    "reasons": [
+     "REQUIRED_NOT_MAPPED"
+    ],
+    "right_table": true,
+    "correct": 2,
+    "held": 1,
+    "edits": 1,
+    "wrong": {
+     "defective_qty": null
+    }
+   },
+   "ai": {
+    "status": "OK",
+    "issues": [],
+    "right_table": true,
+    "correct": 2,
+    "held": 1,
+    "edits": 1,
+    "wrong": {
+     "defective_qty": "C"
+    },
+    "usage": {
+     "completion_tokens": 4480,
+     "prompt_tokens": 579,
+     "total_tokens": 5059,
+     "completion_tokens_details": {
+      "reasoning_tokens": 4227
+     },
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     }
+    }
+   }
+  },
+  {
+   "sample": "rejected_first",
+   "rules": {
+    "route": "NEEDS_AI",
+    "reasons": [
+     "REQUIRED_NOT_MAPPED"
+    ],
+    "right_table": true,
+    "correct": 1,
+    "held": 2,
+    "edits": 2,
+    "wrong": {
+     "inspected_qty": null,
+     "defective_qty": null
+    }
+   },
+   "ai": {
+    "status": "OK",
+    "issues": [],
+    "right_table": true,
+    "correct": 2,
+    "held": 1,
+    "edits": 1,
+    "wrong": {
+     "defective_qty": "C"
+    },
+    "usage": {
+     "completion_tokens": 3799,
+     "prompt_tokens": 578,
+     "total_tokens": 4377,
+     "completion_tokens_details": {
+      "reasoning_tokens": 3525
+     },
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     }
+    }
+   }
+  },
+  {
+   "sample": "multiple_tables",
+   "rules": {
+    "route": "NEEDS_AI",
+    "reasons": [
+     "MULTIPLE_TABLES"
+    ],
+    "right_table": false,
+    "correct": 0,
+    "held": 2,
+    "edits": 3,
+    "wrong": {
+     "lot": "A",
+     "inspected_qty": null,
+     "defective_qty": null
+    }
+   },
+   "ai": {
+    "status": "OK",
+    "issues": [],
+    "right_table": true,
+    "correct": 3,
+    "held": 0,
+    "edits": 0,
+    "wrong": {},
+    "usage": {
+     "completion_tokens": 2553,
+     "prompt_tokens": 660,
+     "total_tokens": 3213,
+     "completion_tokens_details": {
+      "reasoning_tokens": 2295
+     },
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     }
+    }
+   }
+  },
+  {
+   "sample": "two_sheets",
+   "rules": {
+    "route": "NEEDS_AI",
+    "reasons": [
+     "MULTIPLE_TABLES"
+    ],
+    "right_table": false,
+    "correct": 0,
+    "held": 3,
+    "edits": 3,
+    "wrong": {
+     "lot": null,
+     "inspected_qty": null,
+     "defective_qty": null
+    }
+   },
+   "ai": {
+    "status": "OK",
+    "issues": [],
+    "right_table": true,
+    "correct": 3,
+    "held": 2,
+    "edits": 0,
+    "wrong": {},
+    "usage": {
+     "completion_tokens": 3593,
+     "prompt_tokens": 662,
+     "total_tokens": 4255,
+     "completion_tokens_details": {
+      "reasoning_tokens": 3333
+     },
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     }
+    }
+   }
+  },
+  {
+   "sample": "japanese",
+   "rules": {
+    "route": "NEEDS_AI",
+    "reasons": [
+     "REQUIRED_NOT_MAPPED"
+    ],
+    "right_table": true,
+    "correct": 0,
+    "held": 3,
+    "edits": 3,
+    "wrong": {
+     "lot": null,
+     "inspected_qty": null,
+     "defective_qty": null
+    }
+   },
+   "ai": {
+    "status": "OK",
+    "issues": [],
+    "right_table": true,
+    "correct": 3,
+    "held": 0,
+    "edits": 0,
+    "wrong": {},
+    "usage": {
+     "completion_tokens": 1385,
+     "prompt_tokens": 576,
+     "total_tokens": 1961,
+     "completion_tokens_details": {
+      "reasoning_tokens": 1129
+     },
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     }
+    }
+   }
+  },
+  {
+   "sample": "abbreviations",
+   "rules": {
+    "route": "NEEDS_AI",
+    "reasons": [
+     "REQUIRED_NOT_MAPPED"
+    ],
+    "right_table": true,
+    "correct": 1,
+    "held": 2,
+    "edits": 2,
+    "wrong": {
+     "lot": null,
+     "inspected_qty": null
+    }
+   },
+   "ai": {
+    "status": "OK",
+    "issues": [],
+    "right_table": true,
+    "correct": 3,
+    "held": 2,
+    "edits": 0,
+    "wrong": {},
+    "usage": {
+     "completion_tokens": 5145,
+     "prompt_tokens": 563,
+     "total_tokens": 5708,
+     "completion_tokens_details": {
+      "reasoning_tokens": 4912
+     },
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     }
+    }
+   }
+  },
+  {
+   "sample": "missing_defective",
+   "rules": {
+    "route": "NEEDS_AI",
+    "reasons": [
+     "REQUIRED_NOT_MAPPED"
+    ],
+    "right_table": true,
+    "correct": 3,
+    "held": 1,
+    "edits": 0,
+    "wrong": {}
+   },
+   "ai": {
+    "status": "OK",
+    "issues": [
+     "REQUIRED_NOT_MAPPED"
+    ],
+    "right_table": true,
+    "correct": 3,
+    "held": 1,
+    "edits": 0,
+    "wrong": {},
+    "usage": {
+     "completion_tokens": 3716,
+     "prompt_tokens": 554,
+     "total_tokens": 4270,
+     "completion_tokens_details": {
+      "reasoning_tokens": 3452
+     },
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     }
+    }
+   }
+  },
+  {
+   "sample": "builtin_control",
+   "rules": {
+    "route": "FORM",
+    "reasons": [],
+    "right_table": true,
+    "correct": 3,
+    "held": 0,
+    "edits": 0,
+    "wrong": {}
+   },
+   "ai": {
+    "status": "OK",
+    "issues": [],
+    "right_table": true,
+    "correct": 3,
+    "held": 0,
+    "edits": 0,
+    "wrong": {},
+    "usage": {
+     "completion_tokens": 2800,
+     "prompt_tokens": 631,
+     "total_tokens": 3431,
+     "completion_tokens_details": {
+      "reasoning_tokens": 2519
+     },
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     }
+    }
+   }
+  },
+  {
+   "sample": "batch_leading_zero",
+   "rules": {
+    "route": "NEEDS_AI",
+    "reasons": [
+     "REQUIRED_NOT_MAPPED"
+    ],
+    "right_table": true,
+    "correct": 0,
+    "held": 3,
+    "edits": 3,
+    "wrong": {
+     "lot": null,
+     "inspected_qty": null,
+     "defective_qty": null
+    }
+   },
+   "ai": {
+    "status": "OK",
+    "issues": [],
+    "right_table": true,
+    "correct": 3,
+    "held": 3,
+    "edits": 0,
+    "wrong": {},
+    "usage": {
+     "completion_tokens": 2592,
+     "prompt_tokens": 565,
+     "total_tokens": 3157,
+     "completion_tokens_details": {
+      "reasoning_tokens": 2333
+     },
+     "prompt_tokens_details": {
+      "cached_tokens": 369
+     }
+    }
+   }
+  },
+  {
+   "sample": "meta_rows",
+   "rules": {
+    "route": "FORM",
+    "reasons": [],
+    "right_table": true,
+    "correct": 3,
+    "held": 0,
+    "edits": 0,
+    "wrong": {}
+   },
+   "ai": {
+    "status": "OK",
+    "issues": [],
+    "right_table": true,
+    "correct": 3,
+    "held": 1,
+    "edits": 0,
+    "wrong": {},
+    "usage": {
+     "completion_tokens": 5609,
+     "prompt_tokens": 615,
+     "total_tokens": 6224,
+     "completion_tokens_details": {
+      "reasoning_tokens": 5342
+     },
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     }
+    }
+   }
+  }
+ ]
+}

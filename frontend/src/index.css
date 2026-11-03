@@ -129,3 +129,5 @@ table{font-size:13px}th{font-size:12px}td{padding:9px 10px}
 .sidebar nav{flex:1 1 auto;min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#344255 transparent}
 /* every page fills its column and starts at the top, so boxes keep one size from screen to screen (user 2026-11-04) */
 .page{width:100%;align-self:start}
+/* the agent page is one column: heading, conversation and composer share its edges and it widens with the screen */
+.agent-heading,.conversation,.composer{max-width:min(1240px,100%);width:100%;margin-left:auto;margin-right:auto}

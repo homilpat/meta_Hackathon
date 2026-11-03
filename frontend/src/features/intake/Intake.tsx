@@ -62,6 +62,7 @@ export function IntakeCard({ ctx, intake }: { ctx: Ctx; intake: J }) {
   const [target, setTarget] = useState('NEW')
   const [cases, setCases] = useState<J[]>([])
   const [linked, setLinked] = useState<J>(null)
+  const [editing, setEditing] = useState<string[]>([])  // rows a person chose to correct
   const id = intake.intake_id
   useEffect(() => { ctx.api(`/intakes/${id}/draft`).then((v: J) => setView(v?.intake_id ? v : null)).catch(() => setView(null)) }, [id, ctx.api, ctx.tick]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { ctx.api('/cases').then((cs: J) => setCases(Array.isArray(cs) ? cs.filter(c => c?.case_id) : [])).catch(() => setCases([])) }, [ctx.api]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -95,19 +96,21 @@ export function IntakeCard({ ctx, intake }: { ctx: Ctx; intake: J }) {
       {f.egress?.events?.slice(-1)[0]?.event === 'REQUESTED' && <span className="muted"> 승인 대기</span>}</span>)}</div>
     {(view?.files ?? intake.files ?? []).filter((f: J) => /\.xlsx$/i.test(f.name ?? '')).map((f: J) =>
       <InspectionXlsx key={`x${f.file_id}`} ctx={ctx} intakeId={id} f={f} cases={cases}/>)}
-    {!d ? <button className="button primary" disabled={busy} onClick={analyze}>{busy ? '분석 중…' : '문서 분석'}</button> : <>
+    {!d ? !(view?.files ?? intake.files ?? []).every((f: J) => /\.xlsx$/i.test(f.name ?? '')) && <button className="button primary" disabled={busy} onClick={analyze}>{busy ? '분석 중…' : '문서 분석'}</button> : <>
       {d.mode === 'TEST_DOUBLE' && <p><Badge tone="amber">TEST_DOUBLE (Meta 아님)</Badge></p>}
       {d.error && <Note>{d.error}</Note>}
       {d.withheld?.length > 0 && <Note>외부 전송 승인 안 된 파일은 모델에 보내지 않았습니다: {d.withheld.map((w: J) => w.name).join(', ')}</Note>}
       {d.egress?.unread?.elements > 0 && <Note>문서 일부만 읽었습니다 ({d.egress.unread.of - d.egress.unread.elements}/{d.egress.unread.of} 요소).{d.egress.unread.missing?.length > 0 && ` 찾지 못한 항목: ${d.egress.unread.missing.map((k: string) => FIELD[k] ?? k).join(', ')}.`} <button className="citation" disabled={busy} onClick={() => run(async () => setView(await ctx.api(`/intakes/${id}/analyze?read=WHOLE`, 'POST', undefined, true)))}>전체 읽기로 다시 분석</button></Note>}
       {d.egress?.files?.filter((x: J) => x.not_sent_from).map((x: J) => <Note key={x.file_id}>{x.name}: 비용 한도로 {x.not_sent_from}부터 {x.not_sent}개 요소는 모델에 보내지 않았습니다 (원문 위치로 직접 확인)</Note>)}
-      <div className="table-wrap"><table><thead><tr><th>항목</th><th>상태</th><th>값</th><th>원문</th><th>수정 (사유 필수)</th></tr></thead><tbody>
+      <div className="table-wrap"><table><thead><tr><th>항목</th><th>상태</th><th>값</th><th>원문</th><th>수정</th></tr></thead><tbody>
         {Object.entries(d.fields).map(([k, v]: [string, J]) => <tr key={k}><td>{FIELD[k] ?? k}{v.kind === 'HYPOTHESIS' && <> <Badge tone="violet">가설</Badge></>}</td>
           <td><Badge tone={STATUS[v.status]?.[1] ?? 'slate'}>{STATUS[v.status]?.[0] ?? v.status}</Badge></td>
-          <td className="wrap">{v.value ?? '-'}{v.candidates?.map((c: J, n: number) => <div key={n}><button className="citation" onClick={() => pick(k, c)}>{c.value} 선택</button> <span className="muted">{c.sources.map(where).filter(Boolean).join(', ')}</span></div>)}</td>
+          <td className="wrap"><span data-no-ko>{v.value ?? '-'}</span>{v.candidates?.map((c: J, n: number) => <div key={n}><button className="citation" onClick={() => pick(k, c)}>{c.value} 선택</button> <span className="muted">{c.sources.map(where).filter(Boolean).join(', ')}</span></div>)}</td>
           <td className="wrap">{v.sources?.map((s: J, n: number) => <div key={n}><span className="muted" data-no-ko>"{s.excerpt}"</span>{where(s) && <span className="muted"> ({where(s)})</span>}</div>)}{v.edit && <span className="muted">{v.edit.by}: {v.edit.reason} ({v.edit.source_check})</span>}{v.rejected?.length > 0 && <span className="muted">제외: {v.rejected[0].problems.join('; ')}</span>}</td>
-          <td><input aria-label={`${FIELD[k] ?? k} 값`} value={edits[k]?.value ?? ''} placeholder="새 값" onChange={e => setEdits(x => ({ ...x, [k]: { ...x[k], reason: x[k]?.reason ?? '', value: e.target.value } }))}/>
-            <input aria-label={`${FIELD[k] ?? k} 수정 사유`} value={edits[k]?.reason ?? ''} placeholder="사유" onChange={e => setEdits(x => ({ ...x, [k]: { ...x[k], value: x[k]?.value ?? '', reason: e.target.value } }))}/></td></tr>)}
+          <td>{!['CONFLICT', 'NEEDS_CONFIRMATION'].includes(v.status) && !editing.includes(k) && !edits[k]
+            ? <button className="citation" onClick={() => setEditing(x => [...x, k])}>수정</button> : <>
+            <input aria-label={`${FIELD[k] ?? k} 값`} value={edits[k]?.value ?? ''} placeholder="새 값" onChange={e => setEdits(x => ({ ...x, [k]: { ...x[k], reason: x[k]?.reason ?? '', value: e.target.value } }))}/>
+            <input aria-label={`${FIELD[k] ?? k} 수정 사유`} value={edits[k]?.reason ?? ''} placeholder="사유" onChange={e => setEdits(x => ({ ...x, [k]: { ...x[k], value: x[k]?.value ?? '', reason: e.target.value } }))}/></>}</td></tr>)}
       </tbody></table></div>
       {Object.keys(edits).length > 0 && <button className="button secondary" disabled={busy} onClick={saveEdits}>수정 저장 (새 버전)</button>}
       {d.links?.length > 0 && <div><b>그림·차트 설명 (AI가 본 내용, 불량 판정 아님)</b>{d.links.map((l: J, n: number) => <p key={n} className="muted wrap">{l.place ? `${l.place}: ` : ''}{l.text}{l.ambiguous ? ' (불확실)' : ''}</p>)}</div>}

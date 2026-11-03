@@ -1,3 +1,4 @@
+import { useScreenKorean } from './components/Ko'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { ApiError, request } from './api/client'
 import { Badge, Card, Empty, Icon } from './components/ui'
@@ -55,6 +56,7 @@ export default function App() {
   }, [user])
   const refresh = useCallback(() => setTick(t => t + 1), [])
 
+  useScreenKorean(user)
   useEffect(() => { fetch('/provider').then(r => r.json()).then(setProvider).catch(() => setProvider(null)) }, [])
   useEffect(() => {
     api('/me').then(setMe).catch(() => setMe(null))

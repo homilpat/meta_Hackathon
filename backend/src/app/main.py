@@ -41,6 +41,7 @@ from app.egress import make_egress_router
 from app.eightd import make_v5_router
 from app.experience import make_experience_router
 from app.export import make_export_router
+from app.translate import make_translate_router
 from app.ingestion import SyntheticBundle, normalize
 from app.intake import make_intake_router
 from app.intake_case import make_intake_case_router
@@ -193,6 +194,7 @@ def create_app(database_url: str | None = None,
     app.include_router(make_experience_router(sessions, current_user, app.state.provider))
     app.include_router(make_docs_router(sessions, current_user, app.state.provider))
     app.include_router(make_export_router(sessions, current_user))
+    app.include_router(make_translate_router(current_user, app.state.provider))
     app.include_router(make_agent_router(app, sessions, current_user, app.state.provider))
     app.state.local_provider = LocalProvider.from_env()  # in-house model for protected files, if configured
     if app.state.local_provider is not None:

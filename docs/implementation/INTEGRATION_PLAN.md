@@ -27,3 +27,19 @@ Status: in progress. Each phase is committed only after its own checks pass. Not
 | P6 | XLS-IN-06, REL-FR-04, §25.6 | HTTP E2E from real bytes through to DOCX/PDF export and re-reads of DB, Queue and audit. Re-measure the loop (OFFLINE / REPLAY first; LIVE only within the approved budget, about $2.36 left). Final report |
 
 Out of scope (spec §28.7): mail, in-house APIs, company-specific XLSX output, a submission outbox.
+
+## P2 done: the investigation's steps and statuses (REL-FR-01..03)
+
+| Step | Where | Status |
+|---|---|---|
+| Investigate (the model picks read-only tools, including `calculate`) | `investigator.investigate` | — |
+| Structure check (strict JSON Schema; the API holds the model to it) | `REPORT_SCHEMA` | `JSON_ERROR` if broken |
+| Evidence, calculation and scope check (ids of this case; `calculation_id` resolved; stale source refused) | `report.validate_report`, `calculations.resolve` | — |
+| Required items (one grounded finding; every UNKNOWN has a next check or question; no finding deleted in a repair) | `investigator.required_missing`, `check` | `INCOMPLETE` (rules kept, item missing) |
+| Bounded repair: structured errors back to the model, `INVESTIGATION_MAX_REPAIRS` (2), stop on the same errors | `investigator.investigate` loop, `report.structured` | — |
+| Re-check | same | `VALIDATED`, or `VALIDATION_FAILED` with every attempt in `model_runs.attempts` |
+
+- **Calculations.** `calculations` table (migration 0026, append-only). The id is derived from case, operation, field, inputs and a hash of the input records. The model's value, unit and inputs are replaced by the server's. A stored report keeps the old `calc` field readable, and test doubles still use it: it is recomputed as before.
+- **Data warnings.** A quoted instruction or claim found in the data goes into `data_warnings`, which is checked for ids only, never as a claim.
+- **Limits.** Repairs count toward `INVESTIGATION_MAX_ROUNDS`, time and cost limits as before.
+- **Not done.** A server-side scan of tool results for instructions, the way intake flags them.

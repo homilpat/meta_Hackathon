@@ -132,7 +132,8 @@ def test_history_off_hides_tools_and_records_flag(env):
         {"classification": "UNKNOWN", "text": "t"}]})]
     run = c.post("/cases/C1/investigations", json={"use_history": False},
                  headers={**A, "Idempotency-Key": uuid.uuid4().hex}).json()
-    assert run["history"] == "OFF" and run["status"] == "VALIDATED"
+    # an UNKNOWN-only report keeps every rule but grounds nothing: INCOMPLETE under the task contract (§27.4)
+    assert run["history"] == "OFF" and run["status"] == "INCOMPLETE"
     assert "retrieve_historical_cases" not in provider.seen[0]
 
 
@@ -147,7 +148,9 @@ def test_history_on_tool_flow_and_egress(env):
                                                               "precedent_ids": []}]})]
     run = c.post("/cases/C1/investigations", json={"use_history": True},
                  headers={**A, "Idempotency-Key": uuid.uuid4().hex}).json()
-    assert run["history"] == "ON" and run["status"] == "VALIDATED", run["validation_errors"]
+    # rules kept, a next check proposed, but nothing grounded: insufficient evidence documented, not complete
+    assert run["history"] == "ON" and run["status"] == "INCOMPLETE", run["validation_errors"]
+    assert all(e.startswith("REQUIRED_ITEM") for e in run["validation_errors"])
     assert [t["ok"] for t in run["tool_calls"]] == [True, False]  # H11 is not eligible
     sent = "".join(provider.seen)
     assert "H02" in sent and "CONFIDENTIAL-MARKER" not in sent and '"H10"' not in sent

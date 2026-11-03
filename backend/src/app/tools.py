@@ -49,6 +49,13 @@ SPECS = [
     _fn("get_prediction", "SPI-only risk model scores for this case's boards (citable as PRED-n). "
         "Model output on a SYNTHETIC_LABEL, not an inspection result.",
         {"panel_id": {"type": "string"}, "board_id": {"type": "string"}}),
+    _fn("calculate", "Server calculation over this case's evidence: mean or sum of a numeric field, count, or "
+        "ratio (numerator ids within denominator ids). Returns a calculation_id to cite on a CALCULATED finding; "
+        "the server fills its value, unit and inputs. Refused when an input lacks the field.",
+        {"op": {"type": "string", "enum": ["mean", "sum", "count", "ratio"]}, "field": {"type": "string"},
+         "evidence_ids": {"type": "array", "items": {"type": "string"}, "maxItems": 200},
+         "denominator_evidence_ids": {"type": "array", "items": {"type": "string"}, "maxItems": 500}},
+        ["op", "evidence_ids"]),
     _fn("explain_prediction", "TreeSHAP attribution of one prediction's score (citable as XAI-n). "
         "Explains the model, not the physical cause.", {"prediction_id": {"type": "integer"}}, ["prediction_id"]),
 ]
@@ -106,6 +113,9 @@ class EvidenceTools:
         from app import ncr
         self._rows()  # same egress gate as raw evidence
         items = ncr.current(ncr._evidence(self.session, self.case_id))
+        from app.calculations import records
+
+        recs = records(self.session, self.case_id)
         aoi, spi = ncr._aoi(items), ncr.latest_spi_by_board(items)
         preds = {tuple(p.target_key): p for p in self._predictions()}
         fails = []
@@ -119,7 +129,8 @@ class EvidenceTools:
                 "repair": [repair["rec"]["disposition"], repair["ev"]] if repair else None,
                 "spi": {"mean_mm3": round(sum(i["rec"]["volume_mm3"] for i in rows) / len(rows), 4),
                         "evidence_ids": [i["ev"] for i in rows],
-                        "calc": {"op": "mean", "field": "volume_mm3"}} if rows else None,
+                        "calculation_id": self.calculate("mean", [i["ev"] for i in rows], "volume_mm3",
+                                                         recs=recs)["calculation_id"]} if rows else None,
                 "model": [f"PRED-{p.id}", round(p.risk_score, 4), round(p.threshold, 4)] if p else None})
         issues = Counter(i.code for i in self.session.scalars(
             select(DataQualityIssue).where(DataQualityIssue.case_id == self.case_id)))
@@ -153,6 +164,16 @@ class EvidenceTools:
                 and (panel_id is None or r["entity_key"][0] == panel_id)
                 and (board_id is None or (len(r["entity_key"]) > 1 and r["entity_key"][1] == board_id))]
         return {"total_matching": len(rows), "events": rows[:limit]}
+
+    def calculate(self, op: str, evidence_ids: list[str], field: str | None = None,
+                  denominator_evidence_ids: list[str] | None = None, recs: dict | None = None) -> dict:
+        from app.calculations import CalcError, compute
+
+        self._rows()  # same egress gate as raw evidence
+        try:
+            return compute(self.session, self.case_id, op, evidence_ids, field, denominator_evidence_ids, recs)
+        except CalcError as exc:
+            raise ToolError(str(exc)) from None
 
     def get_evidence(self, evidence_ids: list[str]) -> dict:
         if not isinstance(evidence_ids, list) or len(evidence_ids) > 20 or not all(

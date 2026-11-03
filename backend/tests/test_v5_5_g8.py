@@ -295,7 +295,9 @@ def test_hybrid_investigation_uses_read_only_tools_and_server_tasks_never_call_t
     ok(c.post("/cases/L/ncr/1/validate", headers=H("bob")))
     assert p.seen == []  # SERVER tasks ran without a single model call
     run = ok(c.post("/cases/L/investigations", json={"hybrid": True}, headers=H("alice")))
-    assert run["status"] == "VALIDATED" and run["mode"] == "TEST_DOUBLE", run["validation_errors"]
+    # every rule kept; it grounds no finding, so the task contract (§27.4) leaves it INCOMPLETE, not complete
+    assert run["status"] == "INCOMPLETE" and run["mode"] == "TEST_DOUBLE", run["validation_errors"]
+    assert all(e.startswith("REQUIRED_ITEM") for e in run["validation_errors"])
     calls = {t["tool_name"]: t for t in run["tool_calls"]}
     assert calls["get_evidence_gaps"]["ok"] and calls["search_experience"]["ok"]
     assert not calls["approve_document"]["ok"] and "unknown tool" in calls["approve_document"]["error"]

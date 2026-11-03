@@ -228,7 +228,7 @@ def judge(task: str, out: dict) -> dict:
                                                                        "arguments": "{}"}}]}])["score"]),
         "cited_only_what_tools_returned": cited <= out["returned"],
     }
-    text = json.dumps(rep, ensure_ascii=False)
+    text = json.dumps({k: v for k, v in rep.items() if k != "data_warnings"}, ensure_ascii=False)  # quotes: data
     validated = out["status"] == "VALIDATED"
     if task == "tool_failure/summary_fails":
         checks |= {"failure_recorded": any(c["tool"] == "get_case_summary" and not c["ok"] for c in out["tool_calls"]),

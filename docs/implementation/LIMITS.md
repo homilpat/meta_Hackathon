@@ -30,6 +30,7 @@ request schemas, so a change takes effect after a restart.
 | TOKENS_PER_ESTIMATE_TEXT | 1.34 | MEASURED | CUAD held-out LIVE, WHOLE: actual / byte-estimated prompt tokens |
 | TOKENS_PER_ESTIMATE_MAP | 2.3 | MEASURED | CUAD held-out LIVE, HYBRID: maps are word lists and cost more per byte |
 | INVESTIGATION_MAX_COST_USD | 0 (off) | DECISION | user, 2026-11-02: same rule as extraction (model input is the bound; the owner sets an amount). Replaces a fixed 30,000-token run cap that stopped 4 of 13 LIVE runs |
+| INVESTIGATION_MAX_REPAIRS | 2 | DEFAULT | starting value: fixes of a refused report per run (each is a paid call and counts toward the rounds); the same errors twice stop at once; 0 = no repair |
 | INVESTIGATION_MAX_ROUNDS | 5 | DEFAULT | starting value; LIVE runs used 3–5 |
 | INVESTIGATION_MAX_TOOL_CALLS | 8 | DEFAULT | starting value; LIVE runs used 4–6 |
 | INVESTIGATION_DEADLINE_S | 300 | DEFAULT | starting value: wall time of one run (LIVE runs took 50–70 s); each call is bounded by the provider timeout |

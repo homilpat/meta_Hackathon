@@ -212,6 +212,8 @@ class ModelRun(Base):
     error: Mapped[str | None] = mapped_column(Text)
     report_json: Mapped[str | None] = mapped_column(Text)
     validation_errors: Mapped[list] = mapped_column(JSON)
+    # every report attempt with its structured errors (spec §27.3); [] for runs before the repair loop
+    attempts: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     started_at: Mapped[str] = mapped_column(String(40))
     finished_at: Mapped[str] = mapped_column(String(40))
 
@@ -227,6 +229,26 @@ class ToolCall(Base):
     result_sha256: Mapped[str | None] = mapped_column(String(64))
     ok: Mapped[bool]
     error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class Calculation(Base):
+    """A server calculation a report may cite by id (spec §27.2): inputs, rule and a hash of the input records."""
+
+    __tablename__ = "calculations"
+
+    id: Mapped[str] = mapped_column(String(30), primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("quality_cases.id"), index=True)
+    operation: Mapped[str] = mapped_column(String(10))
+    field: Mapped[str | None] = mapped_column(String(60))
+    value: Mapped[float]
+    unit: Mapped[str | None] = mapped_column(String(20))
+    input_evidence_ids: Mapped[list] = mapped_column(JSON)
+    denominator_evidence_ids: Mapped[list] = mapped_column(JSON)
+    filters: Mapped[dict] = mapped_column(JSON)
+    missing_policy: Mapped[str] = mapped_column(Text)
+    denominator_definition: Mapped[str | None] = mapped_column(Text)
+    source_sha256: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[str] = mapped_column(String(40))
 
 
@@ -1124,7 +1146,7 @@ class LimitSetting(Base):
 
 
 # Audit rows are append-only at the database level, not just by convention.
-APPEND_ONLY = ("model_responses", "approval_events", "workflow_events", "doc_comments", "audit_chain",
+APPEND_ONLY = ("calculations", "model_responses", "approval_events", "workflow_events", "doc_comments", "audit_chain",
                "workflow_policies", "evidence_quality", "process_contexts", "affected_objects",
                "triage_assessments", "team_events", "actions", "action_events",
                "cause_hypotheses", "why_links", "experiments", "causal_decisions",

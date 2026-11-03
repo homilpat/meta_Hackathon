@@ -27,7 +27,8 @@ ADMIN_ROLE = "AGENT_ADMIN"
 OVERRIDES: dict[str, object] = {}  # recorded settings of this process (loaded at start, updated on change)
 RESTART = {"MAX_FILES_PER_UPLOAD", "MAX_REQUEST_ITEMS"}  # fixed in request schemas at start
 CHOICES = {"MODEL_RESPONSE_REUSE": {"ON", "OFF"}, "INVESTIGATION_REASONING_EFFORT": {"minimal", "default"}, "EXTRACT_MODE": {"WHOLE_FIRST", "HYBRID", "WHOLE", "AUTO"}}
-OFF_ALLOWED = {"MAX_COST_PER_MODEL_CALL_USD", "MODEL_TEMPERATURE", "MODEL_SEED", "INVESTIGATION_MAX_COST_USD"}  # 0 is a valid setting
+OFF_ALLOWED = {"MAX_COST_PER_MODEL_CALL_USD", "MODEL_TEMPERATURE", "MODEL_SEED", "INVESTIGATION_MAX_COST_USD",
+               "INVESTIGATION_MAX_REPAIRS"}  # 0 is a valid setting
 
 
 @dataclass(frozen=True)
@@ -126,6 +127,9 @@ LIMITS: dict[str, Limit] = {
                                         "user, 2026-11-02: the same rule as document extraction; the owner sets an "
                                         "amount from the budget. Replaces a fixed 30,000-token run cap that stopped "
                                         "4 of 13 LIVE runs (a complete run measured 40-50k prompt tokens, $0.06-0.08)"),
+    "INVESTIGATION_MAX_REPAIRS": Limit(2, "times one investigation may fix a report the server refused", "DEFAULT",
+                                       "starting value, set by the owner: each repair is a paid call and counts "
+                                       "toward INVESTIGATION_MAX_ROUNDS; a repeated identical error stops at once"),
     "INVESTIGATION_MAX_ROUNDS": Limit(5, "model calls per investigation run", "DEFAULT",
                                       "starting value, set by the owner; LIVE runs on 2026-11-02 used 3-5"),
     "INVESTIGATION_MAX_TOOL_CALLS": Limit(8, "tool calls per investigation run", "DEFAULT",

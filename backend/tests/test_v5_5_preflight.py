@@ -81,7 +81,7 @@ def test_policy_prerequisite_blocks_s6_approval(c):
     d = create(c, "ncr")
     assert request(c, "ncr", "bob").status_code == 200
     r = decide(c, "ncr", "bob", d["content_sha256"])
-    assert r.status_code == 409 and "D0 complete" in r.json()["detail"]
+    assert r.status_code == 409 and "D0 단계가 끝나야" in r.json()["detail"]
     assert decide(c, "ncr", "bob", d["content_sha256"], decision="REQUEST_INFO").status_code == 200
 
 
@@ -90,7 +90,7 @@ def test_stale_policy_version_is_reevaluated_at_decision(c):
     assert request(c, "ncr", "bob").status_code == 200
     p = publish(c, D2={"approver": "PROCESS_ENGINEER"})  # changed while the review was open
     r = decide(c, "ncr", "bob", d["content_sha256"])
-    assert r.status_code == 403 and "PROCESS_ENGINEER" in r.json()["detail"]
+    assert r.status_code == 403 and "공정 엔지니어" in r.json()["detail"]
     assert c.get("/cases/L/ncr/1", headers=H("alice")).json()["status"] == "IN_REVIEW"
     # an unchanged rule under a new version passes, and the trail says it was re-evaluated
     publish(c)

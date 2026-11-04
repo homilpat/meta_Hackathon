@@ -24,7 +24,7 @@ def test_default_policy_matches_s6_chain_for_d2_d4():
     state = {"D2": "APPROVED", "D3": "DRAFT", "D4": None}
     assert policy.can_approve(B, "D3", "QA_PRODUCTION", "erin", "alice", state).result == "PASS"
     blocked = policy.can_approve(B, "D4", "PROCESS_ENGINEER", "frank", "alice", state)
-    assert blocked.result == "BLOCK" and "D3 complete" in blocked.reasons[0]
+    assert blocked.result == "BLOCK" and "D3 단계가 끝나야" in blocked.reasons[0]
     assert policy.can_draft(B, "D3", {"D2": None}).result == "BLOCK"
     assert policy.can_draft(B, "D3", {"D2": "DRAFT"}).result == "PASS"  # drafts may run ahead
 

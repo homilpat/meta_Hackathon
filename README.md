@@ -33,7 +33,7 @@ writes the report" is dangerous: a wrong number, an invented cause or a self-app
 
 | What | Result |
 |---|---|
-| Investigation loop, 8 tasks × 4 runs (after fixes) | pass^1 **0.94**, pass^4 **0.75**, false completions 0 ([trace](docs/evaluations/ev/loop_eval_LIVE_v2_2026-11-03T053316.html)); before: 0.69 / 0.25 |
+| Investigation loop, 8 tasks × 4 runs (after workflow and evaluator fixes) | pass^1 **0.94**, pass^4 **0.75**, false completions 0 ([trace](docs/evaluations/ev/loop_eval_LIVE_v2_2026-11-03T053316.html)); first run 0.69 / 0.25 (21/28 when re-scored with the corrected evaluator) |
 | Past cases written in other words or languages | found **6/6** (keyword search alone: 2/6) ([details](docs/implementation/EXPERIENCE_AI.md)) |
 | Customer file not approved for external use | masked: 3/3 valid reports, the secret LOT never sent to the model |
 | Synthetic document extraction | 33/33 dev and 17/17 validation checks |
@@ -243,7 +243,7 @@ calls, no LLM judge**. New LIVE collection can cost money and requires an explic
 | CUAD held-out subset, one run | Navigation span recall 0.632; full parsed-document recall 0.719 | 10 English legal contracts; not a manufacturing benchmark or official full-CUAD score |
 | Synthetic file fixtures | Parser 40/40 checks; LIVE extraction 33/33 dev and 17/17 validation checks | Small functional fixtures; no general accuracy or defect-vision claim |
 | AgentEvals paired workflow checks | 16/16 variants: 14 fixed-server, 2 model-loop TEST_DOUBLE | Verifies branches, arguments, state and safe hand-off; not autonomous-model success |
-| LIVE investigation loop | First run 22/32, pass^1 0.688, pass^4 0.25; re-measured after the fixes (2026-11-03): 30/32, pass^1 0.938, pass^4 0.75, 0 false completions | 8 tasks × 4 runs; the two remaining failures were refused by the server, not passed |
+| LIVE investigation loop | First run 22/32, pass^1 0.688, pass^4 0.25; re-scored with the corrected evaluator 21/28 (4 runs of a mis-designed task excluded); re-measured after the workflow fixes (2026-11-03): 30/32, pass^1 0.938, pass^4 0.75, 0 false completions | 8 tasks × 4 runs; the two remaining failures were refused by the server, not passed |
 
 pass^4 measures all-four success consistency per task, averaged across the eight tasks; it is not “at least one
 success in four attempts”. These are custom tests inspired by τ-bench/BFCL, not official benchmark scores.

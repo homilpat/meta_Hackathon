@@ -69,7 +69,7 @@ def download(c, out: Path) -> None:
             r = c.get(f"{path}?format={fmt}", headers=H("bob"))
             text = opened(r, fmt)
             name = r.headers["content-disposition"].split('filename="')[1].rstrip('"')
-            assert r.headers["x-reference-sha256"] in "".join(text.split())
+            assert r.headers["x-reference-sha256"] not in "".join(text.split())  # the hash rides in the header; readers get words
             (out / name).write_bytes(r.content)
             print(f"  {name} {r.headers['content-type']} {len(r.content)} bytes "
                   f"fields_checked={r.headers['x-fields-checked']} sha256={r.headers['x-file-sha256'][:16]}")

@@ -321,7 +321,8 @@ def test_negated_certainty_is_careful_wording_and_an_assertion_is_still_refused(
     from app.report import asserts_certainty
 
     for ok in ("SPI/AOI values alone do not prove causation.", "No root cause is established.",
-               "The data cannot prove that the stencil caused the defects.", "This is not proven; a candidate only."):
+               "The data cannot prove that the stencil caused the defects.", "This is not proven; a candidate only.",
+               "Customer engineers claim likely caused by insufficient solder paste on supplier line."):
         assert not asserts_certainty(ok), ok
     for bad in ("The root cause is stencil wear.", "The defects were caused by low paste volume.",
                 "SPI data is not complete. This proves the stencil was worn.", "Definitely a stencil problem."):

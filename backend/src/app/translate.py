@@ -10,8 +10,8 @@ translated once and every later view reuses that answer at no cost.
 import hashlib
 import json
 import re
-from datetime import UTC, datetime
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
@@ -19,9 +19,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, OperationalError
 
-from app.db import ModelResponse
-
 from app import limits
+from app.db import ModelResponse
 from app.model_provider import ProviderError
 from app.workflow import Actor
 

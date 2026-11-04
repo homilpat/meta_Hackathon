@@ -202,7 +202,9 @@ def structured(errors: list[str]) -> list[dict]:
     return out
 
 
-NEGATION = re.compile(r"(?i)\b(no|not|never|cannot|without|nor|neither)\b|n't\b")
+# hedges count too: "Customer engineers claim likely caused by ..." is a candidate, not certainty (LIVE 2026-11-04)
+NEGATION = re.compile(r"(?i)\b(no|not|never|cannot|without|nor|neither|likely|possibly|probably|may|might|could|"
+                      r"suspected|potentially)\b|n't\b")
 
 
 def asserts_certainty(text: str) -> bool:

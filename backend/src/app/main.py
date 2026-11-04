@@ -41,7 +41,6 @@ from app.egress import make_egress_router
 from app.eightd import make_v5_router
 from app.experience import make_experience_router
 from app.export import make_export_router
-from app.translate import make_translate_router
 from app.ingestion import SyntheticBundle, normalize
 from app.intake import make_intake_router
 from app.intake_case import make_intake_case_router
@@ -57,6 +56,7 @@ from app.synthetic import (
     generate_post_window,
     spi_correction,
 )
+from app.translate import make_translate_router
 from app.v515 import make_v515_router
 from app.validation import make_validation_router
 from app.vision import make_vision_router

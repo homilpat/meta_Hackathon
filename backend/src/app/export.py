@@ -22,7 +22,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app import audit, causes, translate, validation
-from app.db import ApprovalEvent, Closure, DocumentVersion, Evidence, PreventionDeployment, SourceEvent
+from app.db import (
+    ApprovalEvent,
+    Closure,
+    DocumentVersion,
+    Evidence,
+    PreventionDeployment,
+    SourceEvent,
+)
 from app.workflow import KINDS, STEP, Actor, _doc_out, _get_doc, _latest, log, now, require_case
 
 MIME = {"docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -109,8 +116,8 @@ def doc_section(session: Session, doc: DocumentVersion) -> tuple[list[Block], li
                + (" - 이후 근거가 바뀌어 다시 검증 필요" if stale else "")) if v else "검증 기록 없음"
     signed = [x for x in d["decisions"] if x["action"] in SIGNED]
     blocks = [
-        ("h", f"{STEP[doc.doc_type]} {DOC_KO.get(doc.doc_type, doc.doc_type)} - {doc.doc_type} v{doc.version} "
-              f"({ko(d['status'])})"),
+        ("h", (f"{STEP[doc.doc_type]} {DOC_KO.get(doc.doc_type, doc.doc_type)} - {doc.doc_type} v{doc.version} "
+              f"({ko(d['status'])})")),
         ("p", f"작성 {d['author_id']} · {when(d['created_at'])} · {checked}"),
         ("t", ["번호", "구분", "내용", "값", "단위", "근거"],
          [row for c in d["claims"] for row in claim_rows(c, src)], [1, 1.2, 8, 1.4, 1.2, 3.2]),
@@ -171,8 +178,8 @@ def case_report(session: Session, case_id: str) -> tuple[Closure, list[Block], l
              for k, v in state.items()}
     blocks: list[Block] = [
         ("h", "요약"),
-        ("p", f"종결 {c.actor_id} · {when(c.created_at)} · 경로 {ko(s['route'])} · 종결 정책 "
-              f"{s['policy']['policy_id']} v{s['policy']['version']}"),
+        ("p", (f"종결 {c.actor_id} · {when(c.created_at)} · 경로 {ko(s['route'])} · 종결 정책 "
+              f"{s['policy']['policy_id']} v{s['policy']['version']}")),
         ("t", ["단계", "상태"], [[k, v] for k, v in shown.items()], [1, 3]),
     ]
     required = [c.actor_id, *(k for k, v in state.items() if v)]

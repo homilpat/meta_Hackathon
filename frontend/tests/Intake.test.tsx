@@ -36,16 +36,16 @@ describe('intake card', () => {
     expect(await screen.findByText('문서 간 충돌')).toBeTruthy()
     expect(screen.getByText('TEST_DOUBLE (Meta 아님)')).toBeTruthy()
     expect(screen.getByText('가설')).toBeTruthy()
-    expect(screen.getByText('pdf:p1:l3 (p.1)')).toBeTruthy()
-    const confirm = screen.getByRole('button', { name: /확인하고 사건 생성/ }) as HTMLButtonElement
+    expect(screen.getAllByText('(1쪽)').length).toBeGreaterThan(0) // a page, not a raw element id
+    const confirm = screen.getByRole('button', { name: /확인하고 사건 시작/ }) as HTMLButtonElement
     expect(confirm.disabled).toBe(true)
     fireEvent.click(screen.getByRole('button', { name: 'L02 선택' }))
     fireEvent.change(screen.getByLabelText('LOT 수정 사유'), { target: { value: '고객 통화로 확인' } })
     fireEvent.click(screen.getByRole('button', { name: '수정 저장 (새 버전)' }))
     await waitFor(() => expect(api).toHaveBeenCalledWith('/intakes/3/draft/edits', 'POST', { base_version: 1, changes: [
       { field: 'lot', value: 'L02', reason: '고객 통화로 확인', element_id: 'pdf:p1:l12', excerpt: 'L02' }] }, true))
-    await waitFor(() => expect((screen.getByRole('button', { name: /확인하고 사건 생성/ }) as HTMLButtonElement).disabled).toBe(false))
-    fireEvent.click(screen.getByRole('button', { name: /확인하고 사건 생성/ }))
+    await waitFor(() => expect((screen.getByRole('button', { name: /확인하고 사건 시작/ }) as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(screen.getByRole('button', { name: /확인하고 사건 시작/ }))
     await waitFor(() => expect(api).toHaveBeenCalledWith('/intakes/3/confirm', 'POST', { base_version: 2, action: 'NEW_CASE' }, true))
     expect(await screen.findByText('내부 데이터가 연결되지 않았습니다')).toBeTruthy()
   })

@@ -133,7 +133,7 @@ describe('Agent workspace', () => {
   it('labels the planner from the provider status and never claims LIVE without verification', () => {
     expect(plannerLabel(null)[0]).toBe('AI 오프라인 · 서버 규칙 플래너')
     expect(plannerLabel({ configured: true, live_status: 'TEST_DOUBLE' })[0]).toMatch(/LIVE 아님/)
-    expect(plannerLabel({ configured: true, model: 'm', live_status: 'CONFIGURED_NOT_VERIFIED' })[0]).toMatch(/LIVE 미검증/)
+    expect(plannerLabel({ configured: true, model: 'm', live_status: 'CONFIGURED_NOT_VERIFIED' })[0]).toBe('') // a set key shows no badge
     expect(plannerLabel({ configured: true, model: 'm', live_status: 'VERIFIED' })[0]).toMatch(/LIVE 검증됨/)
   })
 })

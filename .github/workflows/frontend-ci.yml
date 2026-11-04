@@ -4,6 +4,7 @@ on:
 jobs:
   frontend:
     runs-on: ubuntu-latest
+    timeout-minutes: 12
     defaults:
       run:
         working-directory: frontend

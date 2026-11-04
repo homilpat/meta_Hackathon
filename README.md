@@ -1,7 +1,46 @@
 # QualityOps AI — evidence-governed quality investigation
 
-Built from 2026-10-27 KST for the Meta Global AI Developer Hackathon. All manufacturing data in this repository is
-**fictional and generated** (SYNTHETIC, `SELF_GENERATED` licence). There are no measured factory-quality improvements or business results. Document extraction and agent evaluations are reported separately below.
+Built for the Meta Global AI Developer Hackathon with Meta **`muse-spark-1.3`**.
+
+## In one minute
+
+**Problem.** When a customer complains about a defect, a quality engineer has to read the customer's PDF/Excel/Word
+files, dig through SPI/AOI/repair records, and write an 8D report (D0–D8). This is slow, and an AI that "just
+writes the report" is dangerous: a wrong number, an invented cause or a self-approved document reaches the customer.
+
+**Approach: the AI proposes, the server verifies, a person approves.**
+1. **The AI does the reading and writing.** Meta reads customer documents, investigates the case with tools, finds
+   similar past cases and writes every answer and draft sentence in Korean.
+2. **The server checks facts, not style.** Every number, LOT, code and calculation the AI writes is re-checked
+   against the records (and recomputed). A failed check goes back to the AI with the reason, and the AI rewrites.
+3. **People decide.** The AI never approves, confirms a cause, closes a case or sends anything out. Approvals are
+   role-checked, bound to the exact document version and written to a hash-chained audit log.
+
+**Where Meta is used**
+
+| Step | What Meta does | What the server checks |
+|---|---|---|
+| Customer document intake (PDF, DOCX, XLSX) | Extracts part, LOT, quantities and dates with their source location; proposes column mappings for unknown spreadsheets | The value really is at that location; a person confirms before a case exists |
+| AI Agent chat | Understands the request, picks tools, asks back when unclear, writes the answer | Only allowed tools run, as the signed-in user; every cited fact exists |
+| Quality investigation | Reads SPI/AOI/verification data, compares the customer's claim with internal records, proposes next checks | Recomputes every calculation; refuses uncited or wrong claims and sends them back |
+| Past cases (Experience Memory) | Recognises the same problem written in other words or languages | Scope and permission filters; a precedent is never treated as proof |
+| D2–D4 drafts and 8D report | Writes the sentences and translates record text | Numbers and codes must match the facts exactly |
+
+**Measured with Meta LIVE** (details in [EV_LOCAL_EVAL](docs/evaluations/EV_LOCAL_EVAL.md) and the
+[LIVE log](docs/evaluations/META_LIVE_LOG.md)):
+
+| What | Result |
+|---|---|
+| Investigation loop, 8 tasks × 4 runs (after fixes) | pass^1 **0.94**, pass^4 **0.75**, false completions 0 ([trace](docs/evaluations/ev/loop_eval_LIVE_v2_2026-11-03T053316.html)); before: 0.69 / 0.25 |
+| Past cases written in other words or languages | found **6/6** (keyword search alone: 2/6) ([details](docs/implementation/EXPERIENCE_AI.md)) |
+| Customer file not approved for external use | masked: 3/3 valid reports, the secret LOT never sent to the model |
+| Synthetic document extraction | 33/33 dev and 17/17 validation checks |
+
+**Try it:** follow [Run locally](#run-locally) (install, `alembic upgrade head`, `uvicorn`), open
+`http://127.0.0.1:8000/app/`, start a case with **SPC 라인 모니터링** or **+ 새 사건**, and talk to the **AI Agent**.
+Without a Meta key a deterministic server planner runs instead, so the app also works offline.
+
+All manufacturing data in this repository is **fictional and generated** (SYNTHETIC, `SELF_GENERATED` licence). There are no measured factory-quality improvements or business results.
 
 ## What it does
 
@@ -23,11 +62,23 @@ QualityOps AI is an **evidence-governed, human-controlled manufacturing quality 
 
 **Boundaries:** All production-style records and operational outcomes here are SYNTHETIC/SIMULATED; a logged “executed” action represents a simulated workflow event, not a physical factory operation. The demo uses role switching via an `X-User` header, not production authentication. A final 8D report requires the appropriate closed case; the NCR_ONLY route can produce its own closure report. Model predictions, explanations and prior cases are evidence for investigation, not independent proof of causation.
 
-## Current snapshot — 2026-11-02
+## Current snapshot — 2026-11-05
 
-Code baseline: [cea4ac5](https://github.com/homilpat/meta_Hackathon/commit/cea4ac5da99585f884ee81c54c436977316f7af0);
-[CI succeeded](https://github.com/homilpat/meta_Hackathon/actions/runs/41414680156).
-The commit records 397 backend tests. This documentation refresh does not claim a new local test run.
+Checked locally on `3ce3bfe` (GitHub Actions minutes ran out on 2026-11-04, so CI is now manual-dispatch only and
+the same steps were run locally): backend pytest **465 passed**, ruff clean, frontend typecheck + **34** tests,
+integration smoke **27/27**, HTTP end-to-end **7/7**. The 23-scene demo ran end to end against Meta LIVE.
+
+Added since 2026-11-02:
+- **The AI writes every answer.** Agent replies, the investigation report and D2–D4 draft sentences are written by
+  Meta in Korean; the server only checks numbers, codes, evidence and recomputed values, and sends failures back.
+- **Screens read like a product:** Korean labels, evidence named by what it is (e.g. "SPI 측정 8건") instead of
+  record ids or hashes; the 8D and NCR-closure reports are Korean D0–D8 documents; the admin picks the translation
+  language (`TRANSLATE_LANGUAGE`: ko, ja, zh, OFF).
+- **Customer forms:** unknown XLSX layouts get an AI column mapping that a person confirms and that is reused for the
+  same layout; customer DOCX forms are filled from the case (content controls and text boxes included).
+- **Protected files** go to the model masked; the server scans tool results for embedded instructions.
+- **Experience Memory with Meta** finds the same problem written in other words or languages (2/6 → 6/6).
+- **Case archive (보관):** any case conversation can be archived; nothing is deleted, an append-only event records it.
 
 - **Implemented and checked:** file intake → draft review → human-confirmed case → existing D0 gates; supplier/audit request and reply review; responsibility/handover. See [v5.8 verification](docs/implementation/V58_VERIFICATION.md).
 - **LIVE measured:** Muse document extraction and the read-only investigation loop. Connectivity is verified; reliable completion is a separate measured question.
@@ -190,7 +241,7 @@ calls, no LLM judge**. New LIVE collection can cost money and requires an explic
 | CUAD held-out subset, one run | Navigation span recall 0.632; full parsed-document recall 0.719 | 10 English legal contracts; not a manufacturing benchmark or official full-CUAD score |
 | Synthetic file fixtures | Parser 40/40 checks; LIVE extraction 33/33 dev and 17/17 validation checks | Small functional fixtures; no general accuracy or defect-vision claim |
 | AgentEvals paired workflow checks | 16/16 variants: 14 fixed-server, 2 model-loop TEST_DOUBLE | Verifies branches, arguments, state and safe hand-off; not autonomous-model success |
-| LIVE investigation loop | 22/32 successful runs; mean pass^1 0.688, pass^4 0.25 | 8 tasks × 4 runs; scenario/design gaps and calculation-evidence errors remain |
+| LIVE investigation loop | First run 22/32, pass^1 0.688, pass^4 0.25; re-measured after the fixes (2026-11-03): 30/32, pass^1 0.938, pass^4 0.75, 0 false completions | 8 tasks × 4 runs; the two remaining failures were refused by the server, not passed |
 
 pass^4 measures all-four success consistency per task, averaged across the eight tasks; it is not “at least one
 success in four attempts”. These are custom tests inspired by τ-bench/BFCL, not official benchmark scores.

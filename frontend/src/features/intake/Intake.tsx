@@ -98,7 +98,7 @@ export function IntakeCard({ ctx, intake }: { ctx: Ctx; intake: J }) {
     {(view?.files ?? intake.files ?? []).filter((f: J) => /\.xlsx$/i.test(f.name ?? '')).map((f: J) =>
       <InspectionXlsx key={`x${f.file_id}`} ctx={ctx} intakeId={id} f={f} cases={cases}/>)}
     {!d ? !(view?.files ?? intake.files ?? []).every((f: J) => /\.xlsx$/i.test(f.name ?? '')) && <button className="button primary" disabled={busy} onClick={analyze}>{busy ? '분석 중…' : '문서 분석'}</button> : <>
-      {d.mode === 'TEST_DOUBLE' && <p><Badge tone="amber">TEST_DOUBLE (Meta 아님)</Badge></p>}
+      {d.mode === 'TEST_DOUBLE' && <p><Badge tone="amber">시험용 응답 (Meta 아님)</Badge></p>}
       {d.error && <Note>{d.error}</Note>}
       {d.withheld?.length > 0 && <Note>외부 전송 승인 안 된 파일은 모델에 보내지 않았습니다: {d.withheld.map((w: J) => w.name).join(', ')}</Note>}
       {d.egress?.unread?.elements > 0 && <Note>문서 일부만 읽었습니다 ({d.egress.unread.of - d.egress.unread.elements}/{d.egress.unread.of} 요소).{d.egress.unread.missing?.length > 0 && ` 찾지 못한 항목: ${d.egress.unread.missing.map((k: string) => FIELD[k] ?? k).join(', ')}.`} <button className="citation" disabled={busy} onClick={() => run(async () => setView(await ctx.api(`/intakes/${id}/analyze?read=WHOLE`, 'POST', undefined, true)))}>전체 읽기로 다시 분석</button></Note>}
@@ -191,9 +191,8 @@ function InspectionXlsx({ ctx, intakeId, f, cases }: { ctx: Ctx; intakeId: numbe
     {reviewing && <p className="row-gap wrap">
       {v.layout.tables.length > 1 && <select className="input" aria-label="표 후보" value={v.layout.table ?? ''} disabled={busy} onChange={e => load(undefined, undefined, e.target.value)}>
         <option value="">표 후보 선택</option>{v.layout.tables.map((t: J) => <option key={t.id} value={t.id}>{t.id} · {t.range}{t.header_rows.length > 1 ? ' · 다단 헤더' : ''}</option>)}</select>}
-      <button className="button secondary" disabled={busy || !v.layout.tables.length} onClick={ask}>AI 열 연결 제안 받기</button>
-      <span className="muted">헤더와 열 형식만 보냅니다 (셀 값은 보내지 않음). 제안은 서버가 검사하고 사람이 확인합니다.</span></p>}
-    {prop && <div className="wrap"><p className="row-gap"><Badge tone={prop.status === 'OK' ? 'blue' : 'red'}>AI 제안 {prop.status}</Badge><span className="muted">{prop.mode} · {prop.model ?? '모델 없음'} · 제안 #{prop.proposal_id}</span></p>
+      <button className="button secondary" disabled={busy || !v.layout.tables.length} onClick={ask}>AI 열 연결 제안 받기</button></p>}
+    {prop && <div className="wrap"><p className="row-gap"><Badge tone={prop.status === 'OK' ? 'blue' : 'red'}>{prop.status === 'OK' ? 'AI 제안' : 'AI 제안 실패'}</Badge></p>
       {prop.issues.map((i: J, n: number) => <Note key={n}>{i.message}</Note>)}
       {prop.proposal && Object.entries(prop.proposal.reasons).filter(([k]) => prop.proposal.mapping[k]).map(([k, why]) => <p key={k} className="muted">{XFIELD[k] ?? k} ← {prop.proposal.mapping[k]}열: {String(why)}</p>)}</div>}
     {reviewing && v.layout.uncertain?.map((u: J) => <div key={u.field} className="intake-card">
@@ -220,10 +219,10 @@ function InspectionXlsx({ ctx, intakeId, f, cases }: { ctx: Ctx; intakeId: numbe
       <button className="button primary" disabled={busy || !caseId || unexplained || reviewing} onClick={save}>확인한 열·행으로 사건에 연결</button>
       {unexplained && <span className="muted">제외한 행마다 사유가 필요합니다 (분모를 남기기 위해)</span>}
       {reviewing && <span className="muted">열 연결을 확인·저장한 뒤 사건에 연결할 수 있습니다</span>}</div>
-    {imp && <p className="muted">연결됨: 가져오기 #{imp.import_id} v{imp.version} · 포함 {imp.denominator.included}행 · 제외 {imp.denominator.excluded}행 · 근거 {imp.evidence_ids.length}건</p>}
-    {rec && <><SectionTitle title="고객 문서 대조" sub="같은 의미·범위라고 확인한 수량만 비교합니다. 고객 수량은 내부 검사 사실로 바뀌지 않습니다."/>
+    {imp && <p className="muted">사건에 연결했습니다 · 포함 {imp.denominator.included}행 · 제외 {imp.denominator.excluded}행</p>}
+    {rec && <><SectionTitle title="고객 문서 대조" sub="같은 의미로 확인한 수량만 비교합니다"/>
       <div className="row-gap">{['inspected_qty', 'defective_qty'].map(k => <label key={k}><input type="checkbox" checked={cmp.includes(k)} onChange={e => { const next = e.target.checked ? [...cmp, k] : cmp.filter(x => x !== k); setCmp(next); reconcile(imp.import_id, next) }}/> {XFIELD[k]}: 같은 의미·검사 범위 확인</label>)}</div>
-      {rec.items.map((i: J, n: number) => <p key={n} className="wrap"><Badge tone={RECON[i.status]}>{i.status}</Badge> {XFIELD[i.field] ?? i.field}{i.lot ? ` (LOT ${i.lot})` : ''}: 고객 {i.customer.map((c: J) => `${c.value} [${c.file ?? ''} ${c.element_id ?? ''}]`).join(', ') || '-'} · 검사 {i.inspection_value ?? i.inspection.map((x: J) => `${x.sheet}!${x.row}`).join(', ') ?? '-'}{i.reason ? ` · ${i.reason}` : ''}{i.calculation_id ? ` · 서버 합계 ${i.calculation_id}` : ''}</p>)}</>}
+      {rec.items.map((i: J, n: number) => <p key={n} className="wrap"><Badge tone={RECON[i.status]}>{i.status}</Badge> {XFIELD[i.field] ?? i.field}{i.lot ? ` (LOT ${i.lot})` : ''}: 고객 {i.customer.map((c: J) => `${c.value}${c.file ? ` (${c.file})` : ''}`).join(', ') || '-'} · 검사 {i.inspection_value ?? i.inspection.map((x: J) => `${x.sheet} ${x.row}행`).join(', ') ?? '-'}{i.reason ? ` · ${i.reason}` : ''}</p>)}</>}
   </Card>
 }
 

@@ -64,7 +64,7 @@ def test_failed_action_is_a_warning_never_a_recommendation(env):
     _, s, _ = env
     p = prof(("SPI_VOLUME_LOW", "AOI_FALSE_ALARM"))
     plan = history.plan_next_evidence(p, history.retrieve(s, p))
-    assert any("PRINTER_PRESSURE_ADJUST" in w["text"] and "do not adopt" in w["text"] for w in plan["warnings"])
+    assert any("PRINTER_PRESSURE_ADJUST" in w["text"] and "쓰지 마세요" in w["text"] for w in plan["warnings"])
     assert "printer pressure" not in json.dumps(plan["next_checks"]).lower()
     assert any("already answered" in k["text"] for k in plan["known"])  # adjudication is not re-requested
 

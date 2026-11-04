@@ -196,7 +196,7 @@ def _d3_plan_check(session: Session, a: Action, actor: Actor) -> None:
         raise HTTPException(409, f"containment plan must be APPROVED (is {doc.status if doc else 'missing'})")
     gate = active_policy(session, a.case_id).body["approval_gates"]["D3"]["approver"]
     if actor.role != gate:
-        raise HTTPException(403, f"D3 plan approval needs role {gate}")
+        raise HTTPException(403, f"D3 계획 승인은 {policy.ROLE_KO.get(gate, gate)}만 할 수 있습니다")
 
 
 # Stage-specific checks before PLAN_APPROVED. stage -> fn(session, action, actor).

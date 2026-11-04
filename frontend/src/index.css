@@ -136,3 +136,8 @@ table{font-size:13px}th{font-size:12px}td{padding:9px 10px}
 .case-list button{border:0;background:transparent;color:#aebac7;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 11px;border-radius:7px;text-align:left;font-size:12px;cursor:pointer}
 .case-list button:hover{background:#1a2a3d;color:white}.case-list button.active{background:#21403f;color:#6ee2d5}
 .case-list button small{font-size:10px;color:#7d8da0}.case-list .case-new{border:1px dashed #344255;color:#c9d2dc;justify-content:center;margin-bottom:6px}
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid #d9e4e1;border-top-color:var(--teal,#0f766e);border-radius:50%;animation:spin .8s linear infinite;flex:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spinner{animation-duration:2.4s}}
+.message-body.working{display:flex;align-items:center;gap:10px;font-size:12px;padding:12px 14px;background:white;border:1px solid var(--line);border-radius:10px;width:fit-content}
+ul.facts{margin:6px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:12px;color:#33404c}

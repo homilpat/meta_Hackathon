@@ -31,12 +31,12 @@ CHECKS = {
     "XRAY_CROSS_SECTION": ("Failure analysis", "X-ray or cross-section the confirmed defective joint"),
 }
 # words that identify an action in free text, used to catch failed fixes being recommended
-ACTION_TERMS = {
-    "STENCIL_CLEAN": "stencil clean", "PRINTER_PRESSURE_ADJUST": "printer pressure",
-    "SPI_RECALIBRATION": "recalibrat", "AOI_THRESHOLD_TUNE": "aoi threshold",
-    "STENCIL_REPLACE": "replace the stencil", "REFLOW_PROFILE_CHANGE": "reflow profile change",
+ACTION_TERMS = {  # English and Korean: the AI writes its report in Korean (user 2026-11-04)
+    "STENCIL_CLEAN": ("stencil clean", "스텐실 세척"), "PRINTER_PRESSURE_ADJUST": ("printer pressure", "인쇄 압력", "인쇄기 압력"),
+    "SPI_RECALIBRATION": ("recalibrat", "재교정"), "AOI_THRESHOLD_TUNE": ("aoi threshold", "aoi 임계", "aoi 판정 기준"),
+    "STENCIL_REPLACE": ("replace the stencil", "스텐실 교체"), "REFLOW_PROFILE_CHANGE": ("reflow profile change", "리플로우 프로파일 변경"),
 }
-NEGATION = ("do not", "don't", "avoid", "not adopt", "not repeat", "not recommended")
+NEGATION = ("do not", "don't", "avoid", "not adopt", "not repeat", "not recommended", "하지 말", "반복하지", "권장하지", "피해")
 
 
 def _h(hid, *, ver=1, site=CASE_SITE, sens="APPROVED_FOR_EXTERNAL", status="APPROVED", process=PROCESS,
@@ -218,18 +218,23 @@ def retrieve(session: Session, profile: Profile, k: int = 5) -> dict:
         if reason:
             excluded[reason] = excluded.get(reason, 0) + 1
             continue
-        why = [f"{h.measurement_pattern} + {h.aoi_pattern} matches board {b}" for b, v in profile.boards.items()
-               if (v["spi"], v["aoi"]) == (h.measurement_pattern, h.aoi_pattern)]
-        partial = [f"{h.aoi_pattern} matches board {b} (SPI pattern differs)" for b, v in profile.boards.items()
+        why = [b for b, v in profile.boards.items() if (v["spi"], v["aoi"]) == (h.measurement_pattern, h.aoi_pattern)]
+        partial = [b for b, v in profile.boards.items()
                    if v["aoi"] == h.aoi_pattern and v["spi"] != h.measurement_pattern]
         score = 2 * len(why) + len(partial)
-        if score:
-            ranked.append((score, h, why + partial))
+        if score:  # one line per pattern, not one per board (user 2026-11-04: 22 near-identical lines)
+            ranked.append((score, h, [x for x in (
+                why and f"{h.measurement_pattern} + {h.aoi_pattern}: 보드 {len(why)}개 같음 ({boards(why)})",
+                partial and f"{h.aoi_pattern}만 같음 (SPI 패턴 다름): 보드 {len(partial)}개 ({boards(partial)})") if x]))
     ranked.sort(key=lambda t: (-t[0], t[1].historical_case_id))
     precedents = [precedent_out(session, h, score, why) for score, h, why in ranked[:k]]
     return {"as_of": profile.as_of, "bank_version": BANK_VERSION, "precedents": precedents,
             "status": "OK" if precedents else "NO_RELEVANT_PRECEDENT", "excluded": excluded,
             "note": "Similarity ranks retrieval candidates; it is not causal evidence for this case."}
+
+
+def boards(b: list[str]) -> str:
+    return ", ".join(b[:3]) + (f" 외 {len(b) - 3}개" if len(b) > 3 else "")
 
 
 def eligibility(h: HistoricalCase, profile: Profile) -> str | None:
@@ -305,8 +310,8 @@ def plan_next_evidence(profile: Profile, history: dict | None) -> dict:
                     add(o["check"], f"In {p['historical_case_id']} this check gave a verified finding "
                         f"({o['check_result']}) for the same pattern", ev, [p["historical_case_id"]])
                 if o["action"] and o["outcome_status"] in ("FAILED", "INSUFFICIENT"):
-                    warnings.append({"text": f"{p['historical_case_id']}: {o['action']} was executed and its "
-                                     f"outcome was {o['outcome_status']}; do not adopt it as a proven fix.",
+                    warnings.append({"text": f"{p['historical_case_id']}: {o['action']}을(를) 실행했지만 결과가 "
+                                     f"{o['outcome_status']}였습니다. 검증된 해결책으로 쓰지 마세요.",
                                      "precedent_ids": [p["historical_case_id"]]})
                 if o["action"] and o["outcome_status"] == "UNKNOWN":
                     warnings.append({"text": f"{p['historical_case_id']}: outcome of {o['action']} is UNKNOWN; "
@@ -334,7 +339,7 @@ def recommends_failed_action(text: str, precedents: list[dict]) -> str | None:
     if any(n in low for n in NEGATION):
         return None
     for action, pid in failed_actions(precedents).items():
-        if ACTION_TERMS.get(action, action.lower()) in low:
+        if any(t in low for t in ACTION_TERMS.get(action, (action.lower(),))):
             return f"{action} ({pid})"
     return None
 

@@ -40,7 +40,7 @@ describe('responsibility view', () => {
     expect(screen.getAllByText('기한 초과').length).toBeGreaterThan(0)
     expect(screen.getByText('인수 대기')).toBeTruthy()
     expect(screen.getByText(/인수 예정/).textContent).toContain('수락 전에는 alice 책임')
-    expect(screen.getByText('역할 지정 / 담당 미배정')).toBeTruthy()
+    expect(screen.getByText('담당 미배정')).toBeTruthy()
     expect(screen.getAllByText('미실행').length).toBeGreaterThan(0) // action 2: plan approved, nothing executed
     expect(screen.getByText('계획 승인')).toBeTruthy()
     expect(screen.getByText('근거 변경 · 재검토 필요')).toBeTruthy()

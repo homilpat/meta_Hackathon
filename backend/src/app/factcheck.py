@@ -35,7 +35,10 @@ EXECUTED_WORDS = re.compile(r"(?i)\b(executed|held|quarantined|contained|complet
 CAUSE_WORDS = re.compile(r"(?i)\b(root cause|confirmed cause|caused by)\b")
 INJECTION = re.compile(r"(?i)ignore (all|any|previous|the) (rules|instructions)|approve_document|system prompt")
 OF_AOI = re.compile(r"(\d+)(?: confirmed)? of (\d+) AOI inspections")
-SPC_LIMIT = re.compile(r"\b(centre line|LCL|UCL)\b")
+# the AI writes drafts in Korean with these fixed forms (ncr.WORDING_PROMPT): "AOI 검사 47건 중 확정 22건"
+OF_AOI_KO = re.compile(r"AOI 검사 (\d+)건 중 (확정 )?(\d+)건")
+SPC_LIMIT = re.compile(r"(?<![A-Za-z])(centre line|중심선|LCL|UCL)(?![A-Za-z])")
+CONFIRMED = re.compile(r"confirmed|확정")
 DONE_ACTION = ("EXECUTED", "INDEPENDENTLY_VERIFIED", "RELEASED")
 
 
@@ -64,7 +67,7 @@ def recompute(claim: dict, rows: list[dict]) -> tuple[dict | None, float | None]
         if len(named) > 1:
             return None, None  # one claim, one statistic
         if named:
-            key = {"centre line": "cl", "LCL": "lcl", "UCL": "ucl"}[named.pop()]
+            key = {"centre line": "cl", "중심선": "cl", "LCL": "lcl", "UCL": "ucl"}[named.pop()]
             return ({"op": "spc_limit", "limit": key, "entity": "spi_measurements", "subgroups": len(sub)},
                     spc.limits(sub)[key])
         return ({"op": "mean", "entity": "spi_measurements", "field": "volume_mm3", "n": len(rows)},
@@ -74,17 +77,19 @@ def recompute(claim: dict, rows: list[dict]) -> tuple[dict | None, float | None]
         fail = sum(r["rec"]["result"] == "FAIL" for r in aoi)
         return ({"op": "ratio", "entity": "aoi_inspections", "numerator": "result=FAIL", "denominator": len(aoi)},
                 100 * fail / len(aoi))
-    if unit == "count" and types == {"human_verifications"} and "confirmed" in text:
+    if unit == "count" and types == {"human_verifications"} and CONFIRMED.search(text):
         return ({"op": "count", "entity": "human_verifications", "where": "result=DEFECT_CONFIRMED"},
                 float(sum(r["rec"]["result"] == "DEFECT_CONFIRMED" for r in rows)))
-    if unit == "count" and aoi and (m := OF_AOI.search(text)):
-        if "confirmed" in m.group(0):
+    if unit == "count" and aoi and (m := OF_AOI.search(text) or OF_AOI_KO.search(text)):
+        confirmed, n_of = ("confirmed" in m.group(0), (int(m.group(1)), int(m.group(2)))) if m.re is OF_AOI \
+            else (bool(m.group(2)), (int(m.group(3)), int(m.group(1))))
+        if confirmed:
             humans = [r for r in rows if r["type"] == "human_verifications"]
-            num = sum(r["rec"]["result"] == "DEFECT_CONFIRMED" for r in humans) if humans else int(m.group(1))
+            num = sum(r["rec"]["result"] == "DEFECT_CONFIRMED" for r in humans) if humans else n_of[0]
         else:
             num = sum(r["rec"]["result"] == "FAIL" for r in aoi)
         pred = {"op": "count", "entity": "aoi_inspections", "numerator": num, "denominator": len(aoi)}
-        stated = (int(m.group(1)), int(m.group(2)))
+        stated = n_of
         expected = float(len(aoi)) if claim.get("value") == stated[1] else float(num)
         pred["text_numbers"] = stated
         return pred, expected

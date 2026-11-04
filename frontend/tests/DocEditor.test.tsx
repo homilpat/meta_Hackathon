@@ -36,7 +36,7 @@ describe('DocEditor', () => {
     const { api, onSaved } = setup({ 'POST /cases/L/ncr/1/edit-proposals': proposal, 'POST /cases/L/ncr/1/edits': { version: 2 } })
     fireEvent.change(screen.getByLabelText('AI 지시'), { target: { value: 'shorter' } })
     fireEvent.click(screen.getByText('AI 제안 받기 (적용 안 됨)'))
-    await screen.findByText(/아직 적용되지 않았습니다/)
+    await screen.findByText(/수락하면 새 버전으로 저장됩니다/)
     expect(api.mock.calls.some(c => c[0].endsWith('/edits'))).toBe(false)
     fireEvent.change(screen.getByLabelText('수정 사유'), { target: { value: 'accepted AI wording' } })
     fireEvent.click(screen.getByText('제안 수락하여 저장'))

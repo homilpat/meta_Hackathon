@@ -65,9 +65,9 @@ export function CustomerForms({ ctx }: { ctx: Ctx }) {
       <button className="button secondary" disabled={busy || !file || !reg.customer.trim() || !reg.name.trim() || !reg.reason.trim()} onClick={register}>양식 등록</button></div>}
     <p className="row-gap wrap">{(Array.isArray(list) ? list : []).map(x => <button key={x.template_id} className={`button ${x.template_id === tid ? 'primary' : 'secondary'}`} onClick={() => open(x.template_id)}>{x.customer} · {x.name} v{x.version}</button>)}</p>
     {t && <>
-      <p className="row-gap wrap"><Badge tone={ROUTE[t.route]?.[1] ?? 'slate'}>{ROUTE[t.route]?.[0] ?? t.route}</Badge><span className="muted" title={`원본 SHA-256 ${t.sha256}`}>칸 {t.slots.length}개 · {say(t.data_origin)}{t.mapping ? ` · 매핑 ${t.mapping.version}번째 확정본` : ''}</span>
+      <p className="row-gap wrap"><Badge tone={ROUTE[t.route]?.[1] ?? 'slate'}>{ROUTE[t.route]?.[0] ?? t.route}</Badge><span className="muted">칸 {t.slots.length}개 · {say(t.data_origin)}{t.mapping ? ` · 매핑 ${t.mapping.version}번째 확정본` : ''}</span>
         {author && <button className="button secondary" disabled={busy} onClick={ask}>AI 매핑 제안 받기</button>}</p>
-      {prop && <p className="row-gap"><Badge tone={prop.status === 'OK' ? 'blue' : 'red'}>AI 제안 {prop.status}</Badge><span className="muted">{prop.mode} · {prop.model ?? '모델 없음'} · 칸 라벨과 필드 정의만 보냅니다 (사건 값은 보내지 않음)</span></p>}
+      {prop && <p className="row-gap"><Badge tone={prop.status === 'OK' ? 'blue' : 'red'}>{prop.status === 'OK' ? 'AI 제안' : 'AI 제안 실패'}</Badge></p>}
       {prop?.issues?.map((i: J, n: number) => <Note key={n}>{i.message}</Note>)}
       <div className="table-wrap"><table><thead><tr><th>칸</th><th>라벨</th><th>사건 필드</th><th>서식</th><th>필수</th><th>이 사건의 값 · 출처</th></tr></thead><tbody>
         {t.slots.map((s: J) => { const v = view?.slots?.find((x: J) => x.id === s.id); return <tr key={s.id}>

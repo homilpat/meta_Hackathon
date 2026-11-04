@@ -349,6 +349,12 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
                 raise HTTPException(422, "Case has no evidence; upload sources first")
             if body.investigation_run_id is None:
                 claims, builder = ncr.BUILDERS[doc_type](session, case_id), ncr.BUILDER
+                # shortcut: only a LIVE model writes the wording; a test double keeps the facts sentences so
+                # scripted replies stay with the tests that script them. Upgrade if a double should word drafts.
+                if provider is not None and getattr(provider, "mode", "") == "LIVE":
+                    claims, builder = ncr.ai_wording(provider, doc_type, claims, lambda cs: {
+                        i["claim_id"]: i["message"] for i in factcheck.validate(session, case_id, cs, actor.role)["issues"]
+                        if i["severity"] == "BLOCK" and i.get("claim_id")})
             elif doc_type == "CONTAINMENT":
                 raise HTTPException(422, "Model findings carry no containment proposals; use the template")
             else:

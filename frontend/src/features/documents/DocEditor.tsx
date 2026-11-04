@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Badge, Card, Note, SectionTitle } from '../../components/ui'
-import { show } from '../../labels'
+import { say, show, words } from '../../labels'
 import type { Ctx, J } from '../../types'
 
 const RESULT_TONE: Record<string, 'green' | 'amber' | 'red'> = { PASS: 'green', WARN: 'amber', BLOCK: 'red' }
@@ -50,25 +50,25 @@ export function DocEditor({ ctx, d, latest, onSaved }: { ctx: Ctx; d: J; latest:
     return save([ch])
   }
   const author = ctx.me?.role === 'AUTHOR'
-  return <Card><SectionTitle title="문서 편집 (Human Docs)" sub="저장 = 새 버전 · 서버 재검증 · 승인본 불변"/>
-    {check ? <div className="detail-row"><span>검증 #{check.validation_id} · {check.contract_ref ?? '-'}</span>
-      <span><Badge tone={RESULT_TONE[check.result]}>{check.result}</Badge>{check.stale && <> <Badge tone="red">STALE</Badge></>}</span></div>
+  return <Card><SectionTitle title="문서 편집" sub="저장하면 새 버전이 되고 다시 검증합니다"/>
+    {check ? <div className="detail-row"><span>검증 결과</span>
+      <span><Badge tone={RESULT_TONE[check.result]}>{check.result}</Badge>{check.stale && <> <Badge tone="red">다시 검증 필요</Badge></>}</span></div>
       : <p className="muted">아직 검증하지 않은 버전</p>}
-    {check?.stale && <Note>{check.stale_reasons.join(' · ')} — 다시 검증해야 승인할 수 있습니다.</Note>}
-    {check?.issues?.length > 0 && <ul className="muted wrap">{check.issues.map((i: J, n: number) => <li key={n}>[{i.severity}] {i.code} {i.claim_id ?? ''}: {i.message}</li>)}</ul>}
-    <button className="button secondary full" onClick={async () => { setCheck(await ctx.api(`${base}/validate`, 'POST', {})); ctx.refresh() }}>서버 검증 실행</button>
+    {check?.stale && <Note>{check.stale_reasons.map(words).join(' · ')} — 다시 검증해야 승인할 수 있습니다.</Note>}
+    {check?.issues?.length > 0 && <ul className="muted wrap">{check.issues.map((i: J, n: number) => <li key={n}>[{say(i.severity)}] {i.claim_id ?? '문서'}: {words(i.message)}</li>)}</ul>}
+    <button className="button secondary full" onClick={async () => { setCheck(await ctx.api(`${base}/validate`, 'POST', {})); ctx.refresh() }}>검증 실행</button>
     {diff && <><p className="muted mt">v{diff.from} → v{diff.to} 변경</p><DiffList diff={diff.diff}/></>}
     {author && latest && <>
       <select className="mt" value={cid} onChange={e => pick(e.target.value)} aria-label="편집할 주장"><option value="">편집할 주장 선택</option>{d.claims.map((c: J) => <option key={c.claim_id} value={c.claim_id}>{c.claim_id} · {c.text.slice(0, 40)}</option>)}</select>
       {cid && <>
         <textarea className="input" aria-label="주장 문장" value={text} onChange={e => setText(e.target.value)}/>
         <div className="dual"><input className="input" aria-label="값" placeholder="값" value={value} onChange={e => setValue(e.target.value)}/><input className="input" aria-label="단위" placeholder="단위" value={unit} onChange={e => setUnit(e.target.value)}/></div>
-        <input className="input" aria-label="근거 ID" placeholder="근거 ID (쉼표 구분)" value={ev} onChange={e => setEv(e.target.value)}/></>}
-      <input className="input" aria-label="수정 사유" placeholder="수정 사유 (5자 이상, 감사 기록)" value={reason} onChange={e => setReason(e.target.value)}/>
+        <input className="input" aria-label="근거 ID" placeholder="근거 기록 ID (쉼표 구분)" value={ev} onChange={e => setEv(e.target.value)}/></>}
+      <input className="input" aria-label="수정 사유" placeholder="수정 사유 (5자 이상)" value={reason} onChange={e => setReason(e.target.value)}/>
       <button className="button primary full" disabled={!cid || reason.trim().length < 5} onClick={manual}>새 버전으로 저장</button>
       <input className="input mt" aria-label="AI 지시" placeholder="AI 수정 제안 요청 (예: 더 간결하게)" value={instruction} onChange={e => setInstruction(e.target.value)}/>
       <button className="button secondary full" disabled={instruction.trim().length < 3} onClick={async () => setProposal(await ctx.api(`${base}/edit-proposals`, 'POST', { instruction }))}>AI 제안 받기 (적용 안 됨)</button>
-      {proposal && <><Note>AI 제안 ({proposal.provider_mode}) — 아직 적용되지 않았습니다. 수락하면 새 버전으로 저장되고 재검증됩니다.</Note><DiffList diff={proposal.diff}/>
+      {proposal && <><p className="muted">AI 제안입니다. 수락하면 새 버전으로 저장됩니다.</p><DiffList diff={proposal.diff}/>
         <button className="button success full" disabled={!proposal.changes.length || reason.trim().length < 5} onClick={() => save(proposal.changes, true)}>제안 수락하여 저장</button></>}</>}
   </Card>
 }

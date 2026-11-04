@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react'
+import { useSyncExternalStore, type ReactNode } from 'react'
+import { say } from '../labels'
 import type { Tone } from '../types'
 
 export function Icon({ name, size = 18 }: { name: string; size?: number }) {
@@ -19,16 +20,33 @@ export function Icon({ name, size = 18 }: { name: string; size?: number }) {
   }
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>
 }
-export const Badge = ({ children, tone = 'slate' }: { children: ReactNode; tone?: Tone }) => <span className={`badge badge-${tone}`}>{children}</span>
+// a bare server code in a badge reads as a word (APPROVED -> 승인됨)
+export const Badge = ({ children, tone = 'slate' }: { children: ReactNode; tone?: Tone }) => <span className={`badge badge-${tone}`}>{typeof children === 'string' ? say(children) : children}</span>
 export const Card = ({ children, className = '' }: { children: ReactNode; className?: string }) => <section className={`card ${className}`}>{children}</section>
 export const SectionTitle = ({ title, sub, action }: { title: string; sub?: string; action?: ReactNode }) =>
   <div className="section-title"><div><strong>{title}</strong>{sub && <span>{sub}</span>}</div>{action}</div>
 export const Empty = ({ children }: { children: ReactNode }) => <p className="muted">{children}</p>
 export const Note = ({ children }: { children: ReactNode }) => <div className="science-note"><Icon name="warning"/><span>{children}</span></div>
-// Evidence a claim rests on: the count is what a person reads; the record ids open on click (audit), never a wall of ids
-export const Cite = ({ ids }: { ids: string[] }) => ids.length
-  ? <details className="cite"><summary className="citation">근거 {ids.length}건</summary><span className="muted wrap" data-no-ko>{ids.join(' · ')}</span></details>
-  : <span className="muted">-</span>
+// What each evidence record is, for the case on screen (GET /cases/{id}/evidence-names): [kind, row id]
+let names: Record<string, [string, string]> = {}
+const subs = new Set<() => void>()
+export const setEvidenceNames = (n: Record<string, [string, string]> | null) => { names = n ?? {}; subs.forEach(f => f()) }
+const useNames = () => useSyncExternalStore(f => { subs.add(f); return () => { subs.delete(f) } }, () => names)
+
+export const evidenceName = (id: string) => (names[id] ? `${names[id][0]} ${names[id][1]}`.trim() : id.startsWith('EV-') ? '기록' : id)
+
+// Evidence a claim rests on, in words: a few records by name, more as counts per kind; never the record ids
+export function Cite({ ids }: { ids: string[] }) {
+  const n = useNames()
+  if (!ids.length) return <span className="muted">-</span>
+  const named = ids.map(id => n[id] ?? (id.startsWith('EV-') ? ['기록', ''] : ['참고', id]))
+  const line = (x: [string, string]) => `${x[0]} ${x[1]}`.trim()
+  if (ids.length <= 2) return <span className="muted" data-no-ko>{named.map(line).join(', ')}</span>
+  const count: Record<string, number> = {}
+  named.forEach(([k]) => { count[k] = (count[k] ?? 0) + 1 })
+  return <details className="cite"><summary className="citation">{Object.entries(count).map(([k, c]) => `${k} ${c}건`).join(', ')}</summary>
+    <span className="muted wrap" data-no-ko>{named.map(line).join(' · ')}</span></details>
+}
 
 export function Page({ title, desc, action, children }: { title: string; desc: string; action?: ReactNode; children: ReactNode }) {
   return <main className="page"><div className="page-head"><div><h1>{title}</h1><p>{desc}</p></div>{action}</div>{children}</main>

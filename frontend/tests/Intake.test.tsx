@@ -34,7 +34,7 @@ describe('intake card', () => {
     })
     render(<IntakeCard ctx={ctxWith(api)} intake={{ intake_id: 3, files: [] }}/>)
     expect(await screen.findByText('문서 간 충돌')).toBeTruthy()
-    expect(screen.getByText('TEST_DOUBLE (Meta 아님)')).toBeTruthy()
+    expect(screen.getByText('시험용 응답 (Meta 아님)')).toBeTruthy()
     expect(screen.getByText('가설')).toBeTruthy()
     expect(screen.getAllByText('(1쪽)').length).toBeGreaterThan(0) // a page, not a raw element id
     const confirm = screen.getByRole('button', { name: /확인하고 사건 시작/ }) as HTMLButtonElement
@@ -67,8 +67,8 @@ describe('requests screen', () => {
       return {}
     })
     render(<Requests ctx={ctxWith(api, { cid: 'SN-1', me: { id: 'bob', role: 'REVIEWER' } })}/>)
-    expect(await screen.findByText('NEEDS_HUMAN')).toBeTruthy()
-    expect(screen.getByText(/AI 의견 \(결정 아님\)/)).toBeTruthy()
+    expect(await screen.findByText('사람 확인 필요')).toBeTruthy()
+    expect(screen.getByText('AI 의견')).toBeTruthy()
     expect(screen.getByText(/회신 v1:/)).toBeTruthy()
     fireEvent.change(screen.getByLabelText('결정'), { target: { value: 'NEEDS_REVISION' } })
     fireEvent.change(screen.getByLabelText('결정 사유'), { target: { value: '보류 기록 번호 없음' } })

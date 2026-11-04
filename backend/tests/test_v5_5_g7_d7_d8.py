@@ -98,7 +98,7 @@ def test_open_d6_failure_blocks_closure(c):
     r = close(c)
     assert r.status_code == 409
     detail = r.json()["detail"]
-    assert "D4 is not complete" in detail and "D6 is not complete (is NOT_EFFECTIVE)" in detail
+    assert "D4 단계가 끝나지 않았습니다" in detail and "D6 단계가 끝나지 않았습니다 (지금 효과 없음)" in detail
 
 
 def test_changed_evidence_blocks_closure(c):
@@ -107,7 +107,7 @@ def test_changed_evidence_blocks_closure(c):
     ok(c.post("/cases/L/source-revisions", headers=H("alice"), json={
         "asset": spi_correction(7, row_id="SPI-L02-P02-B2-C01-1", version=2, line=True), "reason": "re-measured"}))
     r = close(c)
-    assert r.status_code == 409 and "D2 is not complete" in r.json()["detail"]
+    assert r.status_code == 409 and "D2 단계가 끝나지 않았습니다" in r.json()["detail"]
 
 
 def test_signers_and_notification(c):

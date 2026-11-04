@@ -52,7 +52,7 @@ def profile(boards: list[tuple[str, str]]) -> history.Profile:
 def score(plan: dict, needed: str | None, avoid: str | None) -> dict:
     checks = [c["check"] for c in plan["next_checks"]]
     text = json.dumps(plan["next_checks"]).lower()
-    recommended_avoid = bool(avoid) and history.ACTION_TERMS[avoid] in text
+    recommended_avoid = bool(avoid) and any(t in text for t in history.ACTION_TERMS[avoid])
     return {"checks": checks, "top1": (checks[:1] == [needed]) if needed else None,
             "hit3": (needed in checks[:3]) if needed else None, "recommends_failed_fix": recommended_avoid,
             "warned_failed_fix": bool(avoid) and any(avoid in w["text"] for w in plan["warnings"]),

@@ -10,7 +10,7 @@ export function ExportButtons({ user, path, label }: { user: string; path: strin
     const name = /filename="([^"]+)"/.exec(r.headers.get('Content-Disposition') ?? '')?.[1] ?? `export.${format}`
     const a = document.createElement('a')
     a.href = URL.createObjectURL(await r.blob()); a.download = name; a.click(); URL.revokeObjectURL(a.href)
-    setMsg(`${name} · 검증 필드 ${r.headers.get('X-Fields-Checked')}개 · SHA-256 ${r.headers.get('X-File-SHA256')?.slice(0, 12)}`)
+    setMsg(`${name} 내려받음`)
   }
   return <div className="mt"><span className="row-gap">
     <button className="button secondary" onClick={() => get('docx')}>{label} DOCX</button>

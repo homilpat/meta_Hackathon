@@ -6,8 +6,10 @@ import { useLoad } from '../../hooks/useLoad'
 import { DocEditor } from './DocEditor'
 import { CustomerForms } from './CustomerForms'
 import { ExportButtons } from '../../components/ExportButtons'
-import { say as plain } from '../../labels'
+import { say as plain, words } from '../../labels'
 import type { Ctx, J } from '../../types'
+
+const FIRST = 15
 
 export function Reports({ ctx }: { ctx: Ctx }) {
   const lists = KINDS.map(([k]) => useLoad<J[]>(ctx, `/cases/${ctx.cid}/${k}`, [])) // fixed order, safe for hooks
@@ -18,6 +20,7 @@ export function Reports({ ctx }: { ctx: Ctx }) {
   const [note, setNote] = useState('')
   const [claimFor, setClaimFor] = useState('')
   const [replyTo, setReplyTo] = useState<number | null>(null)
+  const [all_, setAll] = useState(false)  // a long document shows its first rows; the rest open on request
   const d = all.find(x => `${x.kind}:${x.version}` === selKey) ?? all[all.length - 1]
   const author = ctx.me?.role === 'AUTHOR'
   const create = async (k: string) => { const r = await ctx.api(`/cases/${ctx.cid}/${k}`, 'POST', {}, true); setSelKey(`${k}:${r.version}`); ctx.refresh() }
@@ -28,29 +31,30 @@ export function Reports({ ctx }: { ctx: Ctx }) {
   const say = async () => { await act('comments', { body: note, claim_id: claimFor || null, reply_to: replyTo }); setNote(''); setReplyTo(null) }
   const resolve = async (id: number) => { await act(`comments/${id}/resolve`, { body: note }); setNote('') }
   const openOn = (cl: string) => (d?.comments ?? []).filter((x: J) => x.open && x.claim_id === cl).length
-  return <Page title="문서 및 결재" desc="8D 순서: D2 NCR(검토자) → D3 임시조치 계획(QA/생산) → D4 원인 가설(공정 엔지니어). 초안은 미리 쓸 수 있지만 결재는 앞 단계 승인 후에만 열립니다."
+  return <Page title="문서 및 결재" desc="D2 NCR → D3 임시조치 계획 → D4 원인 가설 순서로 결재합니다. 초안은 미리 쓸 수 있습니다."
     action={author && <span>{KINDS.map(([k, t]) => <button key={k} className="button secondary" onClick={() => create(k)}>{t} 초안 생성</button>)}</span>}>
     <Card className="mb"><Stages ctx={ctx}/></Card>
     <div className="report-layout">
       <Card><SectionTitle title="문서 목록" sub={`${all.length}개 버전`}/>{all.map(x => <div key={`${x.kind}:${x.version}`} className={`doc-row ${x === d ? 'selected' : ''}`} onClick={() => setSelKey(`${x.kind}:${x.version}`)}>
-        <Icon name="document"/><div><b>{x.doc_type} <small>v{x.version}</small></b><span>근거 주장 {x.claims.length}개 · {x.author_id}</span></div><Badge tone={STATUS_TONE[x.status]}>{x.status}</Badge></div>)}
+        <Icon name="document"/><div><b>{x.doc_type} <small>v{x.version}</small></b><span>주장 {x.claims.length}개 · {x.author_id}</span></div><Badge tone={STATUS_TONE[x.status]}>{x.status}</Badge></div>)}
         {!all.length && <Empty>문서가 없습니다.</Empty>}</Card>
       {d ? <Card className="document-view"><div className="doc-title"><div><Badge tone="teal">{d.doc_type} · v{d.version}</Badge> <Badge tone={STATUS_TONE[d.status]}>{d.status}</Badge><h3>{d.doc_type} {d.case_id}</h3>
-        <span>작성 {d.author_id} · {d.created_at.slice(0, 19)} · 템플릿 {d.template_version} · 기반 {d.based_on.join(', ') || '-'} · 생성기 {d.builder}</span></div>
+        <span>작성 {d.author_id} · {d.created_at.slice(0, 16).replace('T', ' ')}{d.based_on.length ? ` · 기반 ${d.based_on.join(', ')}` : ''}</span></div>
         <a className="button secondary" href={`/cases/${d.case_id}/${d.kind}/${d.version}/html`} onClick={async e => { e.preventDefault(); const w = window.open(''); w?.document.write(await (await fetch(`/cases/${d.case_id}/${d.kind}/${d.version}/html`, { headers: { 'X-User': ctx.me.id } })).text()) }}>HTML 보기</a></div>
         {d.status === 'APPROVED' && <ExportButtons key={`${d.kind}:${d.version}`} user={ctx.me.id} path={`/cases/${d.case_id}/documents/${d.kind}/export?version=${d.version}`} label="승인본"/>}
-        {d.note && <Note>{d.note}</Note>}
-        <div className="table-wrap"><table><thead><tr><th>ID</th><th>구분</th><th>주장</th><th>근거</th><th>코멘트</th></tr></thead><tbody>{d.claims.map((c: J) =>
-          <tr key={c.claim_id}><td>{c.claim_id}</td><td><Badge tone={CLASS_TONE[c.classification]}>{plain(c.classification)}</Badge></td><td className="wrap">{c.text}</td><td className="wrap"><Cite ids={c.evidence_ids}/></td>
+        {d.note && <p className="muted wrap">{words(d.note)}</p>}
+        <div className="table-wrap"><table><thead><tr><th>번호</th><th>구분</th><th>내용</th><th>근거</th><th>코멘트</th></tr></thead><tbody>{(all_ ? d.claims : d.claims.slice(0, FIRST)).map((c: J) =>
+          <tr key={c.claim_id}><td>{c.claim_id}</td><td><Badge tone={CLASS_TONE[c.classification]}>{plain(c.classification)}</Badge></td><td className="wrap">{words(c.text)}</td><td className="wrap"><Cite ids={c.evidence_ids}/></td>
             <td><button className="citation" onClick={() => { setClaimFor(c.claim_id); setReplyTo(null) }}>{openOn(c.claim_id) ? `열림 ${openOn(c.claim_id)}` : '+'}</button></td></tr>)}</tbody></table></div>
-        <p className="muted">SHA-256 {d.content_sha256}</p></Card> : <Card><Empty>문서를 선택하세요.</Empty></Card>}
+        {d.claims.length > FIRST && <button className="button secondary full" onClick={() => setAll(!all_)}>{all_ ? '접기' : `나머지 ${d.claims.length - FIRST}개 주장 보기`}</button>}
+</Card> : <Card><Empty>문서를 선택하세요.</Empty></Card>}
       {d && <div className="stack"><Card><SectionTitle title="검토 및 결재"/>
-        {d.reviews.map((r: J, i: number) => <div className="reviewer" key={i}><div className="avatar">{r.reviewer_id[0].toUpperCase()}</div><div><b>{r.reviewer_id}</b><span>검토 요청 · {r.state}</span></div></div>)}
-        {d.decisions.map((x: J, i: number) => <div className="detail-row" key={i}><span>{x.action} · {x.actor_id}</span><b>{x.comment || '-'}</b></div>)}
-        <div className="role-note"><Icon name="shield"/><span>{d.doc_type} 승인 권한: {APPROVER_ROLE[d.doc_type]}</span></div>
-        {d.status === 'DRAFT' && latestOf(d) && stage && !stage.approval_open && <Note>결재 잠금: {stage.blocked_by}</Note>}
-        {author && d.author_id === ctx.me.id && d.status === 'DRAFT' && latestOf(d) && <button className="button primary full" disabled={!stage?.approval_open} onClick={() => act('request-review', { reviewer_id: approver })}>{approver}에게 검토 요청</button>}
-        {d.status === 'BASIS_CHANGED' && <Note>기반 문서가 정정으로 재검토 중입니다. 이 문서의 내용은 정정된 행을 인용하지 않아 그대로이지만, {APPROVER_ROLE[d.doc_type]}가 새 기반에서 범위가 유효한지 확인해야 다음 단계 결재가 열립니다.</Note>}
+        {d.reviews.map((r: J, i: number) => <div className="reviewer" key={i}><div className="avatar">{r.reviewer_id[0].toUpperCase()}</div><div><b>{r.reviewer_id}</b><span>검토 요청 · {plain(r.state)}</span></div></div>)}
+        {d.decisions.map((x: J, i: number) => <div className="detail-row" key={i}><span>{plain(x.action)} · {x.actor_id}</span><b>{x.comment || '-'}</b></div>)}
+        <div className="role-note"><Icon name="shield"/><span>{d.doc_type} 결재: {plain(APPROVER_ROLE[d.doc_type])}</span></div>
+        {d.status === 'DRAFT' && latestOf(d) && stage && !stage.approval_open && <Note>아직 결재할 수 없습니다: {words(stage.blocked_by)}</Note>}
+        {author && d.author_id === ctx.me.id && d.status === 'DRAFT' && latestOf(d) && <button className="button primary full" disabled={!stage?.approval_open} onClick={() => act('request-review', { reviewer_id: approver })}>{approver}님에게 검토 요청</button>}
+        {d.status === 'BASIS_CHANGED' && <Note>앞 단계 문서가 바뀌었습니다. 이 문서 내용은 그대로이지만, {plain(APPROVER_ROLE[d.doc_type])}가 범위가 여전히 맞는지 확인해야 다음 결재가 열립니다.</Note>}
         {ctx.me?.role === APPROVER_ROLE[d.doc_type] && d.status === 'BASIS_CHANGED' && <>
           <input className="input" placeholder="확인 의견 (필수 · 자유 서술)" value={comment} onChange={e => setComment(e.target.value)}/>
           <div className="dual"><button className="button success" disabled={!comment.trim()} onClick={() => act('basis-check', { decision: 'NO_SCOPE_IMPACT', comment, content_sha256: d.content_sha256 })}>범위 영향 없음</button>
@@ -62,7 +66,7 @@ export function Reports({ ctx }: { ctx: Ctx }) {
           <button className="button secondary full" disabled={!comment.trim()} onClick={() => act('decision', { decision: 'REQUEST_INFO', comment, content_sha256: d.content_sha256 })}>추가 정보 요청</button></>}
       </Card>
       <DocEditor ctx={ctx} d={d} latest={latestOf(d)} onSaved={v => setSelKey(`${d.kind}:${v}`)}/>
-      <Card><SectionTitle title="검토 코멘트" sub="주장 단위 · 감사 기록에 남음" action={<Badge tone={d.comments.some((x: J) => x.open) ? 'violet' : 'slate'}>열림 {d.comments.filter((x: J) => x.open).length}</Badge>}/>
+      <Card><SectionTitle title="검토 코멘트" action={<Badge tone={d.comments.some((x: J) => x.open) ? 'violet' : 'slate'}>열림 {d.comments.filter((x: J) => x.open).length}</Badge>}/>
         {d.comments.filter((x: J) => !x.reply_to).map((x: J) => <div key={x.comment_id} className="comment">
           <div className="detail-row"><span>{x.claim_id ?? '문서 전체'} · {x.actor_id} · {x.created_at.slice(11, 19)}</span><Badge tone={x.open ? 'violet' : 'green'}>{x.open ? '열림' : '해결'}</Badge></div>
           <p>{x.body}</p>
@@ -73,10 +77,9 @@ export function Reports({ ctx }: { ctx: Ctx }) {
           {replyTo && <Badge tone="violet">#{replyTo}에 답글</Badge>}</div>
         <input className="input" placeholder="코멘트 (해결 처리 시 메모로도 사용)" value={note} onChange={e => setNote(e.target.value)}/>
         <button className="button secondary full" disabled={!note.trim()} onClick={say}>코멘트 남기기</button></Card>
-      <Card><SectionTitle title="책임 추적" sub="이 버전에 누가 어떤 역할로 무엇을 했는지 · 수정 불가 기록"/>
+      <Card><SectionTitle title="이력" sub="이 버전에 누가 무엇을 했는지"/>
         <div className="tool-timeline">{d.trail.map((t: J, i: number) => <div className="tool-item" key={i}><i className={t.event === 'APPROVE' ? 'green' : 'amber'}>{t.event === 'APPROVE' && <Icon name="check" size={12}/>}</i>
-          <time>{t.at.slice(11, 19)}</time><div><b>{t.event} · {t.actor_id} ({t.role})</b><span>{t.detail}</span></div></div>)}</div></Card>
-      <Card><SectionTitle title="문서 주의사항"/><p className="muted">임시조치 계획 승인은 물리적 조치 완료를 의미하지 않습니다.</p><p className="muted">원인 가설 승인은 근본원인 확정을 의미하지 않습니다.</p></Card></div>}
+          <time>{t.at.slice(11, 19)}</time><div><b>{plain(t.event)} · {t.actor_id} ({plain(t.role)})</b><span>{words(t.detail ?? '')}</span></div></div>)}</div></Card></div>}
     </div>
     <CustomerForms ctx={ctx}/>
   </Page>

@@ -40,7 +40,7 @@ describe('App shell', () => {
     render(<App/>)
     expect(await screen.findByRole('heading', { name: '품질 조사 워크스페이스' })).toBeTruthy()
     await waitFor(() => expect(screen.getAllByText('C1').length).toBeGreaterThan(0))
-    expect(screen.getByText('키 없음 · 호출 불가')).toBeTruthy()
+    expect(screen.getByText('AI 연결 안 됨')).toBeTruthy()
     expect(screen.getByText('AI 오프라인 · 서버 규칙 플래너')).toBeTruthy()
     expect(await screen.findByText('Agent 서비스에 연결할 수 없습니다')).toBeTruthy()
     expect(screen.queryByText(/LIVE 검증됨/)).toBeNull()
@@ -56,7 +56,7 @@ describe('App shell', () => {
     await waitFor(() => expect(screen.getAllByText('C1').length).toBeGreaterThan(0))
     nav('사건 · 개요')
     expect(await screen.findByRole('heading', { name: '품질 운영 현황' })).toBeTruthy()
-    expect(screen.getByText(/SYNTHETIC, SELF_GENERATED/)).toBeTruthy()
+    expect(screen.getByText('시험용 데이터')).toBeTruthy()
   })
 
   it('every existing screen stays reachable under the specialist tools group', async () => {
@@ -73,11 +73,11 @@ describe('App shell', () => {
     render(<App/>)
     await waitFor(() => expect(screen.getAllByText('C1').length).toBeGreaterThan(0))
     nav('사건 · 개요')
-    expect(await screen.findByRole('button', { name: /SMT 라인 사건/ })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: /시험 사건 \(SMT 라인\)/ })).toBeTruthy()
     const userSelect = screen.getByDisplayValue('작성자 Alice')
     await act(async () => { fireEvent.change(userSelect, { target: { value: 'bob' } }) })
     await waitFor(() => expect(calls.some(c => c.path === '/me' && c.user === 'bob')).toBe(true))
-    await waitFor(() => expect(screen.queryByRole('button', { name: /SMT 라인 사건/ })).toBeNull())
+    await waitFor(() => expect(screen.queryByRole('button', { name: /시험 사건 \(SMT 라인\)/ })).toBeNull())
   })
 
   it('shows the server error text when a mutation is refused', async () => {
@@ -90,7 +90,7 @@ describe('App shell', () => {
       render(<App/>)
       await waitFor(() => expect(screen.getAllByText('C1').length).toBeGreaterThan(0))
       nav('사건 · 개요')
-      const button = await screen.findByRole('button', { name: '소형 픽스처 사건' })
+      const button = await screen.findByRole('button', { name: '시험 사건 (소형)' })
       failPost = { status: 409, detail: 'case already exists' }
       await act(async () => { fireEvent.click(button) })
       expect(await screen.findByText('지금은 할 수 없습니다 · 나중에 다시 시도해 주세요')).toBeTruthy()
@@ -107,8 +107,8 @@ describe('App shell', () => {
     await waitFor(() => expect(screen.getAllByText('C1').length).toBeGreaterThan(0))
     tools()
     nav('감사 · 보안')
-    expect(await screen.findByRole('heading', { name: '감사 및 보안' })).toBeTruthy()
-    expect(await screen.findByText('감사 해시 체인 무결')).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: '감사 기록' })).toBeTruthy()
+    expect(await screen.findByText('기록이 바뀌지 않았습니다')).toBeTruthy()
   })
 
   it('queue lists open work and "열기" opens the document screen for that case', async () => {

@@ -1,8 +1,9 @@
 import { useScreenKorean } from './components/Ko'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { ApiError, request } from './api/client'
-import { Badge, Card, Empty, Icon } from './components/ui'
+import { Badge, Card, Empty, Icon, setEvidenceNames } from './components/ui'
 import { USERS } from './constants'
+import { say } from './labels'
 import { Audit } from './features/audit/Audit'
 import { Dashboard } from './features/dashboard/Dashboard'
 import { Reports } from './features/documents/Reports'
@@ -63,6 +64,7 @@ export default function App() {
     api('/me').then(setMe).catch(() => setMe(null))
     api('/cases').then((cs: J[]) => { setCases(cs); setCid(c => fresh || cs.some(x => x.case_id === c) ? c : cs[cs.length - 1]?.case_id ?? '') }).catch(() => setCases([]))
   }, [api, tick, fresh])
+  useEffect(() => { if (cid) api(`/cases/${cid}/evidence-names`).then(setEvidenceNames).catch(() => setEvidenceNames(null)) }, [api, cid, tick])
 
   const newCase = async (line: boolean) => {
     const id = `${line ? 'SMT' : 'PCB'}-${Date.now().toString(36).toUpperCase()}`
@@ -88,16 +90,16 @@ export default function App() {
       <div className="brand"><div className="brand-mark"><span/><span/><span/></div><div><b>QualityOps</b><small>AI</small></div></div>
       <div className="case-list" aria-label="사건 목록"><button className={`case-new ${fresh ? 'active' : ''}`} onClick={() => pick('')}>+ 새 사건</button>
         {[...cases].reverse().map(c => <button key={c.case_id} className={!fresh && cid === c.case_id ? 'active' : ''} aria-current={!fresh && cid === c.case_id ? 'true' : undefined}
-          onClick={() => pick(c.case_id)}><b>{c.case_id}</b><small>{c.status ?? ''}</small></button>)}</div>
+          onClick={() => pick(c.case_id)}><b>{c.case_id}</b><small>{say(c.status ?? '')}</small></button>)}</div>
       <nav aria-label="주 메뉴">{primary.map(n => <button key={n[0]} className={active === n[0] ? 'active' : ''} aria-current={active === n[0] ? 'page' : undefined} onClick={() => go(n[0])}><Icon name={n[2]}/><span>{n[1]}</span></button>)}
         <div className={`specialist ${showTools ? 'open' : ''}`}><button className="specialist-toggle" aria-expanded={showTools} aria-controls="specialist-items" onClick={() => setToolsOpen(!showTools)}><span>전문 도구 · 상세 화면</span><Icon name="chevron" size={13}/></button>
           {showTools && <div id="specialist-items" className="specialist-items">{specialist.map(n => <button key={n[0]} className={active === n[0] ? 'active' : ''} aria-current={active === n[0] ? 'page' : undefined} onClick={() => go(n[0])}><Icon name={n[2]}/><span>{n[1]}</span>{n[0] === 'investigation' && <i>AI</i>}</button>)}</div>}</div></nav>
-      <div className="sidebar-bottom"><div className="status-live"><i className={provider?.configured ? '' : 'off'}/><span><b>Meta · {provider?.model ?? '-'}</b><small>{provider?.live_status === 'VERIFIED' ? 'LIVE 호출 검증됨' : provider?.configured ? 'AI 연결 설정됨' : '키 없음 · 호출 불가'}</small></span></div></div>
+      <div className="sidebar-bottom"><div className="status-live"><i className={provider?.configured ? '' : 'off'}/><span><b>Meta · {provider?.model ?? '-'}</b><small>{provider?.configured ? 'AI 연결됨' : 'AI 연결 안 됨'}</small></span></div></div>
     </aside>
     <div className="shell">
       <header><div className="breadcrumb"><span>QualityOps AI</span><Icon name="chevron" size={13}/><b>{nav.find(x => x[0] === active)?.[1]}</b></div>
-        <div className="header-actions">{cid && <Badge tone="teal">{cid}</Badge>}<Badge tone="blue">SYNTHETIC 데이터</Badge>
-          <label className="user"><div className="avatar">{user[0].toUpperCase()}</div><span><small>데모 사용자 (X-User, 비밀번호 없음)</small><select value={user} onChange={e => setUser(e.target.value)}>{USERS.map(u => <option key={u[0]} value={u[0]}>{u[1]}</option>)}</select></span></label></div></header>
+        <div className="header-actions">{cid && <Badge tone="teal">사건 {cid}</Badge>}<Badge tone="blue">시험용 데이터</Badge>
+          <label className="user"><div className="avatar">{user[0].toUpperCase()}</div><span><small>사용자</small><select value={user} onChange={e => setUser(e.target.value)}>{USERS.map(u => <option key={u[0]} value={u[0]}>{u[1]}</option>)}</select></span></label></div></header>
       {msg && <div className="error-bar" role="alert" onClick={() => setMsg('')}>{msg}</div>}
       {WITH_CONTEXT.includes(active) ? <div className="main-area">{page}<ContextPanel ctx={ctx} go={go}/></div> : page}
     </div>

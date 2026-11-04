@@ -395,6 +395,68 @@ DOC_NOTE = {"CONTAINMENT": "Plan draft. Execution status: NOT_EXECUTED.",
             "RCA": "Cause hypothesis. Cause status: UNCONFIRMED."}
 
 
+WORDING_PROMPT = """You write the sentences of a {doc} draft for a manufacturing quality engineer, in plain, polite Korean.
+Each claim gives its class and the facts as a sentence. Rewrite only the sentence. Keep every number, unit, LOT, board,
+part and code exactly as written (L02, P03/B4, U7, 0.1128, mm³, FAIL). Add no number, cause or finished action:
+a HYPOTHESIS stays a candidate, UNKNOWN says what is not known, a PROPOSAL is not yet done.
+Ordinary English words become Korean (false alarm -> 오검출, pins -> 핀, within-board sigma -> 보드 내 표준편차, lot -> LOT).
+Fixed forms the server reads: "N of M AOI inspections" -> "AOI 검사 M건 중 N건" ("N confirmed of M" -> "AOI 검사 M건 중 확정 N건");
+"centre line" -> "중심선"; keep LCL and UCL as written; a count of confirmed defects says "확정".
+Return ONLY the JSON: claims with claim_id and text for every claim."""
+WORDING_SCHEMA = {"type": "json_schema", "json_schema": {"name": "wording", "strict": True, "schema": {
+    "type": "object", "additionalProperties": False, "required": ["claims"],
+    "properties": {"claims": {"type": "array", "items": {
+        "type": "object", "additionalProperties": False, "required": ["claim_id", "text"],
+        "properties": {"claim_id": {"type": "string"}, "text": {"type": "string"}}}}}}}}
+
+
+def ai_wording(provider, doc_type: str, claims: list[dict], check: Callable[[list[dict]], dict[str, str]] | None = None,
+               repairs: int = 2) -> tuple[list[dict], str]:
+    """The AI writes every sentence (user 2026-11-04); the server only checks each one carries exactly the numbers
+    and codes of the facts it was given, then runs the draft check (`check`: claim id -> problem) on the result. A
+    sentence that fails either goes back to the AI with the reason; one still failing
+    after the repairs keeps the facts sentence. Returns (claims, builder)."""
+    from app.translate import TOKEN, kept  # translate imports workflow, which imports this module
+
+    facts = {c["claim_id"]: c for c in claims}
+    out: dict[str, str] = {}
+    todo = list(facts)
+    msgs = [{"role": "system", "content": WORDING_PROMPT.format(doc=doc_type)},
+            {"role": "user", "content": json.dumps({"claims": [
+                {"claim_id": i, "class": facts[i]["classification"], "text": facts[i]["text"]} for i in todo]},
+                ensure_ascii=False)}]
+    for _ in range(1 + repairs):
+        try:
+            msg = provider.chat(msgs, [], response_format=WORDING_SCHEMA)["message"]
+            items = json.loads(msg.get("content") or "")["claims"]
+        except Exception:  # noqa: BLE001 - any model failure leaves the facts sentences in place
+            break
+        wrong = []
+        for it in items if isinstance(items, list) else []:
+            cid, text = (it.get("claim_id"), str(it.get("text") or "").strip()) if isinstance(it, dict) else (None, "")
+            if cid not in todo:
+                continue
+            if kept(facts[cid]["text"], text) and not DONE_CLAIM.search(text):
+                out[cid] = text
+            else:
+                want, got = sorted(TOKEN.findall(facts[cid]["text"])), sorted(TOKEN.findall(text))
+                wrong.append({"claim_id": cid, "problem": f"numbers and codes must be exactly {want}; you wrote {got}"})
+        if check and out:  # the same claim validator a stored draft meets (recomputed values, lots, units)
+            for cid, problem in check([{**c, "text": out.get(c["claim_id"], c["text"])} for c in claims]).items():
+                if cid in out:
+                    del out[cid]
+                    wrong.append({"claim_id": cid, "problem": problem})
+        todo = [i for i in facts if i not in out]  # a sentence the draft check refused is open again
+        if not todo:
+            break
+        msgs += [msg, {"role": "user", "content": json.dumps(
+            {"fix_only_these": wrong or [{"claim_id": i, "problem": "missing from your answer"} for i in todo]},
+            ensure_ascii=False)}]
+    if not out:
+        return claims, BUILDER
+    return [{**c, "text": out.get(c["claim_id"], c["text"])} for c in claims], f"TEMPLATE_AI_WORDING:{provider.model}"
+
+
 def generator_note(builder: str) -> str:
     if builder == BUILDER:
         return "no AI model used"

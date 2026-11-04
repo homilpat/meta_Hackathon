@@ -58,6 +58,14 @@ class Verdict(NamedTuple):
         return {"result": self.result, "reasons": self.reasons}
 
 
+# Reasons a person reads (user 2026-11-04: no policy internals on screen)
+ROLE_KO = {"AUTHOR": "작성자", "REVIEWER": "검토자", "QA_PRODUCTION": "QA/생산", "PROCESS_ENGINEER": "공정 엔지니어",
+           "AGENT_ADMIN": "AI 운영"}
+STATE_KO = {None: "시작 전", "DRAFT": "초안", "IN_REVIEW": "검토 중", "REJECTED": "반려됨", "BASIS_CHANGED": "기반 변경 확인 필요",
+            "REVALIDATION_REQUIRED": "재검증 필요", "NOT_EFFECTIVE": "효과 없음", "INCONCLUSIVE": "판단 보류",
+            "REOPENED": "재오픈", "OPEN": "진행 중", "PLANNED": "계획됨", "EXECUTED": "실행됨"}
+
+
 def policy_hash(policy_id: str, version: int, applicability: dict, body: dict) -> str:
     raw = {"policy_id": policy_id, "version": version, "applicability": applicability, "body": body}
     return hashlib.sha256(json.dumps(raw, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
@@ -77,33 +85,33 @@ def can_draft(body: dict, stage: str, state: dict[str, str | None]) -> Verdict:
     """Drafts may be written ahead of approvals, but need a live (not rejected/superseded) upstream draft."""
     missing = [s for s in body["draft_requirements"].get(stage, [])
                if state.get(s) in (None, "REJECTED", "SUPERSEDED")]
-    return _verdict([f"{stage} draft needs a live {s} first" for s in missing])
+    return _verdict([f"{stage} 초안은 {s} 문서가 먼저 있어야 합니다" for s in missing])
 
 
 def can_execute_urgent(body: dict, role: str, state: dict[str, str | None], route: str | None) -> Verdict:
     """Urgent containment: allowed right after D0 for an authorised role, before D1/D2 are complete."""
     blocks = []
     if role not in body["execution_permissions"]["URGENT_CONTAINMENT"]:
-        blocks.append(f"{role} may not execute urgent containment")
-    blocks += [f"urgent containment needs {s} risk assessment first" for s in body["urgent_requires"]
+        blocks.append(f"{ROLE_KO.get(role, role)} 역할은 긴급 봉쇄를 실행할 수 없습니다")
+    blocks += [f"긴급 봉쇄 전에 {s} 위험 평가가 필요합니다" for s in body["urgent_requires"]
                if state.get(s) not in DONE]
-    warns = [] if route == "EMERGENCY_FULL_8D" else [f"route is {route}; urgent action outside an emergency route"]
+    warns = [] if route == "EMERGENCY_FULL_8D" else ["긴급 경로가 아닌 사건의 긴급 조치입니다"]
     return _verdict(blocks, warns)
 
 
 def can_execute(body: dict, permission: str, role: str) -> Verdict:
     allowed = body["execution_permissions"].get(permission, [])
-    return _verdict([] if role in allowed else [f"{role} may not {permission}"])
+    return _verdict([] if role in allowed else [f"{ROLE_KO.get(role, role)} 역할은 이 작업을 할 수 없습니다"])
 
 
 def may_decide(body: dict, stage: str, role: str, actor_id: str, author_id: str | None) -> Verdict:
     """Who may decide (approve, reject, ask for info) at a stage: the policy's approver role, not the author."""
     gate = body["approval_gates"].get(stage)
     if gate is None:
-        return Verdict("BLOCK", [f"policy has no approval gate for {stage}"])
+        return Verdict("BLOCK", [f"{stage} 단계는 결재 대상이 아닙니다"])
     blocks = []
     if role != gate["approver"]:
-        blocks.append(f"{stage} approval needs role {gate['approver']}")
+        blocks.append(f"{stage} 결재는 {ROLE_KO.get(gate['approver'], gate['approver'])}만 할 수 있습니다")
     if author_id == actor_id and stage not in body["self_approval_exceptions"]:
         blocks.append("self-approval is not allowed by this policy")
     return _verdict(blocks)
@@ -114,7 +122,7 @@ def can_approve(body: dict, stage: str, role: str, actor_id: str, author_id: str
     who = may_decide(body, stage, role, actor_id, author_id)
     if stage not in body["approval_gates"]:
         return who
-    blocks = who.reasons + [f"{stage} approval needs {s} complete (is {state.get(s) or 'missing'})"
+    blocks = who.reasons + [f"{stage} 결재 전에 {s} 단계가 끝나야 합니다 (지금 {STATE_KO.get(state.get(s), '시작 전')})"
                             for s in body["approval_gates"][stage]["requires"] if state.get(s) not in DONE]
     return _verdict(blocks)
 
@@ -124,8 +132,8 @@ def can_close(body: dict, state: dict[str, str | None], route: str | None,
     """D8: every stage the route requires is complete; callers add evidence/risk/signature checks."""
     required = body["routes"].get(route or "", body["closure_gates"]) if route else None
     if required is None:
-        return Verdict("BLOCK", ["no D0 route recorded; closure needs a triage decision"])
-    blocks = [f"{s} is not complete (is {state.get(s) or 'missing'})" for s in required if state.get(s) not in DONE]
+        return Verdict("BLOCK", ["D0 판정이 없어 종결할 수 없습니다"])
+    blocks = [f"{s} 단계가 끝나지 않았습니다 (지금 {STATE_KO.get(state.get(s), '시작 전')})" for s in required if state.get(s) not in DONE]
     return _verdict(blocks + (extra_blocks or []))
 
 

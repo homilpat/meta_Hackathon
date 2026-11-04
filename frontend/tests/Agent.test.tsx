@@ -37,12 +37,11 @@ describe('Agent workspace', () => {
     expect(await screen.findByText(RUN.goal)).toBeTruthy()
     expect(api).toHaveBeenCalledWith('/agent/runs?case_id=C1')
     expect(screen.getAllByText('사람 확인 필요').length).toBeGreaterThan(0)
-    expect(screen.getByText('승인 아님')).toBeTruthy()
-    expect(screen.getByText('DRAFT')).toBeTruthy()
-    expect(screen.getByText('검증 PASS')).toBeTruthy()
+    expect(screen.getByText('초안')).toBeTruthy()  // a draft reads as a draft, never as approved
+    expect(screen.getByText('검증 통과')).toBeTruthy()
     expect(screen.getByText('not on the agent allowlist')).toBeTruthy()
     expect(screen.getByText('거부됨')).toBeTruthy()
-    expect(screen.getByText('감사 이벤트 #41')).toBeTruthy()
+    expect(screen.queryByText(/#41/)).toBeNull()  // audit row ids stay in the audit screen
     expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('1')
   })
 
@@ -66,7 +65,7 @@ describe('Agent workspace', () => {
   it('sends a goal for the current case with an idempotency key', async () => {
     const api = vi.fn(async (path: string, method?: string) => method === 'POST' ? { ...RUN, run_id: 8, goal: '내 할 일 알려줘', status: 'COMPLETED', pending: null } : [])
     render(<Agent ctx={ctxWith(api as Ctx['api'])} provider={null} go={vi.fn()}/>)
-    expect(await screen.findByText('이 사건의 Agent 기록이 없습니다.')).toBeTruthy()
+    expect(await screen.findByText('무엇을 도와드릴까요?')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Agent에게 보낼 목표'), { target: { value: '내 할 일 알려줘' } })
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: '메시지 전송' })) })
     expect(api).toHaveBeenCalledWith('/agent/runs', 'POST', { case_id: 'C1', goal: '내 할 일 알려줘' }, true)
@@ -92,8 +91,7 @@ describe('Agent workspace', () => {
     vi.stubGlobal('fetch', fetchSpy)
     render(<Agent ctx={ctxWith(vi.fn(async () => [exportsRun]))} provider={null} go={vi.fn()}/>)
     expect(await screen.findByRole('button', { name: 'NCR 승인본 PDF' })).toBeTruthy()
-    expect(screen.getByText('NCR v2 APPROVED')).toBeTruthy()
-    expect(screen.getByText(/초안은 승인본으로 내보낼 수 없습니다/)).toBeTruthy()
+    expect(screen.getByText('NCR v2 승인됨')).toBeTruthy()
     expect(fetchSpy).not.toHaveBeenCalled() // a file is made only when the user clicks
     vi.unstubAllGlobals()
   })
@@ -124,9 +122,9 @@ describe('Agent workspace', () => {
     const yes = await screen.findByRole('button', { name: '예, 채워 주세요' }) // find outside act: act holds renders
     await act(async () => { fireEvent.click(yes) })
     expect(api).toHaveBeenCalledWith('/agent/runs/7/resume', 'POST', { token: '7:2', confirm: true, reviewer_id: null, answer: null })
-    const submit = await screen.findByRole('button', { name: '제출 권한: REVIEWER' })
+    const submit = await screen.findByRole('button', { name: '검토자만 제출할 수 있습니다' })
     expect((submit as HTMLButtonElement).disabled).toBe(true) // alice cannot record D0; nothing was stored
-    expect(screen.getByDisplayValue('EMERGENCY_FULL_8D')).toBeTruthy()
+    expect(screen.getByDisplayValue('긴급 8D')).toBeTruthy()
     expect(api.mock.calls.some(c => c[0] === '/cases/C1/triage')).toBe(false)
   })
 

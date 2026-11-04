@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { say } from '../../labels'
 import { Badge, Card, Icon } from '../../components/ui'
 import type { Ctx, J, Tone } from '../../types'
 import { IntakePanel } from '../intake/Intake'
@@ -19,6 +20,7 @@ export function Agent({ ctx, provider, go }: { ctx: Ctx; provider: J; go: (view:
   const [down, setDown] = useState('')
   const [goal, setGoal] = useState('')
   const [busy, setBusy] = useState(false)
+  const [asking, setAsking] = useState('')  // the goal on its way: shown at once, like any chat
   const inFlight = useRef(false) // state updates are async; a second click in the same tick must still be refused
 
   useEffect(() => { // restore this case's runs from the server on every entry, user or case change
@@ -42,7 +44,9 @@ export function Agent({ ctx, provider, go }: { ctx: Ctx; provider: J; go: (view:
   const send = async () => {
     const text = goal.trim()
     if (!text) return
-    if (await act(() => ctx.api('/agent/runs', 'POST', { case_id: ctx.cid, goal: text }, true))) setGoal('')
+    setAsking(text); setGoal('')
+    const run = await act(() => ctx.api('/agent/runs', 'POST', { case_id: ctx.cid, goal: text }, true))
+    setAsking(''); if (!run) setGoal(text)  // refused: the text comes back to edit
   }
   const resume = (run: J) => (confirm: boolean, reviewer?: string, answer?: string) =>
     act(() => ctx.api(`/agent/runs/${run.run_id}/resume`, 'POST', { token: run.pending.token, confirm, reviewer_id: reviewer ?? null, answer: answer ?? null }))
@@ -51,7 +55,7 @@ export function Agent({ ctx, provider, go }: { ctx: Ctx; provider: J; go: (view:
   const ordered = [...(runs ?? [])].reverse() // oldest first, like a conversation
   return <main className="agent-page">
     <div className="agent-heading"><div><span className="eyebrow"><i/>QualityOps Agent</span><h1>품질 조사 워크스페이스</h1>
-      <p>목표를 말하면 Agent가 허용된 도구로 근거 조회부터 문서 초안·검증·검토 요청 준비까지 계획하고, 사람의 결정이 필요한 곳에서 멈춥니다.</p></div>
+      <p>목표를 말하면 Agent가 사건 기록을 찾아 답하고 문서 초안과 검토 요청까지 준비합니다. AI의 답은 판단을 돕는 참고 자료이며, 확정과 승인은 담당자가 합니다.</p></div>
       <div className="row-gap">{label && <Badge tone={tone}>{label}</Badge>}
         {ctx.cid && <button className="button secondary" onClick={async () => { if (confirm(`${ctx.cid} 사건을 보관할까요? 목록에서 사라지고 기록은 지워지지 않습니다.`)) { await ctx.api(`/cases/${ctx.cid}/archive`, 'POST'); ctx.refresh() } }}>보관</button>}</div></div>
     {down ? <Card className="fallback"><div className="fallback-icon"><Icon name="warning" size={24}/></div><h2>Agent 서비스에 연결할 수 없습니다</h2>
@@ -62,19 +66,27 @@ export function Agent({ ctx, provider, go }: { ctx: Ctx; provider: J; go: (view:
       : <div className="conversation">
         <IntakePanel ctx={ctx}/>
         {!ctx.cid && <Card><b>새 사건</b><p className="muted">고객 문서를 첨부하세요. 확인하면 사건이 시작되고 이 대화가 그 사건의 기록이 됩니다.</p></Card>}
-        {ctx.cid && runs === null && <p className="muted">서버에서 이 사건의 Agent 기록을 불러오는 중…</p>}
-        {runs?.length === 0 && <Card><b>이 사건의 Agent 기록이 없습니다.</b><p className="muted">예시:</p><div className="row-gap">{EXAMPLES.map(x => <button key={x} className="button secondary" onClick={() => setGoal(x)}>{x}</button>)}</div>
-          <p className="muted mt">AI가 검사한 기록은 사건 확정 판정이 아닙니다.</p></Card>}
+        {ctx.cid && runs === null && <p className="muted row-gap"><span className="spinner" aria-hidden="true"/>대화를 불러오는 중…</p>}
+        {runs?.length === 0 && !asking && <Card><b>무엇을 도와드릴까요?</b><p className="muted">예시:</p><div className="row-gap">{EXAMPLES.map(x => <button key={x} className="button secondary" onClick={() => setGoal(x)}>{x}</button>)}</div></Card>}
         {ordered.map(r => <div key={r.run_id}>
           <div className="message user-message"><div className="avatar user">{r.user_id[0].toUpperCase()}</div><div><span>{r.user_id} · {r.created_at?.slice(0, 19)}</span><p className="wrap">{r.goal}</p></div></div>
           <RunView run={r} ctx={ctx} busy={busy} onResume={resume(r)}/></div>)}
+        {asking && <div><div className="message user-message"><div className="avatar user">{(ctx.me?.id ?? '?')[0].toUpperCase()}</div><div><span>{ctx.me?.id}</span><p className="wrap">{asking}</p></div></div>
+          <Working/></div>}
       </div>}
     <div className="composer"><div className="composer-input">
       <textarea aria-label="Agent에게 보낼 목표" value={goal} disabled={!!down || !ctx.cid} onChange={e => setGoal(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send() } }}
-        placeholder={ctx.cid ? 'Agent에게 품질 관리 목표를 설명하세요… (Enter 전송, Shift+Enter 줄바꿈)' : '배정된 사건이 없습니다'}/>
-      <div><span>현재 사건과 연결됨 · {ctx.cid || '-'} · 사용자 {ctx.me?.id ?? '-'} ({ctx.me?.role ?? '-'})</span>
-        <button className="send" aria-label="메시지 전송" disabled={busy || !goal.trim() || !!down || !ctx.cid} onClick={send}><Icon name="arrow"/></button></div></div>
-      {busy && <p>서버가 실행 중입니다…</p>}</div>
+        placeholder={ctx.cid ? '무엇을 할지 적어 주세요 (Enter 전송, Shift+Enter 줄바꿈)' : '고객 문서를 첨부하면 사건이 시작됩니다'}/>
+      <div><span>사건 {ctx.cid || '-'} · {ctx.me?.id ?? '-'} ({say(ctx.me?.role)})</span>
+        <button className="send" aria-label="메시지 전송" disabled={busy || !goal.trim() || !!down || !ctx.cid} onClick={send}><Icon name="arrow"/></button></div></div></div>
   </main>
+}
+
+// The Agent at work: a spinner and the seconds so far, until the server answers
+function Working() {
+  const [sec, setSec] = useState(0)
+  useEffect(() => { const t = window.setInterval(() => setSec(x => x + 1), 1000); return () => clearInterval(t) }, [])
+  return <div className="message agent-message" role="status" aria-live="polite"><div className="avatar muse"><Icon name="spark" size={17}/></div>
+    <div className="message-body working"><span className="spinner" aria-hidden="true"/><span>{sec < 5 ? '요청을 읽는 중…' : sec < 20 ? '기록을 찾고 확인하는 중…' : '답을 쓰는 중…'}</span><span className="muted">{sec}초</span></div></div>
 }

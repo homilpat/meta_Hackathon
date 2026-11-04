@@ -412,6 +412,13 @@ def make_export_router(sessions: sessionmaker, current_user: Callable[..., Actor
             "Content-Disposition": f'attachment; filename="{filename}"', "X-Reference-SHA256": ref,
             "X-File-SHA256": digest, "X-Fields-Checked": str(len(set(required)))})
 
+    @router.get("/cases/{case_id}/evidence-names")
+    def evidence_names(case_id: str, actor: Who) -> dict[str, tuple[str, str]]:
+        """evidence id -> (kind of record, its row id): screens show what the evidence is, never the id."""
+        with sessions() as session:
+            require_case(session, case_id, actor)
+            return sources(session, case_id)
+
     @router.get("/cases/{case_id}/documents/{kind:doc}/export")
     def export_document(case_id: str, kind: str, actor: Who, format: Literal["docx", "pdf"] = "pdf",
                         version: int | None = None) -> Response:

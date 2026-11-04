@@ -2,6 +2,8 @@
 
 Built for the Meta Global AI Developer Hackathon with Meta **`muse-spark-1.3`**.
 
+**▶ Demo video: https://youtu.be/V2bcRva2lkM**
+
 ## In one minute
 
 **Problem.** When a customer complains about a defect, a quality engineer has to read the customer's PDF/Excel/Word

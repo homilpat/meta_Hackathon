@@ -1,10 +1,6 @@
-# One run per commit: backend and frontend in parallel, integration only after both succeed on the same SHA.
-# No path filters, so a backend-only or frontend-only change still gets the integration verdict.
+# Manual-only CI to conserve GitHub Actions minutes.
 name: CI
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 permissions:
   contents: read

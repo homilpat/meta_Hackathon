@@ -57,7 +57,7 @@ QualityOps AI is an **evidence-governed, human-controlled manufacturing quality 
 | D7–D8 | Controlled SOP/FMEA revision and training gates, current-evidence closure checks, human acknowledgements, archived closure snapshots and reopen history |
 | Docs and reports | G9 versioned human editing, difference review, claim revalidation, hash-bound approvals; G10 approved DOCX/PDF exports with read-back checks |
 | Experience Memory | Scope/permission-filtered precedent search: KNOWN / ANALOGICAL / NO_RELEVANT_HISTORY. Failed, recurrent, stale or condition-mismatched precedents are not blindly prescribed |
-| AI and Agent-First | Meta-backed read-only investigation and a hybrid agent planner over allowlisted tools; persisted runs, ask-back, D0 form proposals, draft preparation and explicit human hand-off; deterministic offline fallback |
+| AI and Agent-First | Meta-backed read-only investigation and a hybrid agent planner over allowlisted tools; every answer is written by Meta and fact-checked by the server; persisted runs, ask-back, D0 form proposals, draft preparation and explicit human hand-off; deterministic offline fallback |
 | Audit and verification | ClaimValidator, policy-driven approval, least-privilege tools, immutable evidence/document references, audit checks and backend/frontend/integration CI |
 
 **Boundaries:** All production-style records and operational outcomes here are SYNTHETIC/SIMULATED; a logged “executed” action represents a simulated workflow event, not a physical factory operation. The demo uses role switching via an `X-User` header, not production authentication. A final 8D report requires the appropriate closed case; the NCR_ONLY route can produce its own closure report. Model predictions, explanations and prior cases are evidence for investigation, not independent proof of causation.
@@ -81,7 +81,7 @@ Added since 2026-11-02:
 - **Case archive (보관):** any case conversation can be archived; nothing is deleted, an append-only event records it.
 
 - **Implemented and checked:** file intake → draft review → human-confirmed case → existing D0 gates; supplier/audit request and reply review; responsibility/handover. See [v5.8 verification](docs/implementation/V58_VERIFICATION.md).
-- **LIVE measured:** Muse document extraction and the read-only investigation loop. Connectivity is verified; reliable completion is a separate measured question.
+- **LIVE measured:** Muse document extraction, the read-only investigation loop (pass^1 0.94, pass^4 0.75 after the fixes) and Experience Memory; see [Evaluation](#evaluation-scripts-run-from-backend).
 - **Not implemented:** specialist defect-vision model (`NOT_CONFIGURED`), mail integration, unattended case creation, external supplier accounts, production authentication.
 - **Limits:** DOCX uses structural locators and is not rendered; PDF tables are reconstructed; masked inputs lose semantic information. This is not a production QMS or a validated manufacturing deployment.
 
@@ -108,9 +108,9 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 python -m scripts.integration_smoke     # real uvicorn on a fresh migrated scratch DB
 ```
 
-`GET /health` returns `{"status":"ok","stage":"S6"}` (web process only). Open `http://127.0.0.1:8000/ui` and pick a
+`GET /health` returns `{"status":"ok","stage":"S6"}` (web process only). Open `http://127.0.0.1:8000/app/` and pick a
 demo user in the header: alice/dave (author), bob/carol (NCR reviewer), erin (QA/Production), frank (process
-engineer). Demo identities are selected by the `X-User` header with no password; this is not real authentication.
+engineer), gina (AI admin). Demo identities are selected by the `X-User` header with no password; this is not real authentication.
 
 ## Web UI
 
@@ -205,7 +205,7 @@ PDF (default: a new temp directory). The failure scenario records D6 NOT_EFFECTI
   ?format=docx|pdf[&version=n]` exports an **APPROVED** version whose approval names its exact content hash. Drafts,
   `BASIS_CHANGED` / `REVALIDATION_REQUIRED`, BLOCK-validated or replaced versions get a 409 with the reason.
 - After writing, the server reads the file back (DOCX XML / PDF text) and checks every required value, unit,
-  evidence id (LOT), version, approver and hash from the snapshot; a miss returns 500 and no file. Each export is
+  claim id, version and approver (the content hash is checked against the approval before writing); a miss returns 500 and no file. Each export is
   logged (`EXPORTED`, file SHA-256). In `/app`: *문서 · 결재* (approved version) and *D0~D8 진행* → D8 (closed case).
 - Limits: synthetic data only. Hangul text is rendered in the PDF with reportlab's built-in CID font, but PDF text
   extraction only round-trips ASCII, so Hangul statements are not part of the read-back check.
@@ -224,7 +224,7 @@ From `backend/`:
 - `python -m scripts.meta_smoke` — minimal structured-response check.
 - `python -m scripts.meta_investigate_smoke` — synthetic-case, read-only investigation and report validation.
 
-**Real Meta `muse-spark-1.3` calls have succeeded**, including the structured smoke, an Agent-First draft/validation hand-off and the hybrid planner. See the [LIVE run log](docs/evaluations/META_LIVE_LOG.md), which also records failed calls. The standalone investigation sometimes produces a final report that fails its strict schema; the server refuses it instead of accepting unsupported content. Do not interpret LIVE connectivity as a 100% report success rate.
+**Real Meta `muse-spark-1.3` calls have succeeded**, including the structured smoke, an Agent-First draft/validation hand-off and the hybrid planner. See the [LIVE run log](docs/evaluations/META_LIVE_LOG.md), which also records failed calls. When an investigation report fails a server check, the server refuses it and sends the reasons back to the model for a rewrite; it never shows unsupported content. The latest LIVE re-measurement completed 30 of 32 runs (pass^1 0.94); LIVE connectivity is not a 100% success rate.
 
 The hybrid planner uses the model as an intent classifier (one strict-JSON call over a server-generated situation card); the tools for each intent are a fixed server workflow, so the same request runs the same tools LIVE or offline. The fixed chat investigation workflow adds a summary call at `reasoning_effort=minimal` (LIVE: about 9 s end to end). Intent accuracy is measured with `python -m scripts.intent_eval` (LIVE 30/30 incl. 5 held-out, see the LIVE log). When the goal is ambiguous it asks a clarifying question; if no key is available it uses a deterministic server planner. The agent does not approve documents, execute plant actions, confirm causes or close a case.
 

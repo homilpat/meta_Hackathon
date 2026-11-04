@@ -49,25 +49,25 @@ def test_closed_case_report_and_approved_document_match_the_snapshot(c):  # TC-D
     for fmt in ("docx", "pdf"):
         r = c.get(f"/cases/L/report/export?format={fmt}", headers=H("bob"))
         text = squash(opened(r, fmt))
-        assert f'filename="L_8D_report_{ref[:12]}.{fmt}"' in r.headers["content-disposition"]
-        assert r.headers["x-reference-sha256"] == ref and ref in text
-        for d in snap["documents"]:  # every version with its status at closure and content hash
-            assert squash(f"v{d['version']}{d['status']}{d['content_sha256']}") in text, d
-        for cl in ncr2["claims"]:  # the edited, approved NCR v2: statements (LOTs), values, units, evidence ids
-            assert squash(cl["text"]) in text and all(e in text for e in cl["evidence_ids"])
+        assert f'filename="L_8D_report.{fmt}"' in r.headers["content-disposition"]
+        assert r.headers["x-reference-sha256"] == ref and ref not in text  # readers get words, not hashes
+        assert not any(d["content_sha256"] in text for d in snap["documents"])
+        for cl in ncr2["claims"]:  # the edited, approved NCR v2: statements (LOTs), values, units
+            assert squash(export.plain(cl["text"])) in text and not any(e in text for e in cl["evidence_ids"])
             if cl["value"] is not None:
                 assert export.num(cl["value"]) in text
         assert "(alllots)" in text  # the Docs edit is what was exported
-        assert all(squash(f"{k}{v}") in text for k, v in snap["state"].items() if v) and "D8CLOSED" in text
+        assert all(squash(f"{k}{export.ko(v)}") in text for k, v in snap["state"].items() if v) and "D8종결" in text
         assert all(f"ACT-{a['action_id']}" in text for a in snap["actions"])
         assert all(f"H{h}" in text for h in snap["confirmed_causes"])
         assert all(squash(f"{p['doc_number']}rev{p['revision']}") in text for p in snap["prevention"])
-        assert "bob" in text and "Syntheticdata" in text
+        assert "bob" in text and "EQ-STN-2" in text  # a few records are named by their row id
         # the approved NCR on its own
         r = c.get(f"/cases/L/documents/ncr/export?format={fmt}", headers=H("bob"))
         text = squash(opened(r, fmt))
-        assert r.headers["x-reference-sha256"] == ncr2["content_sha256"] in text and "NCRv2" in text
-        assert f'filename="L_NCR_v2_{ncr2["content_sha256"][:12]}.{fmt}"' in r.headers["content-disposition"]
+        assert r.headers["x-reference-sha256"] == ncr2["content_sha256"] and "NCRv2" in text
+        assert ncr2["content_sha256"] not in text
+        assert f'filename="L_NCR_v2.{fmt}"' in r.headers["content-disposition"]
     assert len(events(c, "EXPORTED")) == 4
     assert c.get("/audit/verify", headers=H("bob")).json()["ok"] is True
 

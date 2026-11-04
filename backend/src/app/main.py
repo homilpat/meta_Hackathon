@@ -193,7 +193,7 @@ def create_app(database_url: str | None = None,
     app.include_router(make_validation_router(sessions, current_user))
     app.include_router(make_experience_router(sessions, current_user, app.state.provider))
     app.include_router(make_docs_router(sessions, current_user, app.state.provider))
-    app.include_router(make_export_router(sessions, current_user))
+    app.include_router(make_export_router(sessions, current_user, app.state.provider))
     app.include_router(make_translate_router(sessions, current_user, app.state.provider))
     app.include_router(make_agent_router(app, sessions, current_user, app.state.provider))
     app.state.local_provider = LocalProvider.from_env()  # in-house model for protected files, if configured

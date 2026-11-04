@@ -26,7 +26,7 @@ from app.fields import FreeText
 ADMIN_ROLE = "AGENT_ADMIN"
 OVERRIDES: dict[str, object] = {}  # recorded settings of this process (loaded at start, updated on change)
 RESTART = {"MAX_FILES_PER_UPLOAD", "MAX_REQUEST_ITEMS"}  # fixed in request schemas at start
-CHOICES = {"MODEL_RESPONSE_REUSE": {"ON", "OFF"}, "INVESTIGATION_REASONING_EFFORT": {"minimal", "default"}, "EXTRACT_MODE": {"WHOLE_FIRST", "HYBRID", "WHOLE", "AUTO", "AI_CHOICE"}}
+CHOICES = {"TRANSLATE_LANGUAGE": {"ko", "ja", "zh", "OFF"}, "MODEL_RESPONSE_REUSE": {"ON", "OFF"}, "INVESTIGATION_REASONING_EFFORT": {"minimal", "default"}, "EXTRACT_MODE": {"WHOLE_FIRST", "HYBRID", "WHOLE", "AUTO", "AI_CHOICE"}}
 OFF_ALLOWED = {"AGENT_ANSWER_MAX_REPAIRS", "MAX_COST_PER_MODEL_CALL_USD", "MODEL_TEMPERATURE", "MODEL_SEED", "INVESTIGATION_MAX_COST_USD",
                "INVESTIGATION_MAX_REPAIRS"}  # 0 is a valid setting
 
@@ -163,6 +163,10 @@ LIMITS: dict[str, Limit] = {
                                      "readable header terms, comma separated (JA)", "DECISION", "user, 2026-11-03: a protected file's header words go masked except the inspection terms of its language, read on the server (a header is a form label, not a value); terms a run may be built from"),
     "XLSX_HEADER_TERMS_ZH": Limit("批次,批号,编号,品号,零件,检验,檢驗,检查,日期,数量,數量,合格,不合格,不良,良品,单位,單位,备注,測量,测量,项目,值,合计,判定,结果",
                                      "readable header terms, comma separated (ZH)", "DECISION", "user, 2026-11-03: a protected file's header words go masked except the inspection terms of its language, read on the server (a header is a form label, not a value); terms a run may be built from"),
+    "TRANSLATE_LANGUAGE": Limit("ko", "language English record text is shown in on screens and reports: ko, ja, zh "
+                                "or OFF (originals as written)", "DECISION",
+                                "user, 2026-11-05: Meta translates; numbers and codes must survive or the original "
+                                "is shown. Labels of the screens stay Korean"),
     "ALLOWED_TIMEZONES": Limit("Asia/Seoul,America/New_York,America/Chicago,America/Denver,America/Los_Angeles",
                                "IANA zones for due dates (KST = Asia/Seoul)", "DECISION",
                                "user, 2026-11-01: Korea and the US; the US has several zones, so each by its IANA "
@@ -215,7 +219,8 @@ def where(name: str) -> str:
 
 def table() -> list[dict]:
     return [{"name": k, "value": get(k), "default": v.default, "unit": v.unit, "basis": v.basis,
-             "source": v.source, "set_by": where(k), "restart_required": k in RESTART} for k, v in LIMITS.items()]
+             "source": v.source, "set_by": where(k), "restart_required": k in RESTART,
+             "choices": sorted(CHOICES.get(k, ()))} for k, v in LIMITS.items()]
 
 
 def load(sessions: sessionmaker) -> None:

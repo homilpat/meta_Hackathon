@@ -29,11 +29,13 @@ function Limits({ ctx }: { ctx: Ctx }) {
   const admin = ctx.me?.role === data?.admin_role
   const save = async () => { try { await ctx.api(`/limits/${form.name}`, 'POST', { value: form.value, reason: form.reason }); setForm({ name: '', value: '', reason: '' }); ctx.refresh() } catch { /* error bar */ } }
   if (!data) return null
+  const choices: string[] = data.limits.find((l: J) => l.name === form.name)?.choices ?? []  // e.g. TRANSLATE_LANGUAGE: ko, ja, zh, OFF
   return <Card><SectionTitle title="운영 한도" sub={`근거와 함께 공개 · 변경은 ${data.admin_role}만`}/><div className="table-wrap"><table><thead><tr><th>항목</th><th>값</th><th>단위</th><th>근거</th><th>출처</th><th>적용</th></tr></thead><tbody>
     {data.limits.map((l: J) => <tr key={l.name}><td>{l.name}</td><td><b>{String(l.value)}</b></td><td className="wrap">{l.unit}</td><td><Badge tone={BASIS[l.basis]?.[1] ?? 'slate'}>{BASIS[l.basis]?.[0] ?? l.basis}</Badge></td><td className="wrap muted">{l.source}</td><td>{l.set_by}{l.restart_required ? ' · 재시작 필요' : ''}</td></tr>)}
   </tbody></table></div>
     {admin && <div className="row-gap"><select aria-label="변경할 항목" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}><option value="">항목 선택</option>{data.limits.map((l: J) => <option key={l.name}>{l.name}</option>)}</select>
-      <input aria-label="새 값" placeholder="새 값" value={form.value} onChange={e => setForm(f => ({ ...f, value: e.target.value }))}/>
+      {choices.length ? <select aria-label="새 값" value={form.value} onChange={e => setForm(f => ({ ...f, value: e.target.value }))}><option value="">값 선택</option>{choices.map(c => <option key={c}>{c}</option>)}</select>
+        : <input aria-label="새 값" placeholder="새 값" value={form.value} onChange={e => setForm(f => ({ ...f, value: e.target.value }))}/>}
       <input aria-label="변경 사유" placeholder="사유 (필수)" value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))}/>
       <button className="button primary" disabled={!form.name || !form.value || !form.reason.trim()} onClick={save}>변경</button></div>}
     {admin && <LimitProposals ctx={ctx}/>}

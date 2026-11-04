@@ -105,7 +105,7 @@ def test_simple_ncr_route_closes_after_d3_with_its_own_report(tmp_path):
     r = c.get("/cases/L/report/export?format=pdf", headers=H("bob"))
     text = squash(opened(r, "pdf"))
     assert "NCR_closure_report" in r.headers["content-disposition"]
-    assert all(squash(x) in text for x in ("NCR closure report", "Route NCR_ONLY", "N/A (NCR_ONLY)"))
-    assert squash("D4 confirmed causes") not in text  # an empty, not-required section is left out
+    assert all(squash(x) in text for x in ("NCR 종결 보고서", "경로 NCR 단독", "해당 없음 (NCR 단독)"))
+    assert squash("D4 확정 원인") not in text  # an empty, not-required section is left out
     links = run(c, "종료 보고서 내보내 줘")
     assert next(s for s in links["steps"] if s["tool"] == "exports")["result"]["report"] == "/cases/L/report/export"

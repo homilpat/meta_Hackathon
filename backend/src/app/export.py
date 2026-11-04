@@ -21,8 +21,8 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app import audit, causes, validation
-from app.db import ApprovalEvent, Closure, DocumentVersion, PreventionDeployment
+from app import audit, causes, translate, validation
+from app.db import ApprovalEvent, Closure, DocumentVersion, Evidence, PreventionDeployment, SourceEvent
 from app.workflow import KINDS, STEP, Actor, _doc_out, _get_doc, _latest, log, now, require_case
 
 MIME = {"docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -35,43 +35,95 @@ def num(v: float) -> str:
     return repr(float(v)).removesuffix(".0")
 
 
-def claim_rows(c: dict, per_row: int = 12) -> list[list[str]]:
-    """Long evidence lists continue on extra rows: a table row taller than a page cannot be laid out in the PDF."""
-    ev = c["evidence_ids"]
-    chunks = [", ".join(ev[i:i + per_row]) for i in range(0, len(ev), per_row)] or [""]
-    first = [c["claim_id"], c["classification"], c["text"], "" if c["value"] is None else num(c["value"]),
-             c["unit"] or "", chunks[0]]
-    return [first] + [["", "", "", "", "", x] for x in chunks[1:]]
+# Readers get words, not hashes (user 2026-11-05): each claim names what its evidence is ("SPI 측정 8건");
+# record ids, content hashes and the audit chain stay in the system and its logs.
+KO = {"OBSERVED": "관찰", "CALCULATED": "계산", "HYPOTHESIS": "가설", "PROPOSAL": "제안", "UNKNOWN": "미확인",
+      "DONE": "완료", "APPROVED": "승인", "CLOSED": "종결", "APPROVE": "승인", "REJECT": "반려",
+      "REQUEST_CHANGES": "수정 요청", "NO_SCOPE_IMPACT": "범위 영향 없음 확인", "IN_REVIEW": "검토 중",
+      "NCR_ONLY": "NCR 단독 (D0-D3)", "FULL_8D": "전체 8D", "EMERGENCY_FULL_8D": "긴급 전체 8D",
+      "INDEPENDENTLY_VERIFIED": "독립 확인 완료", "EXECUTED": "실행됨", "REQUESTED": "요청됨",
+      "PLAN_APPROVED": "계획 승인", "EFFECTIVE": "효과 있음", "NOT_EFFECTIVE": "효과 없음",
+      "MEETS_CRITERIA": "기준 충족", "HOLD": "보류", "EQUIPMENT_CHANGE": "설비 변경", "WARN": "경고", "PASS": "통과",
+      "BLOCK": "차단"}
+# status words the records keep in English inside sentences (and translations keep as written)
+WORDS = {"FALSE_ALARM": "오경보", "DEFECT_CONFIRMED": "불량 확정", "NO_REPAIR": "수리 안 함", "REPAIRED": "수리 완료",
+         "UNCONFIRMED": "미확정", "NOT_EXECUTED": "미실행", "CLEANING_INTERVAL_EXCEEDED": "세척 주기 초과",
+         "SHIPPED": "출하됨"}
+WORD = re.compile(r"\b(" + "|".join(WORDS) + r")\b")
+
+
+def plain(t: str) -> str:
+    return WORD.sub(lambda m: WORDS[m.group(1)], t)
+
+
+def when(t: str) -> str:
+    return t[:16].replace("T", " ")
+SOURCE = {"aoi_inspections": "AOI 검사", "spi_measurements": "SPI 측정", "human_verifications": "사람 확인",
+          "repair_dispositions": "수리 처리", "equipment_events": "설비 기록", "lots": "LOT", "panels": "패널",
+          "boards": "보드", "components": "부품", "pins": "핀", "shipments": "출하", "CUSTOMER_REPORT": "고객 문서"}
+DOC_KO = {"NCR": "문제 기술 (NCR)", "CONTAINMENT": "임시 조치 계획", "RCA": "원인 분석"}
+
+
+def ko(v) -> str:
+    return KO.get(str(v), str(v)) if v is not None else "-"
+
+
+def sources(session: Session, case_id: str) -> dict[str, tuple[str, str]]:
+    """evidence id -> (kind of record, original row id such as AOI-L02-P03-B4-A01)."""
+    rows = session.execute(select(Evidence.evidence_id, Evidence.classification, SourceEvent.entity_type,
+                                  SourceEvent.original_row_id)
+                           .outerjoin(SourceEvent, SourceEvent.id == Evidence.source_event_id)
+                           .where(Evidence.case_id == case_id))
+    return {e: (SOURCE.get(t, t) if t else ko(k), r or "") for e, k, t, r in rows}
+
+
+def evidence_words(ids: list[str], src: dict) -> str:
+    """'SPI 측정 8건' or, for a few records, their row ids ('설비 기록 EQ-STN-2')."""
+    if not ids:
+        return "-"
+    known = [src.get(e, ("근거", "")) for e in ids]
+    if len(known) <= 3 and all(r for _, r in known):
+        return ", ".join(f"{k} {r}" for k, r in known)
+    count: dict[str, int] = {}
+    for k, _ in known:
+        count[k] = count.get(k, 0) + 1
+    return ", ".join(f"{k} {n}건" for k, n in count.items())
+
+
+def claim_rows(c: dict, src: dict) -> list[list[str]]:
+    return [[c["claim_id"], ko(c["classification"]), c["text"], "" if c["value"] is None else num(c["value"]),
+             c["unit"] or "", evidence_words(c["evidence_ids"], src)]]
 
 
 # --- what goes in the report -------------------------------------------------------------------------------
 
+SIGNED = ("APPROVE", "REJECT", "REQUEST_CHANGES", "NO_SCOPE_IMPACT")
+
+
 def doc_section(session: Session, doc: DocumentVersion) -> tuple[list[Block], list[str]]:
     d = _doc_out(session, doc)
+    src = sources(session, doc.case_id)
     v = validation.latest_run(session, doc)
     stale = validation.stale_reasons(session, v) if v else []
-    checked = (f"Validation #{v.id}: {v.result} by {v.validated_by} at {v.validated_at}; "
-               + (f"no longer current ({'; '.join(stale)})" if stale else "current")) if v else "Not validated"
+    checked = (f"검증 {ko(v.result)} ({v.validated_by}, {when(v.validated_at)})"
+               + (" - 이후 근거가 바뀌어 다시 검증 필요" if stale else "")) if v else "검증 기록 없음"
+    signed = [x for x in d["decisions"] if x["action"] in SIGNED]
     blocks = [
-        ("h", f"{doc.doc_type} v{doc.version} ({STEP[doc.doc_type]}) - {d['status']}"),
-        ("p", (f"Author {d['author_id']}; generator {d['builder']}; based on {', '.join(d['based_on']) or '-'}; "
-               f"created {d['created_at']}")),
-        ("p", f"Content SHA-256 {doc.content_sha256}"),
-        ("p", checked),
-        ("t", ["Claim", "Class", "Statement", "Value", "Unit", "Evidence"],
-         [row for c in d["claims"] for row in claim_rows(c)], [1, 2, 7, 1.4, 1.2, 3]),
-        ("t", ["Signed by", "Decision", "Signed content SHA-256", "At"],
-         [[x["actor_id"], x["action"], x["content_sha256"], x["created_at"]] for x in d["decisions"]],
-         [1.4, 1.4, 5, 3]),
+        ("h", f"{STEP[doc.doc_type]} {DOC_KO.get(doc.doc_type, doc.doc_type)} - {doc.doc_type} v{doc.version} "
+              f"({ko(d['status'])})"),
+        ("p", f"작성 {d['author_id']} · {when(d['created_at'])} · {checked}"),
+        ("t", ["번호", "구분", "내용", "값", "단위", "근거"],
+         [row for c in d["claims"] for row in claim_rows(c, src)], [1, 1.2, 8, 1.4, 1.2, 3.2]),
+        ("t", ["결재자", "결정", "일시"], [[x["actor_id"], ko(x["action"]), when(x["created_at"])] for x in signed],
+         [2, 3, 3]),
     ]
-    required = [f"{doc.doc_type} v{doc.version}", doc.content_sha256,
-                *(x["actor_id"] for x in d["decisions"] if x["action"] == "APPROVE")]
+    required = [f"{doc.doc_type} v{doc.version}", *(x["actor_id"] for x in signed if x["action"] == "APPROVE")]
     for c in d["claims"]:
-        required += [c["claim_id"], *c["evidence_ids"]]
+        required += [c["claim_id"]]
         required += [num(c["value"])] if c["value"] is not None else []
         required += [c["unit"]] if c["unit"] else []
         # LOT numbers live in the statements; extracted PDF text only round-trips ASCII (CID font), so Hangul
-        # statements are rendered but not compared
+        # statements are rendered but not compared (respond() also drops the ones it shows translated)
         required += [c["text"]] if c["text"].isascii() else []
     return blocks, required
 
@@ -95,6 +147,15 @@ def require_exportable(session: Session, doc: DocumentVersion) -> None:
         raise HTTPException(409, f"{name}: latest validation #{v.id} is BLOCK")
 
 
+def appendix(session: Session, docs, src: dict) -> list[list[str]]:
+    """How many records of each kind the report's claims rest on."""
+    count: dict[str, int] = {}
+    for e in {e for row in docs for c in _doc_out(session, row)["claims"] for e in c["evidence_ids"]}:
+        k = src.get(e, ("근거", ""))[0]
+        count[k] = count.get(k, 0) + 1
+    return [[k, f"{n}건"] for k, n in sorted(count.items(), key=lambda x: -x[1])]
+
+
 def case_report(session: Session, case_id: str) -> tuple[Closure, list[Block], list[str]]:
     c = session.scalar(select(Closure).where(Closure.case_id == case_id).order_by(Closure.id.desc()).limit(1))
     if c is None or c.decision != "CLOSED":
@@ -106,18 +167,15 @@ def case_report(session: Session, case_id: str) -> tuple[Closure, list[Block], l
     s = c.snapshot
     state = {**s["state"], "D8": "CLOSED"}
     simple = s["route"] == "NCR_ONLY"  # D0 chose the simple route: D4-D7 were never required
-    shown = {k: (v or ("N/A (NCR_ONLY)" if simple and k in ("D4", "D5", "D6", "D7") else "-")) for k, v in state.items()}
+    shown = {k: (ko(v) if v else ("해당 없음 (NCR 단독)" if simple and k in ("D4", "D5", "D6", "D7") else "-"))
+             for k, v in state.items()}
     blocks: list[Block] = [
-        ("h", "Closure"),
-        ("p", (f"Closed by {c.actor_id} at {c.created_at} (closure #{c.id}); policy {s['policy']['policy_id']} "
-               f"v{s['policy']['version']} ({s['policy']['policy_hash'][:16]}); route {s['route']}")),
-        ("p", f"Snapshot SHA-256 {c.snapshot_sha256}"),
-        ("t", ["Stage", "State"], [[k, str(v)] for k, v in shown.items()], [1, 3]),
-        ("t", ["Document", "Version", "Status at closure", "Content SHA-256"],
-         [[d["doc_type"], f"v{d['version']}", d["status"], d["content_sha256"]] for d in s["documents"]],
-         [2, 1, 2, 6]),
+        ("h", "요약"),
+        ("p", f"종결 {c.actor_id} · {when(c.created_at)} · 경로 {ko(s['route'])} · 종결 정책 "
+              f"{s['policy']['policy_id']} v{s['policy']['version']}"),
+        ("t", ["단계", "상태"], [[k, v] for k, v in shown.items()], [1, 3]),
     ]
-    required = [c.snapshot_sha256, c.actor_id, "CLOSED", *(f"{k}{v}" for k, v in state.items() if v)]
+    required = [c.actor_id, *(k for k, v in state.items() if v)]
     rows = {(d.doc_type, d.version): d for d in session.scalars(
         select(DocumentVersion).where(DocumentVersion.case_id == case_id))}
     approved = {}
@@ -125,7 +183,6 @@ def case_report(session: Session, case_id: str) -> tuple[Closure, list[Block], l
         row = rows.get((d["doc_type"], d["version"]))
         if row is None or row.content_sha256 != d["content_sha256"]:
             raise HTTPException(409, f"{d['doc_type']} v{d['version']} no longer matches the closure snapshot")
-        required += [f"{d['doc_type']}v{d['version']}{d['status']}{d['content_sha256']}"]
         if d["status"] == "APPROVED":
             approved[d["doc_type"]] = row  # snapshot is ordered by id, so the last approved version wins
     for row in approved.values():
@@ -133,25 +190,27 @@ def case_report(session: Session, case_id: str) -> tuple[Closure, list[Block], l
         blocks += b
         required += r
     hyps = {h.id: h for h in causes.confirmed(session, case_id)}
+    src = sources(session, case_id)
     if simple:
-        blocks.append(("p", ("Route NCR_ONLY: the D0 decision found no defect needing a full 8D, so the policy "
-                             "required D0-D3 only. D4-D7 (cause, corrective action, effectiveness, prevention) were "
-                             "not required.")))
+        blocks.append(("p", ("NCR 단독 경로: D0 판단에서 전체 8D가 필요한 불량이 없어 정책상 D0-D3만 요구되었습니다. "
+                             "D4-D7(원인, 시정 조치, 효과 검증, 재발 방지)은 요구되지 않았습니다.")))
     sections = [
-        ("h", "D4 confirmed causes"),
-        ("t", ["Cause", "Type", "Statement", "Evidence"],
+        ("h", "D4 확정 원인"),
+        ("t", ["원인", "유형", "내용", "근거"],
          [[f"H{i}", f"{hyps[i].cause_type}/{hyps[i].category}" if i in hyps else "-",
-           hyps[i].text if i in hyps else "(no longer confirmed)", ", ".join(hyps[i].evidence_ids) if i in hyps
-           else ""] for i in s["confirmed_causes"]], [1, 2.4, 6, 3]),
-        ("h", "D3/D5 actions"),
-        ("t", ["Action", "Stage", "Type", "Status"],
-         [[f"ACT-{a['action_id']}", a["stage"], a["type"], a["status"]] for a in s["actions"]], [1.4, 1, 3, 3]),
-        ("h", "D6 effectiveness"),
-        ("t", ["Result", "Action", "Computed", "Decision"],
-         [[f"#{x['result_id']}", f"ACT-{x['action_id']}", x["computed"], x["decision"]]
+           hyps[i].text if i in hyps else "(더 이상 확정 상태 아님)",
+           evidence_words(hyps[i].evidence_ids, src) if i in hyps else ""] for i in s["confirmed_causes"]],
+         [1, 2.4, 6, 3]),
+        ("h", "D3 임시 조치 · D5 시정 조치"),
+        ("t", ["조치", "단계", "종류", "상태"],
+         [[f"ACT-{a['action_id']}", a["stage"], ko(a["type"]), ko(a["status"])] for a in s["actions"]],
+         [1.4, 1, 3, 3]),
+        ("h", "D6 효과 검증"),
+        ("t", ["결과", "조치", "계산 결과", "판정"],
+         [[f"#{x['result_id']}", f"ACT-{x['action_id']}", ko(x["computed"]), ko(x["decision"])]
           for x in s["effectiveness"]], [1, 1.4, 3, 3]),
-        ("h", "D7 prevention"),
-        ("t", ["Controlled document", "Revision", "Trained operators"],
+        ("h", "D7 재발 방지"),
+        ("t", ["관리 문서", "개정", "교육 이수 작업자"],
          [[p["doc_number"], f"rev {p['revision']}", ", ".join(sorted(
              {t["operator_id"] for d in session.scalars(select(PreventionDeployment).where(
                  PreventionDeployment.case_id == case_id, PreventionDeployment.doc_number == p["doc_number"],
@@ -160,19 +219,21 @@ def case_report(session: Session, case_id: str) -> tuple[Closure, list[Block], l
     ]
     for head, table in zip(sections[::2], sections[1::2], strict=True):
         # NCR_ONLY: leave out a not-required section only when it is empty, so every recorded row is still printed
-        if not simple or table[2] or head[1] == "D3/D5 actions":
+        if not simple or table[2] or head[1].startswith("D3"):
             blocks += [head, table]
     blocks += [
-        ("h", "D8 sign-off"),
-        ("p", f"Acknowledged by: {', '.join(s['acknowledged'])}"),
-        ("t", ["Residual risk", "Mitigation", "Owner"],
+        ("h", "D8 종결"),
+        ("p", f"결과 확인 서명: {', '.join(s['acknowledged'])}"),
+        ("t", ["잔여 위험", "완화 방안", "담당"],
          [[r["risk"], r["mitigation"], r["owner"]] for r in c.residual_risks], [4, 4, 1.4]),
-        ("p", f"Customer notification: {c.customer_notification_ref or 'not required'}. Comment: {c.comment}"),
-        ("p", f"Audit chain verified at export: {chain['links']} links, head {chain['head_sha256']}"),
+        ("p", f"고객 통보: {c.customer_notification_ref or '필요 없음'} · 종결 의견: {c.comment}"),
+        ("p", f"감사 기록 {chain['links']}건이 내보내기 시점에 변경 없이 확인되었습니다."),
+        ("h", "부록: 근거 자료"),
+        ("p", "본문 각 내용의 근거가 된 원본 기록입니다. 기록별 상세는 시스템의 근거 화면에서 볼 수 있습니다."),
+        ("t", ["자료", "건수"], appendix(session, approved.values(), src), [4, 1]),
     ]
     required += [f"H{i}" for i in s["confirmed_causes"]]
-    required += [f"ACT-{a['action_id']}{a['stage']}{a['type']}{a['status']}" for a in s["actions"]]
-    required += [f"ACT-{x['action_id']}{x['computed']}{x['decision']}" for x in s["effectiveness"]]
+    required += [f"ACT-{a['action_id']}" for a in s["actions"]]
     required += [f"{p['doc_number']}rev{p['revision']}" for p in s["prevention"]]
     required += list(s["acknowledged"])
     return c, blocks, required
@@ -278,8 +339,7 @@ def to_pdf(title: str, author: str, created: str, ref: str, blocks: list[Block])
 
     def footer(canvas, d) -> None:
         canvas.setFont(FONT, 7)
-        canvas.drawString(15 * mm, 8 * mm, f"QualityOps AI - synthetic data - snapshot {ref[:16]} - "
-                                           f"generated {created[:19]} by {author} - page {d.page}")
+        canvas.drawString(15 * mm, 8 * mm, f"QualityOps AI · 합성 데이터 · {when(created)} · {author} · {d.page}쪽")
 
     out = io.BytesIO()
     SimpleDocTemplate(out, pagesize=A4, leftMargin=15 * mm, rightMargin=15 * mm, topMargin=15 * mm,
@@ -309,23 +369,38 @@ def missing_fields(data: bytes, fmt: str, required: list[str]) -> list[str]:
 
 # --- routes ------------------------------------------------------------------------------------------------
 
-def make_export_router(sessions: sessionmaker, current_user: Callable[..., Actor]) -> APIRouter:
+def make_export_router(sessions: sessionmaker, current_user: Callable[..., Actor], provider=None) -> APIRouter:
     router = APIRouter()
     Who = Annotated[Actor, Depends(current_user)]
 
-    def respond(session: Session, case_id: str, actor: Actor, fmt: str, name: str, title: str, ref: str,
+    def korean(blocks: list[Block]) -> tuple[list[Block], dict[str, str]]:
+        """English record text shown in Korean: Meta translates, translate.kept() has checked every number and code
+        survived; a sentence without a checked translation stays in English."""
+        texts = list(dict.fromkeys(x for b in blocks for x in ([b[1]] if b[0] != "t" else [c for r in b[2] for c in r])))
+        out: dict[str, str] = {}
+        for _ in range(2):  # a sentence whose translation failed the check is asked once more
+            todo = [t for t in texts if t not in out]
+            for i in range(0, len(todo), 40):  # the screen's batch size
+                out |= translate.translate(provider, todo[i:i + 40], sessions)
+        return [b if b[0] != "t" else (b[0], b[1], [[plain(out.get(c, c)) for c in r] for r in b[2]], b[3])
+                for b in [(b[0], plain(out.get(b[1], b[1]))) if b[0] != "t" else b for b in blocks]], out
+
+    def respond(case_id: str, actor: Actor, fmt: str, name: str, title: str, ref: str,
                 blocks: list[Block], required: list[str], doc_id: int | None = None) -> Response:
+        # translated outside any write transaction: storing a new translation needs its own (SQLite: one writer)
+        blocks, out = korean(blocks)
+        required = [r for r in required if r not in out and plain(r) == r]  # printed in Korean instead
         created = now()
-        head: list[Block] = [("p", (f"Case {case_id}. Generated by {actor.id} at {created}. Reference SHA-256 "
-                                    f"{ref}. Synthetic data; not a real plant record."))]
+        head: list[Block] = [("p", f"사건 {case_id} · 작성 {actor.id} · {when(created)} · 합성 데이터 (실제 공장 기록 아님)")]
         data = (to_pdf if fmt == "pdf" else to_docx)(title, actor.id, created, ref, head + blocks)
-        if gaps := missing_fields(data, fmt, required + [ref]):
+        if gaps := missing_fields(data, fmt, required):
             raise HTTPException(500, f"export check failed: {len(gaps)} required fields missing from the file "
                                      f"(e.g. {gaps[:3]}); nothing exported")
-        filename = f"{name}_{ref[:12]}.{fmt}"
+        filename = f"{name}.{fmt}"
         digest = hashlib.sha256(data).hexdigest()
-        log(session, case_id, actor, "EXPORTED", f"{filename} file_sha256={digest} reference={ref} "
-            f"fields_checked={len(set(required))}", doc_id)
+        with sessions.begin() as session:
+            log(session, case_id, actor, "EXPORTED", f"{filename} file_sha256={digest} reference={ref} "
+                f"fields_checked={len(set(required))}", doc_id)
         return Response(data, media_type=MIME[fmt], headers={
             "Content-Disposition": f'attachment; filename="{filename}"', "X-Reference-SHA256": ref,
             "X-File-SHA256": digest, "X-Fields-Checked": str(len(set(required)))})
@@ -333,7 +408,7 @@ def make_export_router(sessions: sessionmaker, current_user: Callable[..., Actor
     @router.get("/cases/{case_id}/documents/{kind:doc}/export")
     def export_document(case_id: str, kind: str, actor: Who, format: Literal["docx", "pdf"] = "pdf",
                         version: int | None = None) -> Response:
-        with sessions.begin() as session:
+        with sessions() as session:
             require_case(session, case_id, actor)
             doc = _get_doc(session, case_id, version, KINDS[kind]) if version else _latest(session, case_id,
                                                                                             KINDS[kind])
@@ -341,18 +416,19 @@ def make_export_router(sessions: sessionmaker, current_user: Callable[..., Actor
                 raise HTTPException(404, "Document version not found")
             require_exportable(session, doc)
             blocks, required = doc_section(session, doc)
-            return respond(session, case_id, actor, format, f"{case_id}_{doc.doc_type}_v{doc.version}",
-                           f"{doc.doc_type} {case_id} v{doc.version} - approved", doc.content_sha256, blocks,
-                           required, doc.id)
+            ref, doc_id, name = doc.content_sha256, doc.id, f"{case_id}_{doc.doc_type}_v{doc.version}"
+            title = f"{doc.doc_type} v{doc.version} - 사건 {case_id} (승인)"
+        return respond(case_id, actor, format, name, title, ref, blocks, required, doc_id)
 
     @router.get("/cases/{case_id}/report/export")
     def export_report(case_id: str, actor: Who, format: Literal["docx", "pdf"] = "pdf") -> Response:
-        with sessions.begin() as session:
+        with sessions() as session:
             require_case(session, case_id, actor)
             c, blocks, required = case_report(session, case_id)
             simple = c.snapshot["route"] == "NCR_ONLY"  # closed early on the simple route: say so in the title
-            name, title = ("NCR_closure_report", "NCR closure report") if simple else ("8D_report", "8D report")
-            return respond(session, case_id, actor, format, f"{case_id}_{name}",
-                           f"{title} {case_id} - CLOSED", c.snapshot_sha256, blocks, required)
+            name, title = ("NCR_closure_report", "NCR 종결 보고서") if simple else ("8D_report", "8D 보고서")
+            ref = c.snapshot_sha256
+        return respond(case_id, actor, format, f"{case_id}_{name}", f"{title} - 사건 {case_id} (종결)", ref, blocks,
+                       required)
 
     return router

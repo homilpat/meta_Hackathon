@@ -5,7 +5,7 @@ import { request } from '../api/client'
 // view are sent together to POST /translations: the model translates, the server keeps a translation only if its
 // numbers and codes match the original. Records are unchanged; hovering shows the original. Quotes of a source
 // document stay as written: mark them data-no-ko. A text is asked for once per page load.
-const ENGLISH = /[A-Za-z][a-z]{2,}(?:[^A-Za-z가-힣]+[A-Za-z][a-z]+){2,}/
+const ENGLISH = /^(?![\s\S]*[가-힣])(?:[\s\S]*?\b[A-Za-z][a-z]+\b){3}/  // no Hangul, three English words anywhere (same as translate.py)
 const done = new Map<string, string>()
 const asked = new Map<string, number>()  // when it was asked
 const failed = new Set<string>()  // no translation passed the check: the original is shown

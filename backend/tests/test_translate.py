@@ -47,3 +47,22 @@ def test_a_translation_is_stored_and_survives_a_restart(tmp_path):
     again = Fake([])
     assert translate(again, [text], sessions) == {text: "해당 패드에서 막힌 개구부 발견"} and again.sent == []
     MEMO.clear()
+
+
+def test_the_admin_picks_the_language_and_off_shows_originals(monkeypatch):
+    from app import limits
+
+    text = "Clogged apertures found on affected pads of STN-2"
+    monkeypatch.setitem(limits.OVERRIDES, "TRANSLATE_LANGUAGE", "ja")
+    p = Fake([{"n": 1, "ko": "STN-2の該当パッドで目詰まりした開口部を発見"}])
+    asked = []
+    chat = p.chat
+    p.chat = lambda messages, tools, **kw: asked.append(messages[0]["content"]) or chat(messages, tools, **kw)
+    assert translate(p, [text]) == {text: "STN-2の該当パッドで目詰まりした開口部を発見"}
+    assert len(asked) == 1 and "into natural Japanese" in asked[0]
+    monkeypatch.setitem(limits.OVERRIDES, "TRANSLATE_LANGUAGE", "OFF")
+    off = Fake([])
+    assert translate(off, [text]) == {} and off.sent == []
+    with __import__("pytest").raises(Exception):
+        limits.cast("TRANSLATE_LANGUAGE", "fr")  # only the offered languages
+    MEMO.clear()

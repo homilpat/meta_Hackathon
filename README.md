@@ -87,6 +87,11 @@ Added since 2026-11-02:
 - **Not implemented:** specialist defect-vision model (`NOT_CONFIGURED`), mail integration, unattended case creation, external supplier accounts, production authentication.
 - **Limits:** DOCX uses structural locators and is not rendered; PDF tables are reconstructed; masked inputs lose semantic information. This is not a production QMS or a validated manufacturing deployment.
 
+## Post-hackathon roadmap
+
+- **Inspection data analysis.** Compare inspection counts, defective unit counts, defect rates, and defect types by lot, equipment, or process. Link each result to the original inspection records.
+- **SPC method selection.** Extend the existing X̄–R workflow with I–MR for individual measurements and p charts for defective proportions. Muse proposes a method based on the data and the investigation goal. The server validates the inputs and computes the results. If required data is missing, Muse asks the user for it.
+
 ## Repository layout
 
 | Path | Contents |

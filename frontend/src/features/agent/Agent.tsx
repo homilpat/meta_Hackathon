@@ -52,7 +52,8 @@ export function Agent({ ctx, provider, go }: { ctx: Ctx; provider: J; go: (view:
   return <main className="agent-page">
     <div className="agent-heading"><div><span className="eyebrow"><i/>QualityOps Agent</span><h1>품질 조사 워크스페이스</h1>
       <p>목표를 말하면 Agent가 허용된 도구로 근거 조회부터 문서 초안·검증·검토 요청 준비까지 계획하고, 사람의 결정이 필요한 곳에서 멈춥니다.</p></div>
-      {label && <Badge tone={tone}>{label}</Badge>}</div>
+      <div className="row-gap">{label && <Badge tone={tone}>{label}</Badge>}
+        {ctx.cid && <button className="button secondary" onClick={async () => { if (confirm(`${ctx.cid} 사건을 보관할까요? 목록에서 사라지고 기록은 지워지지 않습니다.`)) { await ctx.api(`/cases/${ctx.cid}/archive`, 'POST'); ctx.refresh() } }}>보관</button>}</div></div>
     {down ? <Card className="fallback"><div className="fallback-icon"><Icon name="warning" size={24}/></div><h2>Agent 서비스에 연결할 수 없습니다</h2>
       <p>서버 응답: {down}. Agent 없이도 할 일, 승인, 8D, 문서 편집·검증은 기존 화면에서 계속할 수 있습니다.</p>
       <div className="row-gap" style={{ justifyContent: 'center' }}><button className="button secondary" onClick={ctx.refresh}>다시 연결</button>

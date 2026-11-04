@@ -299,12 +299,25 @@ def make_router(sessions: sessionmaker, current_user: Callable[..., Actor],
     def me(actor: Who) -> dict:
         return {"id": actor.id, "role": actor.role, "name": DEMO_USERS[actor.id][0]}
 
+    archived = select(WorkflowEvent.case_id).where(WorkflowEvent.event == "ARCHIVED")
+
     @router.get("/cases")
     def list_cases(actor: Who) -> list[dict]:
         with sessions() as session:
             rows = session.scalars(select(QualityCase).join(Assignment, Assignment.case_id == QualityCase.id)
-                                   .where(Assignment.user_id == actor.id).order_by(QualityCase.created_at)).all()
+                                   .where(Assignment.user_id == actor.id, QualityCase.id.not_in(archived))
+                                   .order_by(QualityCase.created_at)).all()
             return [{"case_id": c.id, "domain": c.domain, "data_origin": c.data_origin} for c in rows]
+
+    @router.post("/cases/{case_id}/archive")
+    def archive(case_id: str, actor: Who) -> dict:
+        """Hide a case from every screen at any stage. Nothing is deleted: the append-only event records who and
+        when, and an admin finds archived cases in the DB (workflow_events.event = 'ARCHIVED')."""
+        with sessions.begin() as session:
+            require_case(session, case_id, actor)
+            if not session.scalar(archived.where(WorkflowEvent.case_id == case_id)):
+                log(session, case_id, actor, "ARCHIVED", "보관")
+        return {"case_id": case_id, "archived": True}
 
     @router.post("/cases/{case_id}/assignments", status_code=201)
     def assign(case_id: str, body: Assign, actor: Who) -> dict:

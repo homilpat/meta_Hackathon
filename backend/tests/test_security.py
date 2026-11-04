@@ -73,7 +73,7 @@ def test_prompt_injection_in_a_source_record_cannot_act_or_pass_validation(env):
     assert attack in p.seen[1]  # the note does reach the model as data ...
     assert "untrusted data" in p.seen[0]  # ... after the system prompt told it not to obey record text
     assert run["tool_calls"][1] == {**run["tool_calls"][1], "tool_name": "approve_document", "ok": False}
-    assert run["status"] == "VALIDATION_FAILED"  # the confirmed-cause claim is rejected
+    assert run["status"] != "VALIDATED"  # a reference for people, never a validated cause
     assert c.post("/cases/C1/ncr", json={"investigation_run_id": run["run_id"]}, headers=H("alice")).status_code == 409
     assert c.get("/cases/C1/ncr", headers={"X-User": "alice"}).json() == []  # nothing drafted or approved
 

@@ -283,4 +283,8 @@ def test_the_eleven_rejected_live_reports_stay_rejected_for_their_recorded_reaso
     c = line_client(tmp_path)
     with Session(c.app_ref.state.engine) as s:
         for case in cases:
-            assert validate_report(s, "L", InvestigationReport.model_validate(case["report"])), case["task"]
+            errors = validate_report(s, "L", InvestigationReport.model_validate(case["report"]))
+            if all("causal certainty" in e for e in case["recorded_errors"]):  # a reference now, not refused
+                assert not errors, case["task"]
+            else:
+                assert errors, case["task"]

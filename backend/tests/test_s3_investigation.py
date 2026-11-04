@@ -144,11 +144,11 @@ def test_wrong_ratio_or_mean_is_blocked(case, index, value):
 
 @pytest.mark.parametrize("text", ["The root cause is stencil wear.", "Bridging was caused by excess paste.",
                                   "This definitely explains the failure."])
-def test_causal_certainty_is_blocked(case, text):
+def test_causal_wording_in_the_investigation_is_a_reference_not_refused(case, text):
     report = good_report(evidence(case))
     report["findings"][3]["text"] = text
     out = outcome(case, LOOKUP, final(report))
-    assert any("causal certainty" in e for e in out["validation_errors"])
+    assert not any("causal certainty" in e for e in out.get("validation_errors") or [])
 
 
 def test_confirmed_class_or_root_cause_field_is_rejected_by_schema(case):

@@ -141,10 +141,10 @@ def validate_report(session: Session, case_id: str, report: InvestigationReport,
                     errors.append(f"{tag}: {exc}")
         elif f.calc is not None:
             errors.append(f"{tag}: calc only allowed on CALCULATED")
-        errors += _text_errors(tag, f.text, known)
+        errors += _text_errors(tag, f.text, known, certainty=False)
         if f.classification in ("OBSERVED", "CALCULATED") and PRECEDENT_REF.search(f.text):
             errors.append(f"{tag}: a precedent is not evidence about this case; cite it in a next check")
-    errors += _text_errors("summary", report.summary, known)
+    errors += _text_errors("summary", report.summary, known, certainty=False)
     for n, w in enumerate(report.data_warnings, 1):  # a quoted instruction is data: only its ids are checked
         if missing := sorted(set(w.evidence_ids) - known):
             errors.append(f"data warning {n}: unknown evidence_id {missing}")
@@ -160,7 +160,7 @@ def validate_report(session: Session, case_id: str, report: InvestigationReport,
             errors.append(f"{tag}: precedent {bad} was not retrieved as eligible for this case")
         if hit := recommends_failed_action(texts, precedents or []):
             errors.append(f"{tag}: recommends {hit}, which failed before")
-        errors += _text_errors(tag, texts, known)
+        errors += _text_errors(tag, texts, known, certainty=False)
     for t in [report.summary, *(f.text for f in report.findings)]:
         if bad := sorted(set(PRECEDENT_REF.findall(t)) - allowed):
             errors.append(f"precedent {bad} cited but not eligible/retrieved")
@@ -218,10 +218,12 @@ def asserts_certainty(text: str) -> bool:
     return False
 
 
-def _text_errors(tag: str, text: str, known: set[str]) -> list[str]:
-    """known: every evidence id the report may name (internal records and customer statements)."""
+def _text_errors(tag: str, text: str, known: set[str], certainty: bool = True) -> list[str]:
+    """known: every evidence id the report may name (internal records and customer statements).
+    certainty=False for the AI investigation: it is a reference for people, said once on the Agent page, not a
+    finding; only documents a person approves refuse causal certainty (user 2026-11-04)."""
     errors = []
-    if asserts_certainty(text):
+    if certainty and asserts_certainty(text):
         errors.append(f"{tag}: causal certainty is not allowed")
     if SHAP_AS_CAUSE.search(text):
         errors.append(f"{tag}: SHAP attribution is not causal evidence")
